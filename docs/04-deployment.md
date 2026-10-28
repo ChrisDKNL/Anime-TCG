@@ -174,7 +174,7 @@ npm run test:e2e              # Playwright against the Vite dev server
 
 `.github/workflows/ci.yml`:
 
-- `quality`: root `format:check`, `lint`, `typecheck`, the web unit tests with coverage, the api unit tests, `build`.
+- `quality`: root `format:check`, `lint`, `typecheck`, the shared unit tests (the schema guard), the web unit tests with coverage, the api unit tests, `build`.
 - `api-tests`: a `postgres:16-alpine` service container in which a `psql` step creates `anime_app` (the service container has no init mount); `npm run test:coverage -w api` with `DATABASE_URL` (app role) and `MIGRATIONS_DATABASE_URL` (owner) pointing at it runs the unit, route and adversarial suites and enforces the 85 % statement threshold from `api/vitest.config.ts`.
 - `e2e`: Playwright against the Vite dev server.
 - `security`: `npm audit` (high and above) and gitleaks over the full history.

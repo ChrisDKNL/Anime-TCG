@@ -23,7 +23,8 @@
   ],
   "scripts": {
     "build": "tsc -b",
-    "typecheck": "tsc -b"
+    "typecheck": "tsc -b && tsc -p test",
+    "test:run": "vitest run"
   },
   "dependencies": {
     "@sinclair/typebox": "^0.34.52"

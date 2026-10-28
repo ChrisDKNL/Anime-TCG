@@ -32,6 +32,9 @@ jobs:
         run: npm run lint
       - name: Typecheck
         run: npm run typecheck
+      - name: Unit tests (shared)
+        # The schema guard: every exported object schema refuses unknown fields (docs/design/accounts-api.md §4.3).
+        run: npm run test:run --workspace shared
       - name: Unit tests (web, with coverage)
         run: npm run test:coverage --workspace web
       - name: Unit tests (api)
