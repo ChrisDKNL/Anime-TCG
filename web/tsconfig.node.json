@@ -7,6 +7,7 @@
     "strict": true,
     "skipLibCheck": true,
     "noEmit": true,
+    "allowImportingTsExtensions": true,
     "composite": true,
     "types": ["node"]
   },
@@ -14,6 +15,7 @@
     "vite.config.ts",
     "vitest.config.ts",
     "playwright.config.ts",
+    "shared-alias.ts",
     "e2e/**/*.ts",
     "src/test/fixtures.ts",
     "src/types.ts"

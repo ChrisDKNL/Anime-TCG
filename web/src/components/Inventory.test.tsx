@@ -2,7 +2,8 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { makeCard } from "../test/fixtures";
-import type { Card, Rarity } from "../types";
+import type { Rarity } from "@anime-tcg/shared/rarity";
+import type { Card } from "../types";
 import { Inventory } from "./Inventory";
 
 function statsFor(cards: Card[]) {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { BASE_WEIGHTS, POPULARITY_INFLUENCE, RARITIES } from "@anime-tcg/shared/rarity";
 import { makeCharacters } from "../test/fixtures";
-import { RARITIES } from "../types";
-import { BASE_WEIGHTS, POPULARITY_INFLUENCE, popularityScore, rarityWeights, rollRarity } from "./rarity";
+import { popularityScore, rarityWeights, rollRarity } from "./rarity";
 
 describe("BASE_WEIGHTS", () => {
   it("sums to 1 and matches the advertised 70/25/5 odds", () => {

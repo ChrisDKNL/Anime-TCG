@@ -9,12 +9,15 @@ WORKDIR /app
 # image, so tell Husky to skip.
 ENV HUSKY=0
 # Manifests first so the dependency layer is cached until a manifest changes.
-# Only the `web` workspace is installed; `api` has its own image.
+# Only the workspaces this image needs are installed: `shared` (the contract
+# and constants the web app imports) and `web` itself; `api` has its own image.
 COPY package.json package-lock.json tsconfig.base.json ./
+COPY shared/package.json shared/
 COPY web/package.json web/
-RUN npm ci --workspace web
+RUN npm ci --workspace shared --workspace web
+COPY shared shared
 COPY web web
-RUN npm run build --workspace web
+RUN npm run build --workspace shared --workspace web
 
 # Stage 2: serve dist/ with Caddy as an unprivileged user.
 FROM caddy:2-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f

@@ -1,5 +1,4 @@
-import type { Rarity } from "../types";
-import { RARITY_LABEL } from "../types";
+import { type Rarity, RARITY_LABEL } from "@anime-tcg/shared/rarity";
 
 const BADGE_CLASS: Record<Rarity, string> = {
   common: "bg-zinc-950/85 text-zinc-200 ring-zinc-500/60",

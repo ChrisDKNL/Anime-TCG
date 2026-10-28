@@ -1,4 +1,4 @@
-import { BASE_WEIGHTS } from "../lib/rarity";
+import { BASE_WEIGHTS } from "@anime-tcg/shared/rarity";
 
 interface Props {
   disabled: boolean;

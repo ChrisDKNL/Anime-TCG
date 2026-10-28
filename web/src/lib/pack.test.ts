@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { makeCharacters } from "../test/fixtures";
-import { RARITIES } from "../types";
+import { RARITIES } from "@anime-tcg/shared/rarity";
 import { openPack, PACK_SIZE, sampleDistinct } from "./pack";
 
 describe("sampleDistinct", () => {

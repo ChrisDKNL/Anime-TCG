@@ -1,4 +1,5 @@
-import type { Card, Rarity } from "../types";
+import type { Rarity } from "@anime-tcg/shared/rarity";
+import type { Card } from "../types";
 import { RarityBadge } from "./RarityBadge";
 
 /**

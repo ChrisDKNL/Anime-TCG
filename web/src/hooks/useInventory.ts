@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import type { Card, Rarity } from "../types";
-import { RARITIES } from "../types";
+import { RARITIES, type Rarity } from "@anime-tcg/shared/rarity";
+import type { Card } from "../types";
 
 const STORAGE_KEY = "anime-tcg:inventory:v1";
 

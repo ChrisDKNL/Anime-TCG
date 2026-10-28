@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
-import type { Card, Rarity } from "../types";
-import { RARITIES, RARITY_LABEL } from "../types";
+import { RARITIES, RARITY_LABEL, type Rarity } from "@anime-tcg/shared/rarity";
+import type { Card } from "../types";
 import { CharacterCard } from "./CharacterCard";
 
 interface Props {
