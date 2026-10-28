@@ -28,6 +28,16 @@ describe("validatedLogin", () => {
     expect(validatedLogin("\u{1F600}\u{1F600}\u{1F600}")).toHaveLength(6);
   });
 
+  function rejection(login: string): ApiError {
+    try {
+      validatedLogin(login);
+    } catch (err) {
+      if (err instanceof ApiError) return err;
+      throw err;
+    }
+    throw new Error("expected validatedLogin to throw");
+  }
+
   it.each([
     ["two characters padded to pass the schema", "  ab  "],
     ["spaces only", "      "],
@@ -35,16 +45,23 @@ describe("validatedLogin", () => {
     ["25 characters", "x".repeat(25)],
     ["25 emoji", "\u{1F600}".repeat(25)],
   ])("rejects %s as 400 validation_failed naming body/login", (_label, login) => {
-    let thrown: unknown;
-    try {
-      validatedLogin(login);
-    } catch (err) {
-      thrown = err;
-    }
-    expect(thrown).toBeInstanceOf(ApiError);
-    const error = thrown as ApiError;
+    const error = rejection(login);
     expect(error.statusCode).toBe(400);
     expect(error.code).toBe("validation_failed");
     expect(error.message).toBe("body/login must be 3 to 24 characters after trimming");
+  });
+
+  it("rejects a null character anywhere, which Postgres could not store, as a 400 rather than a 500", () => {
+    for (const login of ["a\u0000b\u0000c", "\u0000abc", "abc\u0000"]) {
+      const error = rejection(login);
+      expect(error.statusCode).toBe(400);
+      expect(error.message).toBe("body/login must not contain the null character");
+    }
+  });
+
+  it("keeps other control and direction characters: they are storable text", () => {
+    expect(validatedLogin("\u202Eevil\u202C")).toBe("\u202Eevil\u202C");
+    expect(validatedLogin("a\tb\nc")).toBe("a\tb\nc");
+    expect(validatedLogin("a\u200Bb\u200Bc")).toBe("a\u200Bb\u200Bc");
   });
 });

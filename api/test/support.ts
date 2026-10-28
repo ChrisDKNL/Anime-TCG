@@ -1,4 +1,6 @@
+import type { AccountPublic } from "@anime-tcg/shared/api";
 import { Type } from "@sinclair/typebox";
+import type { InjectOptions, LightMyRequestResponse } from "fastify";
 import { type App, type BuildAppOptions, buildApp } from "../src/app.js";
 import { type Config, parseConfig } from "../src/config.js";
 import { createDb, type Db } from "../src/db/client.js";
@@ -133,4 +135,83 @@ export function sessionCookieFrom(setCookie: string | string[] | undefined): str
 
 export function cookieHeader(value: string): string {
   return `__Host-session=${value}`;
+}
+
+let clientCounter = 0;
+
+/**
+ * A client address nobody else in the run has used: the auth routes allow 10
+ * requests per minute per address, and one test file sends far more than that.
+ * The TEST-NET-3 block has 256 addresses, so a wrap-around is still well
+ * under the limit for any single one.
+ */
+export function nextClientAddress(): string {
+  clientCounter += 1;
+  return `203.0.113.${clientCounter % 256}`;
+}
+
+export interface Call {
+  method: "GET" | "POST" | "PATCH" | "DELETE";
+  url: string;
+  /** Anything at all: tests send shapes the schema must refuse. */
+  payload?: unknown;
+  /** A session cookie value; omitted means no cookie at all. */
+  cookie?: string;
+  /** `null` sends no Origin header (the CSRF check must refuse); default is the web origin. */
+  origin?: string | null;
+  headers?: Record<string, string>;
+}
+
+/** One request from a fresh client address, with the web origin unless told otherwise. */
+export function send(app: App, call: Call): Promise<LightMyRequestResponse> {
+  const { method, url, payload, cookie, origin = WEB_ORIGIN, headers = {} } = call;
+  return app.inject({
+    method,
+    url,
+    payload: payload as InjectOptions["payload"],
+    remoteAddress: nextClientAddress(),
+    headers: {
+      ...headers,
+      ...(origin === null ? {} : { origin }),
+      ...(cookie === undefined ? {} : { cookie: cookieHeader(cookie) }),
+    },
+  });
+}
+
+export interface Credentials {
+  login: string;
+  password: string;
+  inviteCode?: string;
+}
+
+export interface SignedInClient {
+  cookie: string;
+  account: AccountPublic;
+}
+
+/** Registers through the real route and returns the cookie and the account the api answered with. */
+export async function registerAccount(app: App, credentials: Credentials): Promise<SignedInClient> {
+  const { login, password, inviteCode = TEST_INVITE_CODES[0] } = credentials;
+  const res = await send(app, {
+    method: "POST",
+    url: "/api/accounts/register",
+    payload: { inviteCode, login, password },
+  });
+  if (res.statusCode !== 201) throw new Error(`register answered ${res.statusCode}: ${res.body}`);
+  const cookie = sessionCookieFrom(res.headers["set-cookie"]);
+  if (cookie === undefined) throw new Error("register set no session cookie");
+  return { cookie, account: res.json<{ account: AccountPublic }>().account };
+}
+
+/** Signs in through the real route; the account must exist. */
+export async function loginAccount(app: App, credentials: Credentials): Promise<SignedInClient> {
+  const res = await send(app, {
+    method: "POST",
+    url: "/api/session/login",
+    payload: { login: credentials.login, password: credentials.password },
+  });
+  if (res.statusCode !== 200) throw new Error(`login answered ${res.statusCode}: ${res.body}`);
+  const cookie = sessionCookieFrom(res.headers["set-cookie"]);
+  if (cookie === undefined) throw new Error("login set no session cookie");
+  return { cookie, account: res.json<{ account: AccountPublic }>().account };
 }
