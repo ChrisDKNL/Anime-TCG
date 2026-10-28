@@ -1,16 +1,17 @@
 import { HealthResponse } from "@anime-tcg/shared/api";
 import type { FastifyPluginAsyncTypebox } from "@fastify/type-provider-typebox";
 import { sql } from "drizzle-orm";
+import type { LogLevel } from "../../config.js";
+import { NoQuery } from "../schemas.js";
 
 /** Liveness for the image healthcheck and compose. Not rate-limited, not under /api, says nothing about versions or hosts. */
-export const healthRoutes: FastifyPluginAsyncTypebox = async (app) => {
+export const healthRoutes: FastifyPluginAsyncTypebox<{ logLevel: LogLevel }> = async (app, { logLevel }) => {
   app.get(
     "/healthz",
     {
-      schema: { response: { 200: HealthResponse, 503: HealthResponse } },
+      schema: { querystring: NoQuery, response: { 200: HealthResponse, 503: HealthResponse } },
       config: { rateLimit: false },
-      // Probed every 30 s by the image healthcheck; only failures are worth a line.
-      logLevel: "warn",
+      logLevel,
     },
     async (req, reply) => {
       try {

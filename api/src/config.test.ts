@@ -118,3 +118,87 @@ describe("parseConfig", () => {
     );
   });
 });
+
+describe("parseConfig edge cases", () => {
+  it("never echoes credentials from a rejected DATABASE_URL or origin", () => {
+    const db = failure({ ...valid, DATABASE_URL: "mysql://anime:hunter2@db.internal:3306/anime" });
+    expect(db.variable).toBe("DATABASE_URL");
+    expect(db.message).not.toContain("hunter2");
+    expect(db.message).not.toContain("db.internal");
+
+    const origin = failure({ ...valid, WEB_ORIGIN: "https://owner:hunter2@anime.example.com" });
+    expect(origin.variable).toBe("WEB_ORIGIN");
+    expect(origin.message).not.toContain("hunter2");
+  });
+
+  it("accepts the postgresql:// spelling and an IPv6 literal origin", () => {
+    expect(
+      parseConfig({ ...valid, DATABASE_URL: "postgresql://anime:anime@[::1]:5432/anime" }).DATABASE_URL,
+    ).toMatch(/^postgresql:/);
+    expect(parseConfig({ ...valid, WEB_ORIGIN: "http://[::1]:5173" }).WEB_ORIGIN).toBe("http://[::1]:5173");
+  });
+
+  it("accepts only the canonical form of an origin: lower-case host, no default port", () => {
+    expect(failure({ ...valid, WEB_ORIGIN: "http://Localhost:5173" }).variable).toBe("WEB_ORIGIN");
+    expect(failure({ ...valid, WEB_ORIGIN: "HTTP://localhost:5173" }).variable).toBe("WEB_ORIGIN");
+    expect(failure({ ...valid, API_ORIGIN: "https://anime.example.com:443" }).variable).toBe("API_ORIGIN");
+    expect(failure({ ...valid, API_ORIGIN: "https://anime.example.com?x=1" }).variable).toBe("API_ORIGIN");
+    expect(failure({ ...valid, API_ORIGIN: "https://anime.example.com#top" }).variable).toBe("API_ORIGIN");
+  });
+
+  it("accepts port 0 (OS-assigned) and the top of the range, rejects out-of-range and non-numeric ports", () => {
+    expect(parseConfig({ ...valid, PORT: "0" }).PORT).toBe(0);
+    expect(parseConfig({ ...valid, PORT: "65535" }).PORT).toBe(65535);
+    for (const port of ["-1", "65536", "abc", "3000abc"]) {
+      expect(failure({ ...valid, PORT: port }).variable, port).toBe("PORT");
+    }
+  });
+
+  /**
+   * Regression (fixed in #20): TypeBox's `Value.Convert` used to coerce "3000.5",
+   * "1e3" and "true" to integers before validation, so a mistyped number was
+   * silently accepted as a different number instead of failing fast.
+   */
+  it("rejects a non-integer numeric string rather than silently truncating it", () => {
+    for (const port of ["3000.5", "1e3", "true"]) {
+      expect(failure({ ...valid, PORT: port }).variable, port).toBe("PORT");
+    }
+    expect(failure({ ...valid, RATE_LIMIT_MAX: "10.9" }).variable).toBe("RATE_LIMIT_MAX");
+  });
+
+  it("rejects a zero rate limit and a window under one second", () => {
+    expect(failure({ ...valid, RATE_LIMIT_MAX: "0" }).variable).toBe("RATE_LIMIT_MAX");
+    expect(failure({ ...valid, RATE_LIMIT_MAX: "-5" }).variable).toBe("RATE_LIMIT_MAX");
+    expect(failure({ ...valid, RATE_LIMIT_WINDOW_MS: "999" }).variable).toBe("RATE_LIMIT_WINDOW_MS");
+    expect(parseConfig({ ...valid, RATE_LIMIT_WINDOW_MS: "1000" }).RATE_LIMIT_WINDOW_MS).toBe(1000);
+  });
+
+  it("accepts a secret of exactly 32 bytes and rejects one padded to 32 with whitespace only by its bytes", () => {
+    expect(parseConfig({ ...valid, SESSION_SECRET: "x".repeat(32) }).SESSION_SECRET).toHaveLength(32);
+    // Whitespace is bytes too: the check is length, not entropy. Documented here so nobody mistakes it for a strength check.
+    expect(parseConfig({ ...valid, SESSION_SECRET: `${"x".repeat(31)} ` }).SESSION_SECRET).toHaveLength(32);
+    expect(failure({ ...valid, SESSION_SECRET: "" }).variable).toBe("SESSION_SECRET");
+  });
+
+  it("treats empty required variables as missing rather than as empty values", () => {
+    expect(failure({ ...valid, SESSION_SECRET: "" }).message).toMatch(/required/i);
+    expect(failure({ ...valid, WEB_ORIGIN: "" }).message).toMatch(/required/i);
+  });
+
+  it("does not let an unknown variable with a known-looking name leak in", () => {
+    const config = parseConfig({ ...valid, session_secret: "lower", WEB_ORIGIN_: "x", "WEB_ORIGIN ": "y" });
+    expect(config.SESSION_SECRET).toBe(SECRET);
+    expect(Object.keys(config).sort()).toEqual([
+      "API_ORIGIN",
+      "DATABASE_URL",
+      "HOST",
+      "LOG_LEVEL",
+      "NODE_ENV",
+      "PORT",
+      "RATE_LIMIT_MAX",
+      "RATE_LIMIT_WINDOW_MS",
+      "SESSION_SECRET",
+      "WEB_ORIGIN",
+    ]);
+  });
+});

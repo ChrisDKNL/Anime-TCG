@@ -8,7 +8,8 @@ import { ApiError, errorEnvelopeFor } from "../domain/errors.js";
  */
 export const errorsPlugin = fp(
   async (app) => {
-    app.setNotFoundHandler({ preHandler: app.rateLimit() }, async () => {
+    // The instance-wide hooks (rate limit, CSRF) run for unknown routes as well.
+    app.setNotFoundHandler(async () => {
       throw new ApiError(404, "not_found", "Route not found");
     });
 

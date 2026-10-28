@@ -85,6 +85,32 @@ describe("error envelope, CSRF and rate limit", () => {
     expect(res.json()).toEqual({ name: "chris" });
   });
 
+  describe("NoQuery querystring schema", () => {
+    it("rejects an unknown query parameter on GET /api/session as 400 validation_failed", async () => {
+      const res = await app.inject({ method: "GET", url: "/api/session?x=1" });
+      expect(res.statusCode).toBe(400);
+      expect(res.json()).toEqual({
+        error: { code: "validation_failed", message: "querystring must NOT have additional properties" },
+      });
+    });
+
+    it("rejects an unknown query parameter on GET /healthz as 400 validation_failed", async () => {
+      const res = await app.inject({ method: "GET", url: "/healthz?x=1" });
+      expect(res.statusCode).toBe(400);
+      expect(res.json()).toEqual({
+        error: { code: "validation_failed", message: "querystring must NOT have additional properties" },
+      });
+    });
+
+    it("leaves the same routes untouched when no query string is sent", async () => {
+      const session = await app.inject({ method: "GET", url: "/api/session" });
+      expect(session.statusCode).toBe(200);
+      expect(session.json()).toEqual({ signedIn: false });
+      const health = await app.inject({ method: "GET", url: "/healthz" });
+      expect(health.statusCode).toBe(200);
+    });
+  });
+
   describe("CSRF", () => {
     it("rejects a POST with no Origin and no Referer", async () => {
       const res = await app.inject({ method: "POST", url: "/test/echo", payload: { name: "chris" } });

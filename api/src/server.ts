@@ -23,6 +23,7 @@ const server = await startServer(config, logger);
 for (const signal of ["SIGTERM", "SIGINT"] as const) {
   process.once(signal, () => {
     logger.info({ signal }, "shutting down");
-    void server.shutdown().then(() => process.exit(0));
+    // A drain that timed out dropped connections; exit non-zero so the supervisor can tell.
+    void server.shutdown().then((drained) => process.exit(drained ? 0 : 1));
   });
 }

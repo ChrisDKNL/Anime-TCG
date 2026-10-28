@@ -4,6 +4,25 @@
 {
 	admin off
 	auto_https off
+	servers {
+		# Only the owner's host proxy or tunnel can connect (the publish is
+		# loopback-only), and both live in private ranges, so their
+		# X-Forwarded-For is believed and the real client address reaches the
+		# api; without this Caddy would replace the header with the Docker
+		# gateway address and the api's rate limiter would see one client.
+		# Behind Cloudflare Tunnel keep this line; the api picks the entry
+		# Cloudflare appended, so a forged leftmost one is harmless. Add
+		# `client_ip_headers CF-Connecting-IP` next to it only for Caddy's own
+		# {client_ip} and access logs (docs/04-deployment.md).
+		trusted_proxies static private_ranges
+		# A client that opens a connection and stalls is cut off here, before
+		# it can hold a socket to the api.
+		timeouts {
+			read_header 10s
+			read_body 30s
+			idle 2m
+		}
+	}
 }
 
 :8080 {
@@ -23,8 +42,11 @@
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"
 		Permissions-Policy "camera=(), microphone=(), geolocation=()"
-		# A version banner only helps someone probing the server.
+		# A version banner only helps someone probing the server. The Via line
+		# is Caddy's own, added by reverse_proxy after the backend's headers, so
+		# it has to go here rather than in a `header_down` of that block.
 		-Server
+		-Via
 	}
 
 	# Liveness probe for the image HEALTHCHECK and the CI smoke test.

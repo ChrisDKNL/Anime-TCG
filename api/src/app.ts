@@ -1,12 +1,15 @@
 import { randomUUID } from "node:crypto";
+import { STATUS_CODES } from "node:http";
+import type { Socket } from "node:net";
 import type { TypeBoxTypeProvider } from "@fastify/type-provider-typebox";
 import fastify from "fastify";
 import type { Logger } from "pino";
 import type { Config } from "./config.js";
 import type { Db } from "./db/client.js";
+import type { ErrorEnvelope } from "@anime-tcg/shared/errors";
 import { dbPlugin } from "./plugins/db.js";
 import { errorsPlugin } from "./plugins/errors.js";
-import { createLogger } from "./plugins/logging.js";
+import { createLogger, quieterOf } from "./plugins/logging.js";
 import { securityPlugin } from "./plugins/security.js";
 import { sessionPlugin } from "./plugins/session.js";
 import { healthRoutes } from "./routes/health/index.js";
@@ -27,6 +30,45 @@ const BODY_LIMIT_BYTES = 64 * 1024;
 const CONNECTION_TIMEOUT_MS = 10_000;
 const REQUEST_TIMEOUT_MS = 15_000;
 
+type ClientError = { statusCode: number } & ErrorEnvelope["error"];
+
+const CLIENT_ERRORS: Record<string, ClientError> = {
+  HPE_HEADER_OVERFLOW: {
+    statusCode: 431,
+    code: "header_too_large",
+    message: "Request headers are too large",
+  },
+  ERR_HTTP_REQUEST_TIMEOUT: { statusCode: 408, code: "bad_request", message: "Request timed out" },
+};
+const MALFORMED_REQUEST: ClientError = { statusCode: 400, code: "bad_request", message: "Malformed request" };
+
+/**
+ * Requests Node's parser refuses (oversized headers, a malformed request
+ * line) never reach the router or the error plugin, so the envelope and the
+ * api's headers are written by hand here. Mirrors Fastify's default in how
+ * it treats the socket; only the body and headers differ.
+ */
+function clientErrorHandler(logger: Logger) {
+  return (err: NodeJS.ErrnoException, socket: Socket): void => {
+    if (err.code === "ECONNRESET" || socket.destroyed) return;
+    const { statusCode, code, message } = CLIENT_ERRORS[err.code ?? ""] ?? MALFORMED_REQUEST;
+    const payload = JSON.stringify({ error: { code, message } } satisfies ErrorEnvelope);
+    logger.trace({ err }, "client error");
+    if (socket.writable) {
+      socket.write(
+        `HTTP/1.1 ${statusCode} ${STATUS_CODES[statusCode] ?? ""}\r\n` +
+          "Content-Type: application/json; charset=utf-8\r\n" +
+          "Cache-Control: no-store\r\n" +
+          "X-Content-Type-Options: nosniff\r\n" +
+          `Content-Length: ${Buffer.byteLength(payload)}\r\n` +
+          "Connection: close\r\n\r\n" +
+          payload,
+      );
+    }
+    socket.destroy(err);
+  };
+}
+
 /** Wires plugins and routes; never listens, never touches the network, so tests can `inject()`. */
 export async function buildApp({
   config,
@@ -46,13 +88,15 @@ export async function buildApp({
     ajv: {
       customOptions: { removeAdditional: false, coerceTypes: false, useDefaults: false, allErrors: false },
     },
+    clientErrorHandler: clientErrorHandler(logger),
   }).withTypeProvider<TypeBoxTypeProvider>();
 
   await app.register(dbPlugin, { db });
   await app.register(securityPlugin, { config });
   await app.register(sessionPlugin, { config });
   await app.register(errorsPlugin);
-  await app.register(healthRoutes);
+  // Probed every 30 s by the image healthcheck: only failures are worth a line, unless the operator asked for less.
+  await app.register(healthRoutes, { logLevel: quieterOf(config.LOG_LEVEL, "warn") });
   await app.register(sessionRoutes, { prefix: "/api" });
 
   return app;
