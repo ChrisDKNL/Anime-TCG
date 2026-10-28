@@ -49,13 +49,14 @@ export default tseslint.config(
         "error",
         {
           selector: "MemberExpression[object.name='process'][property.name='env']",
-          message: "Only api/src/server.ts and api/test/support.ts read process.env; take a Config instead.",
+          message:
+            "Only api/src/server.ts, the CLI entry points in api/src/cli/ and api/test/support.ts read process.env; take a Config instead.",
         },
       ],
     },
   },
   {
-    files: ["api/src/server.ts", "api/test/support.ts"],
+    files: ["api/src/server.ts", "api/src/cli/*.ts", "api/test/support.ts"],
     rules: { "no-restricted-syntax": "off" },
   },
   {

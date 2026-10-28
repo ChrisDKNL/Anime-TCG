@@ -75,17 +75,8 @@ export class SessionService {
    * Ends every session of an account, except the one named (the caller's
    * own, which a password change rotates instead). Returns how many went.
    */
-  async destroyAllForAccount(accountId: string, exceptSessionId?: string): Promise<number> {
-    const ownedByAccount = eq(sessions.accountId, accountId);
-    const gone = await this.db
-      .delete(sessions)
-      .where(
-        exceptSessionId === undefined
-          ? ownedByAccount
-          : and(ownedByAccount, ne(sessions.id, exceptSessionId)),
-      )
-      .returning({ id: sessions.id });
-    return gone.length;
+  destroyAllForAccount(accountId: string, exceptSessionId?: string): Promise<number> {
+    return destroySessionsOf(this.db, accountId, exceptSessionId);
   }
 
   /** Removes rows past their sliding expiry or their absolute lifetime; returns how many went. */
@@ -96,4 +87,24 @@ export class SessionService {
       .returning({ id: sessions.id });
     return gone.length;
   }
+}
+
+/**
+ * The statement behind `destroyAllForAccount`, callable without a session
+ * secret and inside someone else's transaction: the owner's password-reset
+ * command has only the database.
+ */
+export async function destroySessionsOf(
+  db: Pick<Db, "delete">,
+  accountId: string,
+  exceptSessionId?: string,
+): Promise<number> {
+  const ownedByAccount = eq(sessions.accountId, accountId);
+  const gone = await db
+    .delete(sessions)
+    .where(
+      exceptSessionId === undefined ? ownedByAccount : and(ownedByAccount, ne(sessions.id, exceptSessionId)),
+    )
+    .returning({ id: sessions.id });
+  return gone.length;
 }
