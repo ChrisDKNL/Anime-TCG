@@ -8,6 +8,9 @@ import { DUMMY_HASH } from "../src/domain/accounts/password.js";
 /** Obviously fake; only has to be 32+ bytes and not the .env.example placeholder. */
 export const TEST_SESSION_SECRET = "route-test-session-secret-not-for-real-use-0123456789";
 export const WEB_ORIGIN = "http://localhost:5173";
+/** Two valid codes so tests can prove membership is a set, not the first entry; a third one that is never configured. */
+export const TEST_INVITE_CODES = ["Route-Test-Invite-1", "second-code-2026"] as const;
+export const UNKNOWN_INVITE_CODE = "not-configured-code";
 export const FOREIGN_ORIGIN = "http://evil.example";
 
 /** The app role, as the api runs it. CI points this at its service container; locally the compose `test` profile. */
@@ -29,6 +32,7 @@ export function testConfig(overrides: Partial<Record<keyof Config, string>> = {}
     SESSION_SECRET: TEST_SESSION_SECRET,
     API_ORIGIN: "http://localhost:3000",
     WEB_ORIGIN,
+    INVITE_CODES: TEST_INVITE_CODES.join(","),
     ...overrides,
   });
 }

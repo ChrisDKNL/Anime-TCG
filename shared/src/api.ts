@@ -10,6 +10,11 @@ export const PASSWORD_LENGTH = { min: 8, max: 128 } as const;
 /** `min` binds the configured codes (`INVITE_CODES`); a submitted code may be any length up to `max`. */
 export const INVITE_CODE_LENGTH = { min: 8, max: 64 } as const;
 
+/** The length the limits above are measured in: code points, as Ajv counts them for `minLength`/`maxLength`. */
+export function characterCount(text: string): number {
+  return [...text].length;
+}
+
 /** What the api says about an account; `cards` is 0 until the collection moves server-side in 1c. */
 export const AccountPublic = Type.Object(
   {

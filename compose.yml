@@ -11,8 +11,9 @@
 # Variables come from the shell or from a gitignored env file passed with
 # `--env-file` (`.env.example` lists every one). Required by acceptance and
 # production: POSTGRES_PASSWORD, APP_DB_PASSWORD, SESSION_SECRET, WEB_ORIGIN. Optional: TAG,
-# ACCEPTANCE_PORT, PRODUCTION_PORT, LOG_LEVEL, DEV_DB_PORT. Env files are read
-# by compose only; `.dockerignore` keeps them out of every build context.
+# ACCEPTANCE_PORT, PRODUCTION_PORT, LOG_LEVEL, DEV_DB_PORT, INVITE_CODES (registration
+# is closed without it), ACCOUNT_CAP. Env files are read by compose only;
+# `.dockerignore` keeps them out of every build context.
 
 x-hardened: &hardened
   read_only: true
@@ -60,6 +61,9 @@ x-api: &api
     WEB_ORIGIN: ${WEB_ORIGIN:?set WEB_ORIGIN to the public origin, e.g. https://anime.example.com}
     API_ORIGIN: ${WEB_ORIGIN}
     LOG_LEVEL: ${LOG_LEVEL:-info}
+    # Registration: comma-separated invite codes (empty closes it) and how many accounts may exist.
+    INVITE_CODES: ${INVITE_CODES:-}
+    ACCOUNT_CAP: ${ACCOUNT_CAP:-10}
 
 x-db: &db
   <<: *hardened

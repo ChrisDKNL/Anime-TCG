@@ -1,9 +1,11 @@
+import { characterCount, INVITE_CODE_LENGTH } from "@anime-tcg/shared/api";
 import { type Static, Type } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 
 /** The placeholder shipped in `api/.env.example`; the api refuses to run with it. */
 export const EXAMPLE_SESSION_SECRET = "replace-with-32-plus-random-bytes-see-api/.env.example";
 export const MIN_SESSION_SECRET_BYTES = 32;
+export const DEFAULT_ACCOUNT_CAP = 10;
 
 const LOG_LEVELS = ["fatal", "error", "warn", "info", "debug", "trace", "silent"] as const;
 export type LogLevel = (typeof LOG_LEVELS)[number];
@@ -32,6 +34,9 @@ const ConfigSchema = Type.Object(
     WEB_ORIGIN: Origin,
     RATE_LIMIT_MAX: Type.Integer({ minimum: 1, default: 100 }),
     RATE_LIMIT_WINDOW_MS: Type.Integer({ minimum: 1000, default: 60_000 }),
+    /** The entries of the comma-separated variable, trimmed; empty means registration is closed. */
+    INVITE_CODES: Type.Array(Type.String()),
+    ACCOUNT_CAP: Type.Integer({ minimum: 1, default: DEFAULT_ACCOUNT_CAP }),
   },
   { additionalProperties: false },
 );
@@ -55,7 +60,7 @@ type Env = Readonly<Record<string, string | undefined>>;
  * `Value.Convert` is lenient with numeric strings ("3000.5" becomes 3000,
  * "1e3" becomes 1), so integers are checked as text first.
  */
-const INTEGER_VARIABLES = ["PORT", "RATE_LIMIT_MAX", "RATE_LIMIT_WINDOW_MS"] as const;
+const INTEGER_VARIABLES = ["PORT", "RATE_LIMIT_MAX", "RATE_LIMIT_WINDOW_MS", "ACCOUNT_CAP"] as const;
 const WHOLE_NUMBER = /^\d+$/;
 
 /**
@@ -64,16 +69,17 @@ const WHOLE_NUMBER = /^\d+$/;
  * `FOO=${FOO:-}` behaves like one that omits FOO.
  */
 export function parseConfig(env: Env): Config {
-  const present = Object.fromEntries(
-    Object.keys(ConfigSchema.properties)
-      .filter((name) => env[name] !== undefined && env[name] !== "")
-      .map((name) => [name, env[name]]),
-  );
+  const present: Record<string, string | string[]> = {};
+  for (const name of Object.keys(ConfigSchema.properties)) {
+    const value = env[name];
+    if (name !== "INVITE_CODES" && value !== undefined && value !== "") present[name] = value;
+  }
   for (const name of INTEGER_VARIABLES) {
-    const raw = present[name];
-    if (raw !== undefined && !WHOLE_NUMBER.test(raw))
+    const raw = env[name];
+    if (raw !== undefined && raw !== "" && !WHOLE_NUMBER.test(raw))
       throw new ConfigError(name, "must be a whole number (digits only)");
   }
+  present.INVITE_CODES = parseInviteCodes(env.INVITE_CODES);
   const candidate: unknown = Value.Default(ConfigSchema, Value.Convert(ConfigSchema, present));
   if (!Value.Check(ConfigSchema, candidate)) {
     const first = Value.Errors(ConfigSchema, candidate).First();
@@ -87,6 +93,28 @@ export function parseConfig(env: Env): Config {
   assertExactOrigin("WEB_ORIGIN", candidate.WEB_ORIGIN);
   assertDistinctDatabaseRoles(candidate.DATABASE_URL, candidate.MIGRATIONS_DATABASE_URL);
   return Object.freeze(candidate);
+}
+
+/**
+ * Comma-separated, each entry trimmed, blanks dropped (a trailing comma is
+ * not a code). An entry outside the length policy fails start-up by its
+ * position, never by its text: the codes are secrets.
+ */
+function parseInviteCodes(raw: string | undefined): string[] {
+  const codes = (raw ?? "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== "");
+  codes.forEach((code, index) => {
+    const length = characterCount(code);
+    if (length < INVITE_CODE_LENGTH.min || length > INVITE_CODE_LENGTH.max) {
+      throw new ConfigError(
+        "INVITE_CODES",
+        `entry ${index + 1} must be ${INVITE_CODE_LENGTH.min} to ${INVITE_CODE_LENGTH.max} characters after trimming`,
+      );
+    }
+  });
+  return codes;
 }
 
 /** The user part of a `postgres://user:password@host/db` URL, before any decoding; empty when there is no userinfo. */

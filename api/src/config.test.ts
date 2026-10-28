@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { ConfigError, databaseUser, EXAMPLE_SESSION_SECRET, parseConfig } from "./config.js";
+import {
+  ConfigError,
+  databaseUser,
+  DEFAULT_ACCOUNT_CAP,
+  EXAMPLE_SESSION_SECRET,
+  parseConfig,
+} from "./config.js";
 
 const SECRET = "unit-test-session-secret-not-for-real-use-0123456789";
 
@@ -224,9 +230,11 @@ describe("parseConfig edge cases", () => {
     const config = parseConfig({ ...valid, session_secret: "lower", WEB_ORIGIN_: "x", "WEB_ORIGIN ": "y" });
     expect(config.SESSION_SECRET).toBe(SECRET);
     expect(Object.keys(config).sort()).toEqual([
+      "ACCOUNT_CAP",
       "API_ORIGIN",
       "DATABASE_URL",
       "HOST",
+      "INVITE_CODES",
       "LOG_LEVEL",
       "MIGRATIONS_DATABASE_URL",
       "NODE_ENV",
@@ -236,5 +244,61 @@ describe("parseConfig edge cases", () => {
       "SESSION_SECRET",
       "WEB_ORIGIN",
     ]);
+  });
+});
+
+describe("registration variables", () => {
+  it("treats a missing or empty INVITE_CODES as no codes, without failing", () => {
+    expect(parseConfig(valid).INVITE_CODES).toEqual([]);
+    expect(parseConfig({ ...valid, INVITE_CODES: "" }).INVITE_CODES).toEqual([]);
+    expect(parseConfig({ ...valid, INVITE_CODES: " , ," }).INVITE_CODES).toEqual([]);
+  });
+
+  it("splits on commas, trims each entry and drops blanks", () => {
+    expect(parseConfig({ ...valid, INVITE_CODES: " Alpha-Code-1 ,beta-code-22,, " }).INVITE_CODES).toEqual([
+      "Alpha-Code-1",
+      "beta-code-22",
+    ]);
+  });
+
+  it("keeps the entries as written: case and inner spaces are the domain's business", () => {
+    expect(parseConfig({ ...valid, INVITE_CODES: "MiXeD case code" }).INVITE_CODES).toEqual([
+      "MiXeD case code",
+    ]);
+  });
+
+  it.each([
+    ["shorter than 8", "abcdefg", 1],
+    ["longer than 64", "x".repeat(65), 1],
+    ["too short after trimming", "   abcdefg   ", 1],
+    ["too short in the second position", "a-valid-code,short", 2],
+  ])("rejects an entry %s, naming the variable and the position but never the value", (_label, codes, n) => {
+    const err = failure({ ...valid, INVITE_CODES: codes });
+    expect(err.variable).toBe("INVITE_CODES");
+    expect(err.message).toContain(`entry ${n}`);
+    expect(err.message).toMatch(/8 to 64 characters/);
+    for (const entry of codes.split(",")) expect(err.message).not.toContain(entry.trim());
+  });
+
+  it("measures an entry in characters, not UTF-16 units or bytes", () => {
+    expect(parseConfig({ ...valid, INVITE_CODES: "\u{1F600}".repeat(8) }).INVITE_CODES).toHaveLength(1);
+    expect(failure({ ...valid, INVITE_CODES: "\u{1F600}".repeat(7) }).variable).toBe("INVITE_CODES");
+    expect(parseConfig({ ...valid, INVITE_CODES: "é".repeat(64) }).INVITE_CODES).toHaveLength(1);
+  });
+
+  it("accepts exactly 8 and exactly 64 characters", () => {
+    expect(parseConfig({ ...valid, INVITE_CODES: "12345678" }).INVITE_CODES).toEqual(["12345678"]);
+    expect(parseConfig({ ...valid, INVITE_CODES: "x".repeat(64) }).INVITE_CODES).toHaveLength(1);
+  });
+
+  it("defaults ACCOUNT_CAP to 10 and accepts a positive integer", () => {
+    expect(parseConfig(valid).ACCOUNT_CAP).toBe(DEFAULT_ACCOUNT_CAP);
+    expect(DEFAULT_ACCOUNT_CAP).toBe(10);
+    expect(parseConfig({ ...valid, ACCOUNT_CAP: "1" }).ACCOUNT_CAP).toBe(1);
+    expect(parseConfig({ ...valid, ACCOUNT_CAP: "250" }).ACCOUNT_CAP).toBe(250);
+  });
+
+  it.each(["0", "-1", "abc", "1.5", "1e1", "10 "])("rejects ACCOUNT_CAP %j", (cap) => {
+    expect(failure({ ...valid, ACCOUNT_CAP: cap }).variable).toBe("ACCOUNT_CAP");
   });
 });
