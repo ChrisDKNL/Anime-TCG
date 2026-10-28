@@ -1,8 +1,8 @@
-import { and, eq, gt, lte } from "drizzle-orm";
+import { and, eq, gt, lte, ne, or } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
 import { sessions } from "../../db/schema.js";
 import { hashSessionId, hashUserAgent, isWellFormedSessionId, newSessionId } from "./ids.js";
-import { expiryFrom, isDueForTouch } from "./policy.js";
+import { absoluteCutoff, expiryFrom, isDueForTouch } from "./policy.js";
 
 export interface Session {
   /** The stored (hashed) id, never the cookie value. */
@@ -32,14 +32,16 @@ export class SessionService {
     private readonly secret: string,
   ) {}
 
-  /** The live session behind a cookie value, or null for anything malformed, unknown or expired. */
+  /** The live session behind a cookie value, or null for anything malformed, unknown, expired or past the absolute lifetime. */
   async find(cookieValue: string, now: Date): Promise<Session | null> {
     if (!isWellFormedSessionId(cookieValue)) return null;
     const id = hashSessionId(this.secret, cookieValue);
     const [row] = await this.db
       .select(columns)
       .from(sessions)
-      .where(and(eq(sessions.id, id), gt(sessions.expiresAt, now)))
+      .where(
+        and(eq(sessions.id, id), gt(sessions.expiresAt, now), gt(sessions.createdAt, absoluteCutoff(now))),
+      )
       .limit(1);
     return row ?? null;
   }
@@ -69,11 +71,28 @@ export class SessionService {
     await this.db.delete(sessions).where(eq(sessions.id, id));
   }
 
-  /** Removes rows past their expiry; returns how many went. */
+  /**
+   * Ends every session of an account, except the one named (the caller's
+   * own, which a password change rotates instead). Returns how many went.
+   */
+  async destroyAllForAccount(accountId: string, exceptSessionId?: string): Promise<number> {
+    const ownedByAccount = eq(sessions.accountId, accountId);
+    const gone = await this.db
+      .delete(sessions)
+      .where(
+        exceptSessionId === undefined
+          ? ownedByAccount
+          : and(ownedByAccount, ne(sessions.id, exceptSessionId)),
+      )
+      .returning({ id: sessions.id });
+    return gone.length;
+  }
+
+  /** Removes rows past their sliding expiry or their absolute lifetime; returns how many went. */
   async purgeExpired(now: Date): Promise<number> {
     const gone = await this.db
       .delete(sessions)
-      .where(lte(sessions.expiresAt, now))
+      .where(or(lte(sessions.expiresAt, now), lte(sessions.createdAt, absoluteCutoff(now))))
       .returning({ id: sessions.id });
     return gone.length;
   }

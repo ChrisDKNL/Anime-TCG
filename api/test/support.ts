@@ -59,6 +59,12 @@ const SessionProbe = Type.Object(
   { additionalProperties: false },
 );
 
+/** Until 1b has sign-in, this is how a test gets a session that belongs to an account. */
+const SessionProbeQuery = Type.Object(
+  { accountId: Type.Optional(Type.String({ format: "uuid" })) },
+  { additionalProperties: false },
+);
+
 /**
  * Routes that exist only in tests, so the cross-cutting behaviour (schemas,
  * CSRF, sessions, error mapping) can be exercised before 1b adds real ones.
@@ -67,10 +73,14 @@ export function registerProbeRoutes(app: App): void {
   app.post("/test/echo", { schema: { body: EchoBody, response: { 200: EchoReply } } }, (req) => ({
     name: req.body.name,
   }));
-  app.post("/test/sessions", { schema: { response: { 200: SessionProbe } } }, async (_req, reply) => {
-    const session = await reply.createSession(null);
-    return { session: { id: session.id, accountId: session.accountId } };
-  });
+  app.post(
+    "/test/sessions",
+    { schema: { querystring: SessionProbeQuery, response: { 200: SessionProbe } } },
+    async (req, reply) => {
+      const session = await reply.createSession(req.query.accountId ?? null);
+      return { session: { id: session.id, accountId: session.accountId } };
+    },
+  );
   app.delete("/test/sessions", { schema: { response: { 200: SessionProbe } } }, async (_req, reply) => {
     await reply.destroySession();
     return { session: null };

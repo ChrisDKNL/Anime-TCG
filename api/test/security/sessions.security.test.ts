@@ -1,17 +1,28 @@
+import { randomUUID } from "node:crypto";
+import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
 import { createDb } from "../../src/db/client.js";
-import { newSessionId } from "../../src/domain/session/ids.js";
+import { sessions } from "../../src/db/schema.js";
+import { hashSessionId, newSessionId } from "../../src/domain/session/ids.js";
+import { SESSION_ABSOLUTE_LIFETIME_MS } from "../../src/domain/session/policy.js";
 import {
   clearSessions,
   cookieHeader,
   createTestApp,
   registerProbeRoutes,
   sessionCookieFrom,
+  TEST_SESSION_SECRET,
   WEB_ORIGIN,
 } from "../support.js";
 
-/** T3 adversarial cases for sessions (docs/05-security.md): tampering, fixation, replay after logout. */
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * T3 adversarial cases for sessions (docs/05-security.md): tampering,
+ * fixation, replay after logout, rotation on sign-in, the absolute lifetime
+ * and the blast radius of ending an account's sessions.
+ */
 describe("session cookie, adversarial", () => {
   let app: App;
   beforeAll(async () => {
@@ -21,11 +32,23 @@ describe("session cookie, adversarial", () => {
   beforeEach(() => clearSessions(app.db));
   afterAll(() => app.close());
 
-  async function signIn(): Promise<string> {
-    const res = await app.inject({ method: "POST", url: "/test/sessions", headers: { origin: WEB_ORIGIN } });
+  async function signIn(accountId?: string): Promise<string> {
+    const res = await app.inject({
+      method: "POST",
+      url: "/test/sessions",
+      query: accountId === undefined ? {} : { accountId },
+      headers: { origin: WEB_ORIGIN },
+    });
+    expect(res.statusCode).toBe(200);
     const value = sessionCookieFrom(res.headers["set-cookie"]);
     if (value === undefined) throw new Error("no session cookie was set");
     return value;
+  }
+
+  async function rowExists(cookieValue: string): Promise<boolean> {
+    const id = hashSessionId(TEST_SESSION_SECRET, cookieValue);
+    const rows = await app.db.select({ id: sessions.id }).from(sessions).where(eq(sessions.id, id));
+    return rows.length === 1;
   }
 
   async function whoami(cookieValue: string) {
@@ -124,6 +147,91 @@ describe("session cookie, adversarial", () => {
     const [sa, sb] = [await whoami(a), await whoami(b)];
     expect(sa).not.toEqual(sb);
     expect(await whoami(a)).toEqual(sa);
+  });
+
+  it("rotation on sign-in: the live session fixed before createSession is destroyed, not promoted", async () => {
+    const planted = await signIn();
+    expect(await whoami(planted)).not.toBeNull();
+
+    const accountId = randomUUID();
+    const res = await app.inject({
+      method: "POST",
+      url: "/test/sessions",
+      query: { accountId },
+      headers: { origin: WEB_ORIGIN, cookie: cookieHeader(planted) },
+    });
+    expect(res.statusCode).toBe(200);
+    const issued = sessionCookieFrom(res.headers["set-cookie"]);
+    expect(issued).toBeDefined();
+    expect(issued).not.toBe(planted);
+    // One Set-Cookie line, the new one: the browser never sees a clear followed by a set.
+    expect([res.headers["set-cookie"]].flat().filter((line) => line !== undefined)).toHaveLength(1);
+
+    expect(await whoami(planted)).toBeNull();
+    expect(await rowExists(planted)).toBe(false);
+    expect(await whoami(issued ?? "")).toEqual({
+      id: hashSessionId(TEST_SESSION_SECRET, issued ?? ""),
+      accountId,
+    });
+    expect(await app.db.select({ id: sessions.id }).from(sessions)).toHaveLength(1);
+    const signedOut = await app.inject({
+      method: "GET",
+      url: "/api/session",
+      headers: { cookie: cookieHeader(planted) },
+    });
+    expect(signedOut.json()).toEqual({ signedIn: false });
+  });
+
+  it("absolute lifetime: constant activity cannot keep a session alive past 90 days", async () => {
+    const value = await signIn(randomUUID());
+    const id = hashSessionId(TEST_SESSION_SECRET, value);
+    const now = Date.now();
+    // As an attacker who touches the session every few minutes would leave it: fresh expiry, recent activity.
+    await app.db
+      .update(sessions)
+      .set({
+        createdAt: new Date(now - SESSION_ABSOLUTE_LIFETIME_MS - DAY_MS),
+        lastSeenAt: new Date(now),
+        expiresAt: new Date(now + 29 * DAY_MS),
+      })
+      .where(eq(sessions.id, id));
+
+    expect(await whoami(value)).toBeNull();
+    expect(await rowExists(value)).toBe(true);
+    expect(await app.sessions.purgeExpired(new Date())).toBe(1);
+    expect(await rowExists(value)).toBe(false);
+  });
+
+  it("destroyAllForAccount ends exactly that account's sessions and keeps the excepted one", async () => {
+    const victim = randomUUID();
+    const bystander = randomUUID();
+    const [current, laptop, phone, other, anonymous] = await Promise.all([
+      signIn(victim),
+      signIn(victim),
+      signIn(victim),
+      signIn(bystander),
+      signIn(),
+    ]);
+    const currentId = hashSessionId(TEST_SESSION_SECRET, current);
+
+    expect(await app.sessions.destroyAllForAccount(victim, currentId)).toBe(2);
+    expect(await whoami(current)).toEqual({ id: currentId, accountId: victim });
+    expect(await whoami(laptop)).toBeNull();
+    expect(await whoami(phone)).toBeNull();
+    expect(await rowExists(laptop)).toBe(false);
+    expect(await rowExists(phone)).toBe(false);
+    expect(await whoami(other)).toEqual({
+      id: hashSessionId(TEST_SESSION_SECRET, other),
+      accountId: bystander,
+    });
+    expect(await whoami(anonymous)).not.toBeNull();
+
+    // Without an exception (the owner's CLI reset) the current one goes too; nobody else is touched.
+    expect(await app.sessions.destroyAllForAccount(victim)).toBe(1);
+    expect(await whoami(current)).toBeNull();
+    expect(await app.sessions.destroyAllForAccount(victim)).toBe(0);
+    expect(await app.sessions.destroyAllForAccount(randomUUID())).toBe(0);
+    expect(await app.db.select({ id: sessions.id }).from(sessions)).toHaveLength(2);
   });
 
   it("a cookie sent to a session-creating route cannot be reflected in the response", async () => {

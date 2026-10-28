@@ -3,7 +3,11 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../src/app.js";
 import { sessions } from "../src/db/schema.js";
 import { hashSessionId, newSessionId } from "../src/domain/session/ids.js";
-import { SESSION_TTL_MS, TOUCH_INTERVAL_MS } from "../src/domain/session/policy.js";
+import {
+  SESSION_ABSOLUTE_LIFETIME_MS,
+  SESSION_TTL_MS,
+  TOUCH_INTERVAL_MS,
+} from "../src/domain/session/policy.js";
 import {
   clearSessions,
   cookieHeader,
@@ -13,6 +17,8 @@ import {
   TEST_SESSION_SECRET,
   WEB_ORIGIN,
 } from "./support.js";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 describe("GET /api/session", () => {
   let app: App;
@@ -78,6 +84,39 @@ describe("GET /api/session", () => {
 
     expect(await app.sessions.purgeExpired(new Date())).toBe(1);
     expect(await app.db.select().from(sessions).where(eq(sessions.id, id))).toEqual([]);
+  });
+
+  it("is signed out once a session is 90 days old, however far ahead expires_at is, and the purge removes it", async () => {
+    const cookieValue = await signIn();
+    const id = hashSessionId(TEST_SESSION_SECRET, cookieValue);
+    const ninetyOneDaysAgo = new Date(Date.now() - SESSION_ABSOLUTE_LIFETIME_MS - DAY_MS);
+    await app.db.update(sessions).set({ createdAt: ninetyOneDaysAgo }).where(eq(sessions.id, id));
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/test/whoami",
+      headers: { cookie: cookieHeader(cookieValue) },
+    });
+    expect(res.json()).toEqual({ session: null });
+    expect(String(res.headers["set-cookie"])).toMatch(/Max-Age=0/);
+
+    expect(await app.sessions.purgeExpired(new Date())).toBe(1);
+    expect(await app.db.select().from(sessions).where(eq(sessions.id, id))).toEqual([]);
+  });
+
+  it("stays signed in one day short of the absolute lifetime, and the purge keeps the row", async () => {
+    const cookieValue = await signIn();
+    const id = hashSessionId(TEST_SESSION_SECRET, cookieValue);
+    const eightyNineDaysAgo = new Date(Date.now() - SESSION_ABSOLUTE_LIFETIME_MS + DAY_MS);
+    await app.db.update(sessions).set({ createdAt: eightyNineDaysAgo }).where(eq(sessions.id, id));
+
+    const res = await app.inject({
+      method: "GET",
+      url: "/test/whoami",
+      headers: { cookie: cookieHeader(cookieValue) },
+    });
+    expect(res.json()).toEqual({ session: { id, accountId: null } });
+    expect(await app.sessions.purgeExpired(new Date())).toBe(0);
   });
 
   it("sets the cookie with exactly the required attributes on creation", async () => {
