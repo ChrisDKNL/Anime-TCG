@@ -4,14 +4,20 @@
 # (package-ecosystem: docker) proposes bumps.
 FROM node:26-alpine@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797 AS build
 WORKDIR /app
-# `npm ci` runs the `prepare` script, which installs Husky hooks. There is no
-# .git in the build context (.dockerignore) and hooks are meaningless in an
-# image, so tell Husky to skip.
-ENV HUSKY=0
-COPY package.json package-lock.json ./
-RUN npm ci
-COPY . .
-RUN npm run build
+# Manifests first so the dependency layer is cached until a manifest changes.
+# Only what this image needs is installed: the root (TypeScript and the other
+# build tooling), `shared` (the contract and constants the web app imports)
+# and `web` itself; `api` has its own image. --ignore-scripts: no package
+# gets to run code during the build (the root `prepare` would install Husky
+# hooks, meaningless in an image); everything here ships its native binaries
+# as optional dependencies, not postinstall downloads.
+COPY package.json package-lock.json tsconfig.base.json ./
+COPY shared/package.json shared/
+COPY web/package.json web/
+RUN npm ci --include-workspace-root --workspace shared --workspace web --ignore-scripts
+COPY shared shared
+COPY web web
+RUN npm run build --workspace shared --workspace web
 
 # Stage 2: serve dist/ with Caddy as an unprivileged user.
 FROM caddy:2-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f
@@ -28,7 +34,7 @@ RUN addgroup -S web && adduser -S -G web -H web \
 # (it ran setcap itself); the add keeps this layer working should a future base
 # drop it, and the del removes libcap afterwards since nothing else needs it.
 RUN apk add --no-cache libcap && setcap -r /usr/bin/caddy && apk del libcap
-COPY --from=build --chown=web:web /app/dist /srv
+COPY --from=build --chown=web:web /app/web/dist /srv
 COPY --chown=web:web Caddyfile /etc/caddy/Caddyfile
 USER web
 EXPOSE 8080

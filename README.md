@@ -4,55 +4,85 @@ A solo, non-commercial anime card-collection game. Open booster packs of five
 characters pulled from the free [AniList GraphQL API](https://docs.anilist.co/),
 each rolled for a rarity tier, and build a collection that persists in your browser.
 
-Stack: Vite 8 · React 19 · TypeScript · Tailwind CSS 4, served from a hardened Caddy container (`docs/04-deployment.md`).
+Stack: Vite 8 · React 19 · TypeScript · Tailwind CSS 4 in `web/`, served from a hardened Caddy container; Fastify 5 · PostgreSQL 16 · Drizzle in `api/`; the API contract and game constants both sides share in `shared/` (`docs/04-deployment.md`, [ADR 0009](docs/adr/0009-backend-stack.md)).
 
 ## Status (2026-10-28)
 
 What is on `main` today is the **proof of concept**: packs, rarity rolls and a collection kept in the browser's `localStorage`. There is no backend, no accounts and no API key yet, and nothing in the browser is protected from manipulation. That is a known, temporary state.
 
-The decided direction is **server-authoritative** ([ADR 0008](docs/adr/0008-server-authoritative.md)): accounts, sessions, collection, pack grants, currency and every game outcome move to an API on the owner's NAS ([ADR 0007](docs/adr/0007-backend-on-nas.md)) built on Fastify, PostgreSQL and Drizzle ([ADR 0009](docs/adr/0009-backend-stack.md)); the web app becomes a thin UI. Sprint 1 is building that foundation (`docs/design/backend-foundation.md`); the roadmap and current status live in [`docs/02-roadmap.md`](docs/02-roadmap.md). The "How it works" section below describes the proof of concept and will be replaced when the API lands.
+The decided direction is **server-authoritative** ([ADR 0008](docs/adr/0008-server-authoritative.md)): accounts, sessions, collection, pack grants, currency and every game outcome move to an API on the owner's NAS ([ADR 0007](docs/adr/0007-backend-on-nas.md)) built on Fastify, PostgreSQL and Drizzle ([ADR 0009](docs/adr/0009-backend-stack.md)); the web app becomes a thin UI. Sprint 1a (`docs/design/backend-foundation.md`) lays that foundation: the repo is an npm workspace (`web/`, `api/`, `shared/`), the api serves `/healthz` and `/api/session` (always signed out until accounts arrive in 1b) with sessions, rate limiting, CSRF and the error envelope in place, and `compose.yml` runs caddy, api and db together. The roadmap and current status live in [`docs/02-roadmap.md`](docs/02-roadmap.md). The "How it works" section below describes the proof of concept and will be replaced when the game moves server-side (1b/1c).
 
 Policies that apply to every change: [`docs/05-security.md`](docs/05-security.md) (controls, security tiers, change log) and [`docs/06-engineering-standards.md`](docs/06-engineering-standards.md) (modern code and UI, zero trust on the client). Team, gates and GitHub flow: [`docs/00-team-and-workflow.md`](docs/00-team-and-workflow.md), [`docs/01-github-flow.md`](docs/01-github-flow.md), releases: [`docs/03-release-process.md`](docs/03-release-process.md).
 
 ## Run it
 
 ```bash
-npm install
-npm run dev        # http://localhost:5173
+npm install                            # installs every workspace (shared, api, web)
+docker compose --profile dev up -d     # Postgres on 127.0.0.1:5432 for the api
+cp api/.env.example api/.env.local     # set SESSION_SECRET (openssl rand -base64 48)
+npm run dev                            # api on http://localhost:3000, web on http://localhost:5173 (proxies /api)
 ```
 
+The web app alone still runs without the api (`npm run dev -w web`); nothing in the game calls `/api` yet.
+
 ```bash
-npm run build      # typecheck + production bundle in dist/
-npm run preview    # serve dist/ locally
+npm run check                 # format, lint, typecheck, unit tests, build for every workspace (the pre-push gate)
+npm run test:routes -w api    # api route and adversarial tests against the dev database
+npm run test:e2e              # Playwright against the Vite dev server
+npm run build                 # shared/dist, api/dist, web/dist
 ```
+
+Running the containers (acceptance, production, variables, rollback): [`docs/04-deployment.md`](docs/04-deployment.md).
 
 ## File structure
 
 ```
-index.html                     Vite entry, <html class="dark">
-vite.config.ts                 React + Tailwind v4 plugins
-src/
-  main.tsx                     React root
-  index.css                    Tailwind import, rarity colour tokens, reveal/glow keyframes
-  types.ts                     Rarity, Character (from API), Card (owned instance)
-  lib/
-    anilist.ts                 GraphQL query, fetch + normalise, 24h localStorage cache
-    rarity.ts                  Weighting maths: base odds, popularity tilt, roll
-    pack.ts                    openPack(): sample 5 distinct characters, assign rarity
-  hooks/
-    useCharacterPool.ts        Loads the pool once; loading / ready / error + reload()
-    useInventory.ts            The inventory array, persisted, with derived stats
-  components/
-    BoosterPack.tsx            The "Open Booster Pack" button + odds line
-    CharacterCard.tsx          Image, name, anime origin, glowing rarity frame
-    RarityBadge.tsx            Small tier pill
-    Inventory.tsx              Collection grid, grouped duplicates, rarity filter
-  App.tsx                      Wires it together: tabs, pack reveal, NEW badges
+package.json                   Workspace root: tooling only; scripts fan out to shared, api, web
+tsconfig.base.json             Strictness flags shared by shared/ and api/
+eslint.config.js               One flat config: type-aware base for every workspace, React rules for web/
+compose.yml                    caddy + api + db per profile; Postgres alone for dev/test
+Dockerfile, Caddyfile          The web image: Vite build served by Caddy, /api proxied to the api
+shared/                        @anime-tcg/shared: TypeScript only
+  src/api.ts                   SessionResponse, HealthResponse (TypeBox schema + Static type)
+  src/errors.ts                ERROR_CODES, ErrorEnvelope
+  src/rarity.ts                RARITIES, RARITY_LABEL, BASE_WEIGHTS, POPULARITY_INFLUENCE
+api/                           @anime-tcg/api: Fastify 5 on Node 22
+  src/server.ts                The only file that reads process.env and listens
+  src/start.ts                 migrate, build, listen, drain on shutdown
+  src/app.ts                   buildApp(): plugins and routes, no listen (tests inject())
+  src/config.ts                parseConfig(env): TypeBox-validated, refuses weak SESSION_SECRET
+  src/plugins/                 db, security (helmet, rate limit, CSRF, no-store), session, errors, logging
+  src/domain/                  Pure logic: csrf, errors (ApiError + envelope), session/{ids,policy,service}
+  src/db/                      Drizzle schema, pg client, migrator, committed SQL migrations
+  src/routes/                  health (/healthz), session (/api/session)
+  test/                        Route and security tests against a real Postgres
+  Dockerfile                   node:22-alpine multi-stage, non-root, read-only friendly
+web/                           @anime-tcg/web: the Vite app (unchanged proof of concept)
+  index.html                   Vite entry, <html class="dark">
+  vite.config.ts               React + Tailwind v4 plugins, /api dev proxy, shared source alias
+  src/
+    main.tsx                   React root
+    index.css                  Tailwind import, rarity colour tokens, reveal/glow keyframes
+    types.ts                   Character (from API), Card (owned instance); Rarity comes from shared/
+    lib/
+      anilist.ts               GraphQL query, fetch + normalise, 24h localStorage cache
+      rarity.ts                Weighting maths: popularity tilt, roll (constants from shared/)
+      pack.ts                  openPack(): sample 5 distinct characters, assign rarity
+    hooks/
+      useCharacterPool.ts      Loads the pool once; loading / ready / error + reload()
+      useInventory.ts          The inventory array, persisted, with derived stats
+    components/
+      BoosterPack.tsx          The "Open Booster Pack" button + odds line
+      CharacterCard.tsx        Image, name, anime origin, glowing rarity frame
+      RarityBadge.tsx          Small tier pill
+      Inventory.tsx            Collection grid, grouped duplicates, rarity filter
+    App.tsx                    Wires it together: tabs, pack reveal, NEW badges
+  e2e/                         Playwright
 ```
 
 ## How it works
 
-### 1. API integration (`src/lib/anilist.ts`)
+### 1. AniList integration (`web/src/lib/anilist.ts`)
 
 One query, paginated:
 
@@ -89,7 +119,7 @@ query CharacterPool($page: Int!, $perPage: Int!) {
 - `media(perPage: 1, sort: POPULARITY_DESC)` returns each character's single most popular anime, so every card has one clean origin label. `romaji` is a fallback for titles with no English name.
 - Two pages of 50 (AniList's max `perPage`) = a 100-character pool. The result is cached in `localStorage` for 24 hours because AniList rate-limits to 90 requests/minute and is frequently degraded to 30 (see https://docs.anilist.co/guide/rate-limiting). "Retry" in the error banner bypasses the cache.
 
-### 2. Pack opening (`src/lib/pack.ts`, `src/App.tsx`)
+### 2. Pack opening (`web/src/lib/pack.ts`, `web/src/App.tsx`)
 
 `openPack(pool)` does a partial Fisher–Yates shuffle to pick 5 _distinct_ characters, then calls `assignRarity` on each and stamps a `uid` and `pulledAt`. The button handler in `App.tsx`:
 
@@ -97,7 +127,7 @@ query CharacterPool($page: Int!, $perPage: Int!) {
 2. clears `lastPack` so the reveal animation re-triggers,
 3. after a 350 ms "ripping the pack" delay, sets `lastPack` and appends the cards to the inventory.
 
-### 3. Rarity logic (`src/lib/rarity.ts`)
+### 3. Rarity logic (`web/src/lib/rarity.ts`, constants in `shared/src/rarity.ts`)
 
 Base odds are the headline numbers: **Common 70 % · Rare 25 % · Legendary 5 %**.
 On top of that, popularity tilts the odds slightly:
@@ -120,7 +150,7 @@ every character outside the top five a score of ~0.
 `rollRarity(weights, roll)` takes the random number as a parameter so it is
 trivially unit-testable with a seeded value.
 
-### 4. Inventory state (`src/hooks/useInventory.ts`)
+### 4. Inventory state (`web/src/hooks/useInventory.ts`)
 
 The inventory is a **flat, append-only `Card[]`**:
 

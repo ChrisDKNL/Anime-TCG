@@ -1,0 +1,35 @@
+{
+  "name": "@anime-tcg/api",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsc -b ../shared && node --watch --env-file-if-exists=.env.local --import tsx src/server.ts",
+    "build": "tsc -b tsconfig.build.json && node --eval \"fs.cpSync('src/db/migrations', 'dist/db/migrations', { recursive: true })\"",
+    "start": "node dist/server.js",
+    "typecheck": "tsc -b",
+    "test": "vitest",
+    "test:run": "vitest run --project unit",
+    "test:routes": "vitest run --project routes",
+    "test:coverage": "vitest run --coverage",
+    "db:generate": "drizzle-kit generate"
+  },
+  "dependencies": {
+    "@anime-tcg/shared": "*",
+    "@fastify/cookie": "^11.1.5",
+    "@fastify/helmet": "^13.2.0",
+    "@fastify/rate-limit": "^11.2.1",
+    "@fastify/type-provider-typebox": "^5.2.0",
+    "@sinclair/typebox": "^0.34.52",
+    "drizzle-orm": "^0.45.4",
+    "fastify": "^5.12.7",
+    "fastify-plugin": "^6.0.1",
+    "pg": "^8.23.1",
+    "pino": "^10.1.0"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.23.1",
+    "drizzle-kit": "^0.31.11",
+    "tsx": "^4.23.15"
+  }
+}
