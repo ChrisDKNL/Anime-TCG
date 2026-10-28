@@ -1,0 +1,1 @@
+{"root":["./src/App.tsx","./src/main.tsx","./src/types.ts","./src/components/BoosterPack.tsx","./src/components/CharacterCard.tsx","./src/components/Inventory.tsx","./src/components/RarityBadge.tsx","./src/hooks/useCharacterPool.ts","./src/hooks/useInventory.ts","./src/lib/anilist.ts","./src/lib/pack.ts","./src/lib/rarity.ts"],"version":"5.9.3"}

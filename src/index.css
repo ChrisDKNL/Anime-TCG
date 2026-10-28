@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+/* Rarity glow colours as design tokens so components and animations share one source. */
+@theme {
+  --color-rarity-common: #94a3b8;
+  --color-rarity-rare: #38bdf8;
+  --color-rarity-legendary: #f59e0b;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-zinc-950 text-zinc-100 antialiased;
+}
+
+/* Card flip-in when a pack is opened. */
+@keyframes card-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(24px) rotateY(90deg) scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) rotateY(0deg) scale(1);
+  }
+}
+
+.card-reveal {
+  animation: card-reveal 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+/* Legendary cards pulse; other tiers are static. */
+@keyframes legendary-pulse {
+  0%,
+  100% {
+    box-shadow:
+      0 0 12px 2px rgb(245 158 11 / 0.55),
+      0 0 40px 6px rgb(245 158 11 / 0.25);
+  }
+  50% {
+    box-shadow:
+      0 0 20px 4px rgb(245 158 11 / 0.85),
+      0 0 60px 12px rgb(245 158 11 / 0.4);
+  }
+}
+
+.glow-legendary {
+  animation: legendary-pulse 2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-reveal,
+  .glow-legendary {
+    animation: none;
+  }
+}
