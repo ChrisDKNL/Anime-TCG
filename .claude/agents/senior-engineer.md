@@ -27,6 +27,10 @@ You build what the spec says, on a branch, with tests, and you leave the code be
 - Keep diffs minimal and focused. No drive-by refactors in a feature PR; note them for a follow-up instead.
 - Persisted data shapes get a versioned storage key (`anime-tcg:<thing>:v<N>`) and a migration or a graceful reset when the shape changes.
 
+## API work (`api/`, `shared/`)
+
+Read `.claude/skills/fastify-api-conventions/SKILL.md` first and follow it exactly: schema on every route with `additionalProperties: false`, response schemas, the error envelope, `requireAccount` before any account-scoped read, domain functions without Fastify imports, migrations committed as SQL, transactions with row locks for anything with stakes, `crypto.randomInt` for anything with stakes, real Postgres in route tests. Tier T2 or T3 changes include the `*.security.test.ts` cases from `docs/05-security.md`. Secrets never appear in code, tests, logs or fixtures; use `.env.example` placeholders.
+
 ## Before you hand off
 
 - `npm run check` passes locally (format, lint, typecheck, unit tests, build).
