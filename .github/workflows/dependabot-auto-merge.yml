@@ -1,0 +1,77 @@
+# Enables GitHub auto-merge on Dependabot pull requests for patch and minor
+# version updates and for GitHub Actions bumps. Owner decision 2026-10-28; the
+# one exception to "a human merges everything" (docs/01-github-flow.md).
+#
+# This workflow can only ask GitHub to merge; the branch ruleset on `main`
+# decides. `gh pr merge --auto` merges on the spot if the PR is already green
+# and otherwise waits for the required checks `quality`, `e2e`, `security` and
+# `docker`, an up-to-date branch and resolved review threads. If any of those
+# fail the PR simply stays open. The ruleset is what makes this safe; this
+# file only decides which PRs qualify.
+#
+# Pattern follows GitHub's documented example (verified 2026-10-28):
+# https://docs.github.com/en/code-security/dependabot/working-with-dependabot/automating-dependabot-with-github-actions
+name: Dependabot auto-merge
+
+# `pull_request`, never `pull_request_target`: the job runs in the context of
+# the PR branch with the base repository's token, and nothing here checks out
+# or executes PR code, so the elevated-token footgun of `pull_request_target`
+# is not needed.
+on: pull_request
+
+# Dependabot-triggered runs get a read-only GITHUB_TOKEN by default. The
+# `permissions` key raises it to exactly what `gh pr merge --auto` needs.
+# No repository or Dependabot secrets are used.
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    runs-on: ubuntu-latest
+    # Only Dependabot's own events in this repository reach the steps. GitHub
+    # sets `github.actor`; nothing in the PR can forge it, and a push by any
+    # other account skips the job. (Auto-merge already enabled on a PR does
+    # persist through later pushes by a write-access user, which today is
+    # only the owner; see docs/01-github-flow.md.) The repository guard keeps
+    # a fork that still carries this file from running it at all.
+    if: github.actor == 'dependabot[bot]' && github.repository == 'ChrisDKNL/Anime-TCG'
+    steps:
+      - name: Dependabot metadata
+        id: metadata
+        # Pinned by commit SHA, not the mutable `v2` tag: this is the only step
+        # that runs third-party code while holding a write token. Dependabot
+        # bumps the SHA and the version comment together.
+        uses: dependabot/fetch-metadata@21025c705c08248db411dc16f3619e6b5f9ea21a # v2.5.0
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+        # Second, independent guard: fetch-metadata populates its outputs only
+        # when the PR author and the first commit's author are dependabot[bot]
+        # and that commit's signature is verified, so the condition below is
+        # false for a PR that merely looks like Dependabot's.
+
+      # `update-type` is the highest semver change in the PR, so a grouped PR
+      # that contains one major is `semver-major` and does not qualify. An
+      # unparseable version (e.g. a docker digest-only bump) yields an empty
+      # `update-type`, which also fails closed. `package-ecosystem` is taken
+      # from the Dependabot branch name (`dependabot/github_actions/...`),
+      # hence the underscore.
+      #
+      # Actions majors merge too, except for the two security controls
+      # (security review 2026-10-28): a gitleaks-action major can stop
+      # scanning and still report green, and a fetch-metadata major changes
+      # the verification this workflow relies on. `dependency-names` is a
+      # comma-separated string, so `contains` is a substring match.
+      - name: Enable auto-merge
+        if: >-
+          steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
+          steps.metadata.outputs.update-type == 'version-update:semver-minor' ||
+          (steps.metadata.outputs.package-ecosystem == 'github_actions' &&
+          steps.metadata.outputs.update-type == 'version-update:semver-major' &&
+          !contains(steps.metadata.outputs.dependency-names, 'gitleaks/gitleaks-action') &&
+          !contains(steps.metadata.outputs.dependency-names, 'dependabot/fetch-metadata'))
+        # `--squash`: the ruleset requires linear history and allows squash.
+        run: gh pr merge --auto --squash "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -13,7 +13,32 @@ What is enforced, by what, and the one-time setup you (the repo owner) have to d
    - `security` — `npm audit` (high+) and a gitleaks secret scan
    - `docker` — builds the image, starts it and smoke-tests `/healthz`, the app's `<title>` and the exact `Content-Security-Policy` header (`docs/04-deployment.md`)
 5. The branch ruleset blocks the merge button until all four are green, the branch is up to date with `main`, and every review thread is resolved.
-6. **You merge.** Squash or merge commit, then delete the branch. Nothing else can merge: there are no bypass actors in the ruleset, and `CLAUDE.md` forbids the manager from calling the merge API.
+6. **You merge.** Squash or merge commit, then delete the branch. Nothing else can merge: there are no bypass actors in the ruleset, and `CLAUDE.md` forbids the manager from calling the merge API. The one exception is Dependabot auto-merge, below.
+
+### Dependabot auto-merge
+
+Owner decision 2026-10-28: Dependabot pull requests merge without a human click when, and only when, every required check is green. `.github/workflows/dependabot-auto-merge.yml` enables GitHub's auto-merge (squash) on qualifying PRs. The workflow can only ask GitHub to merge; the ruleset decides. If the PR is already green, `gh` merges it on the spot; otherwise GitHub merges once the required checks pass and the branch is up to date. Either way it is the ruleset being satisfied, never the workflow bypassing it.
+
+Merges automatically:
+
+- Patch and minor updates in any ecosystem: `version-update:semver-patch` / `semver-minor`, the highest change in the PR as reported by `dependabot/fetch-metadata`
+- `github-actions` bumps including majors (branch name `dependabot/github_actions/...`), except the two security controls below
+
+Does not:
+
+- Major updates in `npm`; a grouped PR that contains one major counts as major
+- ESLint 10 is not even proposed: `.github/dependabot.yml` ignores majors of `eslint` and `@eslint/js` until `eslint-plugin-jsx-a11y` supports it (peer range `^3..^9`, verified 2026-10-28)
+- Majors of `gitleaks/gitleaks-action` and `dependabot/fetch-metadata` (security review 2026-10-28): a gitleaks major can stop scanning and still report green, and a fetch-metadata major changes the verification this very workflow relies on
+- `docker` bumps, in practice: a digest-only bump has no `update-type`, and a tag change such as `22-alpine` → `26-alpine` (#10) parses as major, so both stay manual
+- Anything whose required checks fail or whose branch is behind `main`: auto-merge waits, and Dependabot rebases on conflict or at its next scheduled run
+- Anything not opened by `dependabot[bot]` in this repository: the job is skipped, and `fetch-metadata` additionally leaves its outputs empty unless the PR author and the first commit's author are `dependabot[bot]` and that commit's signature is verified
+
+Two things to know:
+
+- Once auto-merge is enabled on a PR it stays enabled through later pushes by a user with write access, which today is only you. Pushing to a Dependabot branch yourself does not cancel the merge; disable auto-merge on the PR first if you want to look.
+- PRs that were already open when the workflow landed only get auto-merge on their next `pull_request` event: comment `@dependabot rebase`, or close and reopen.
+
+Prerequisites, both done by the owner on 2026-10-28: **Settings → General → Pull Requests → Allow auto-merge** is enabled (without it `gh pr merge --auto` fails and every Dependabot PR stays manual, the safe failure), and `docker` is a required check in the live ruleset (one-time setup, step 2 below). The second matters because without it an image-breaking base-image or Caddy bump that passes `quality`, `e2e` and `security` could auto-merge.
 
 ## Layers of enforcement
 
@@ -47,7 +72,7 @@ Then **Settings → General → Default branch** → switch to `main`.
 
 What it enforces on `main`: pull request required, all review threads resolved, required checks `quality` / `e2e` / `security` / `docker` green on an up-to-date branch, linear history, no force-push, no deletion, no bypass actors.
 
-If you imported the ruleset before the `docker` job existed, **owner action**: add `docker` to the required checks in the ruleset settings (**Settings → Rules → Rulesets → Protect main → Require status checks to pass**).
+The ruleset was imported before the `docker` job existed; `docker` was added to the required checks by hand on 2026-10-28 (**Settings → Rules → Rulesets → Protect main → Require status checks to pass**). If you ever re-import the JSON, it already includes `docker`.
 
 ### 3. Decide on the approval count
 
