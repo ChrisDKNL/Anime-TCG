@@ -14,9 +14,10 @@ export const errorsPlugin = fp(
     });
 
     app.setErrorHandler(async (err, req, reply) => {
-      const { statusCode, body } = errorEnvelopeFor(err);
+      const { statusCode, body, retryAfterSeconds } = errorEnvelopeFor(err);
       if (statusCode >= 500) req.log.error({ err }, "request failed");
       else req.log.info({ code: body.error.code }, "request rejected");
+      if (retryAfterSeconds !== undefined) reply.header("retry-after", String(retryAfterSeconds));
       return reply.code(statusCode).send(body);
     });
   },

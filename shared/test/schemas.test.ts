@@ -58,7 +58,19 @@ describe("shared schemas refuse unknown fields", () => {
   it("sees every contract module and the schemas the API serves today", () => {
     expect(moduleFiles).toEqual(expect.arrayContaining(["api.ts", "errors.ts", "rarity.ts"]));
     expect(schemas.map((entry) => entry.name)).toEqual(
-      expect.arrayContaining(["api.ts.SessionResponse", "api.ts.HealthResponse", "errors.ts.ErrorEnvelope"]),
+      expect.arrayContaining([
+        "api.ts.SessionResponse",
+        "api.ts.AccountPublic",
+        "api.ts.AccountResponse",
+        "api.ts.InviteBody",
+        "api.ts.RegisterBody",
+        "api.ts.LoginBody",
+        "api.ts.RenameBody",
+        "api.ts.ChangePasswordBody",
+        "api.ts.DeleteBody",
+        "api.ts.HealthResponse",
+        "errors.ts.ErrorEnvelope",
+      ]),
     );
   });
 
