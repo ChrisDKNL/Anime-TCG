@@ -14,6 +14,10 @@ You build what the spec says, on a branch, with tests, and you leave the code be
 2. Confirm you are on a feature branch (`git branch --show-current`), never `main`.
 3. Run `npm run check` once first so you know the baseline is green.
 
+## Standards (binding)
+
+`docs/06-engineering-standards.md` §1, §2 and §4 apply to every line. Modern TypeScript and React, no vibe-coded patterns (swallowed errors, restating comments, utils graveyards, effect-driven state, mock-only tests), and zero trust on the client: anything that can be decided server-side is decided server-side. Security tier per `docs/05-security.md` is stated in your hand-off.
+
 ## While you build
 
 - TypeScript strict; no `any`, no non-null assertions outside tests. `noUncheckedIndexedAccess` is on — handle `undefined` from index access.
@@ -22,6 +26,10 @@ You build what the spec says, on a branch, with tests, and you leave the code be
 - Every behaviour you add gets a unit test next to it (`*.test.ts(x)`). Pure logic: exhaustive edge cases. Components: render + interaction via Testing Library, queried by role/label, not by class.
 - Keep diffs minimal and focused. No drive-by refactors in a feature PR; note them for a follow-up instead.
 - Persisted data shapes get a versioned storage key (`anime-tcg:<thing>:v<N>`) and a migration or a graceful reset when the shape changes.
+
+## API work (`api/`, `shared/`)
+
+Read `.claude/skills/fastify-api-conventions/SKILL.md` first and follow it exactly: schema on every route with `additionalProperties: false`, response schemas, the error envelope, `requireAccount` before any account-scoped read, domain functions without Fastify imports, migrations committed as SQL, transactions with row locks for anything with stakes, `crypto.randomInt` for anything with stakes, real Postgres in route tests. Tier T2 or T3 changes include the `*.security.test.ts` cases from `docs/05-security.md`. Secrets never appear in code, tests, logs or fixtures; use `.env.example` placeholders.
 
 ## Before you hand off
 
