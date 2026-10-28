@@ -8,10 +8,13 @@ WORKDIR /app
 # .git in the build context (.dockerignore) and hooks are meaningless in an
 # image, so tell Husky to skip.
 ENV HUSKY=0
-COPY package.json package-lock.json ./
-RUN npm ci
-COPY . .
-RUN npm run build
+# Manifests first so the dependency layer is cached until a manifest changes.
+# Only the `web` workspace is installed; `api` has its own image.
+COPY package.json package-lock.json tsconfig.base.json ./
+COPY web/package.json web/
+RUN npm ci --workspace web
+COPY web web
+RUN npm run build --workspace web
 
 # Stage 2: serve dist/ with Caddy as an unprivileged user.
 FROM caddy:2-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f
@@ -28,7 +31,7 @@ RUN addgroup -S web && adduser -S -G web -H web \
 # (it ran setcap itself); the add keeps this layer working should a future base
 # drop it, and the del removes libcap afterwards since nothing else needs it.
 RUN apk add --no-cache libcap && setcap -r /usr/bin/caddy && apk del libcap
-COPY --from=build --chown=web:web /app/dist /srv
+COPY --from=build --chown=web:web /app/web/dist /srv
 COPY --chown=web:web Caddyfile /etc/caddy/Caddyfile
 USER web
 EXPOSE 8080

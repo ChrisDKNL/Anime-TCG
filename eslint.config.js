@@ -7,20 +7,13 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist", "coverage", "playwright-report", "test-results", "node_modules"] },
+  { ignores: ["**/dist", "**/coverage", "**/playwright-report", "**/test-results", "**/node_modules"] },
   {
+    // Every workspace: type-aware rules against the nearest tsconfig.json.
     files: ["**/*.{ts,tsx}"],
-    extends: [
-      js.configs.recommended,
-      ...tseslint.configs.recommendedTypeChecked,
-      reactHooks.configs.flat.recommended,
-      reactRefresh.configs.vite,
-      jsxA11y.flatConfigs.recommended,
-      prettier,
-    ],
+    extends: [js.configs.recommended, ...tseslint.configs.recommendedTypeChecked],
     languageOptions: {
       ecmaVersion: 2022,
-      globals: { ...globals.browser, ...globals.node },
       parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
     },
     rules: {
@@ -29,11 +22,21 @@ export default tseslint.config(
     },
   },
   {
+    files: ["web/**/*.{ts,tsx}"],
+    extends: [
+      reactHooks.configs.flat.recommended,
+      reactRefresh.configs.vite,
+      jsxA11y.flatConfigs.recommended,
+    ],
+    languageOptions: { globals: { ...globals.browser, ...globals.node } },
+  },
+  {
     // Test files: allow non-null assertions and unbound methods common in test code.
-    files: ["**/*.test.{ts,tsx}", "e2e/**/*.ts", "src/test/**/*.{ts,tsx}"],
+    files: ["**/*.test.{ts,tsx}", "web/e2e/**/*.ts", "web/src/test/**/*.{ts,tsx}"],
     rules: {
       "@typescript-eslint/no-non-null-assertion": "off",
       "@typescript-eslint/unbound-method": "off",
     },
   },
+  prettier,
 );

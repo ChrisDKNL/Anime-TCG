@@ -40,7 +40,7 @@ jobs:
         if: always()
         with:
           name: coverage
-          path: coverage
+          path: web/coverage
           retention-days: 7
 
   e2e:
@@ -62,7 +62,7 @@ jobs:
         if: failure()
         with:
           name: playwright-report
-          path: playwright-report
+          path: web/playwright-report
           retention-days: 7
 
   security:
