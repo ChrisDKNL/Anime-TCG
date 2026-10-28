@@ -57,7 +57,8 @@ Docs-only or config-only changes still go through a branch, CI, and your merge. 
 
 The owner runs a local Claude Code session on their dev machine and a cloud session (the manager). Both push. To avoid two agents editing the same branch:
 
-- Each session works on its own branch and opens its own PRs. The cloud manager uses `claude/anime-card-game-dapaop`; the local session uses `feat/`, `fix/`, `docs/` branches.
+- Each session works on its own branches and opens its own PRs; both use the `feat/`, `fix/`, `docs/`, `chore/` naming (the owner allowed the cloud manager to do so on 2026-10-28; its original `claude/anime-card-game-dapaop` branch retires once its PR merges).
+- Releases: the manager tags and writes the handoff; the local session runs acceptance and production (`docs/03-release-process.md`).
 - A PR is owned by the session that opened it: rebases, branch updates and review replies on it come from that session only.
 - Dependabot PRs are handled by whichever session the owner asks; by default the local one.
 - Decisions still land in `docs/` and ADRs, not in either session's chat.

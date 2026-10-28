@@ -58,3 +58,7 @@ Recorded in ADR 0003 (accounts) and ADR 0004 (economy). In one line each:
 - Cards can be sold (to the system), recycled (crafting sink) and traded (local profiles only for now).
 
 Owner's answers (same day): starting parameters accepted provisionally (sell 10/50/300, 3 stored packs, 5-to-1 recycle, 3–5 % house edge), to be rebalanced once all mechanics exist; trade deferred until real accounts (item 8); build order **approved**: 1 → 2 → 3 + 4 → 5 → 6, then 7 after 8.
+
+### Sprint 1 (started 2026-10-28)
+
+Item 1 only: local accounts with invite code, login and password (ADR 0006). Release per `docs/03-release-process.md` when merged.
