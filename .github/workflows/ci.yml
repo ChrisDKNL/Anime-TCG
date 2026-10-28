@@ -20,8 +20,8 @@ jobs:
     name: quality
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -36,7 +36,7 @@ jobs:
         run: npm run test:coverage
       - name: Build
         run: npm run build
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: coverage
@@ -47,8 +47,8 @@ jobs:
     name: e2e
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -58,7 +58,7 @@ jobs:
         run: npm run test:e2e
         env:
           CI: true
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: failure()
         with:
           name: playwright-report
@@ -69,8 +69,12 @@ jobs:
     name: security
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+        with:
+          # gitleaks scans the PR's commit range (base^..head); a depth-1 clone
+          # lacks those commits and the scan errors out with "unknown revision".
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -78,6 +82,59 @@ jobs:
       - name: Dependency audit (high+)
         run: npm run audit
       - name: Secret scan
-        uses: gitleaks/gitleaks-action@v2
+        uses: gitleaks/gitleaks-action@v3
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  docker:
+    name: docker
+    runs-on: ubuntu-latest
+    env:
+      # Must match the Caddyfile byte for byte; the smoke test asserts it.
+      EXPECTED_CSP: "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https://s4.anilist.co; connect-src 'self' https://graphql.anilist.co; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+      # Read by compose.yml: the job builds and runs anime-tcg-web:ci.
+      TAG: ci
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Nothing here needs the token after checkout; keep it out of .git
+          # and away from anything the image build or container could read.
+          persist-credentials: false
+      - name: Build image and start acceptance container
+        id: up
+        # The real runtime path, not a bare `docker run`: compose.yml's
+        # acceptance profile, so the hardening it declares (read-only root,
+        # cap_drop ALL, no-new-privileges, pids_limit, noexec tmpfs mounts,
+        # loopback publish) is what the checks below run against. Every
+        # compose variable has a default, so no env file is needed. --wait
+        # returns once the image HEALTHCHECK reports healthy and fails if the
+        # container exits first; either way the container is left in place
+        # for the logs step. Cleanup is explicit at the end.
+        run: docker compose --profile acceptance up -d --build --wait --wait-timeout 60
+      - name: Hardening is live
+        run: |
+          expected='true 64 127.0.0.1'
+          actual="$(docker inspect anime-tcg-acceptance --format '{{.HostConfig.ReadonlyRootfs}} {{.HostConfig.PidsLimit}} {{index .HostConfig.PortBindings "8080/tcp" 0 "HostIp"}}')"
+          if [ "$actual" != "$expected" ]; then
+            echo "hardening mismatch (ReadonlyRootfs PidsLimit HostIp)" >&2
+            echo "expected: $expected" >&2
+            echo "actual:   $actual" >&2
+            exit 1
+          fi
+      - name: Smoke test
+        run: |
+          curl -fsS http://127.0.0.1:8080/healthz && echo
+          curl -fsS http://127.0.0.1:8080/ | grep -q '<title>Anime TCG'
+          actual="$(curl -sI http://127.0.0.1:8080/ | grep -i '^content-security-policy:' | sed 's/^[^:]*: *//' | tr -d '\r')"
+          if [ "$actual" != "$EXPECTED_CSP" ]; then
+            echo "Content-Security-Policy mismatch" >&2
+            echo "expected: $EXPECTED_CSP" >&2
+            echo "actual:   $actual" >&2
+            exit 1
+          fi
+      - name: Container logs
+        if: failure() && steps.up.outcome != 'skipped'
+        run: docker compose --profile acceptance logs --no-color
+      - name: Tear down
+        if: always() && steps.up.outcome != 'skipped'
+        run: docker compose --profile acceptance down --volumes --remove-orphans

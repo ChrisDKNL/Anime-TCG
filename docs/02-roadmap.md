@@ -4,16 +4,20 @@ Status of every feature. The manager updates this; it is the single source of tr
 
 Statuses: `idea` → `specced` → `building` → `testing` → `qc` → `security` → `pr` → `shipped`.
 
-| #   | Feature                          | Status  | Branch / PR                     | Spec                 | Notes                                              |
-| --- | -------------------------------- | ------- | ------------------------------- | -------------------- | -------------------------------------------------- |
-| 0   | Booster packs + local collection | shipped | `claude/anime-card-game-dapaop` | —                    | Pre-dates the workflow; no spec                    |
-| 0.1 | Team, gates, CI, ruleset         | shipped | `main`                          | `docs/00`, `docs/01` | Admin setup done 2026-10-28 (ruleset id 26049188)  |
-| 1   | User accounts                    | idea    |                                 |                      | Needs the backend decision first (ADR)             |
-| 2   | Collection overview              | idea    |                                 |                      | Grid, filters, sort, search, completion stats      |
-| 3   | Profile                          | idea    |                                 |                      | Avatar from a card, stats, favourite card showcase |
-| 4   | In-game currency                 | idea    |                                 |                      | Prerequisite for 5 and 6; also makes packs cost    |
-| 5   | Blackjack                        | idea    |                                 |                      | Wager currency; pure-logic engine in `src/lib/`    |
-| 6   | Slots                            | idea    |                                 |                      | Reel symbols = card art? Odds published in-UI      |
+| #   | Feature                                            | Status  | Branch / PR                     | Spec                                 | Notes                                                                                                                      |
+| --- | -------------------------------------------------- | ------- | ------------------------------- | ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| 0   | Booster packs + local collection                   | shipped | `claude/anime-card-game-dapaop` | —                                    | Pre-dates the workflow; no spec                                                                                            |
+| 0.1 | Team, gates, CI, ruleset                           | shipped | PR #8                           | `docs/00`, `docs/01`                 | Admin setup done by the owner; `docker` added as required check in PR #9's ruleset JSON (owner action on the live ruleset) |
+| 1   | Local profiles (invite code)                       | idea    |                                 | ADR 0003 → `docs/design/accounts.md` | StorageAdapter boundary is the real deliverable                                                                            |
+| 2   | Economy: currency, pack timer, sell/recycle        | idea    |                                 | ADR 0004 → `docs/design/economy.md`  | Prerequisite for 5 and 6; numbers must be shown not to inflate                                                             |
+| 3   | Collection overview                                | idea    |                                 |                                      | Grid, filters, sort, search, completion stats; sell/recycle actions                                                        |
+| 4   | Profile                                            | idea    |                                 |                                      | Avatar from a card, stats, showcase, balance, next-pack timer                                                              |
+| 5   | Blackjack                                          | idea    |                                 |                                      | Wager currency; packs as prize tier; pure engine in `src/lib/`                                                             |
+| 6   | Slots                                              | idea    |                                 |                                      | Reel symbols = card art; published paytable                                                                                |
+| 7   | Trade between local profiles                       | idea    |                                 |                                      | Flow placeholder only; real trading needs ADR 0003 Phase 2                                                                 |
+| 0.2 | Deployment files (Dockerfile, compose, deploy doc) | shipped | PR #9                           | ADR 0010, `docs/04-deployment.md`    | Acceptance bootstrap verified by the owner 2026-10-28 (`docs/releases/0001-acceptance-bootstrap.md`)                       |
+| 9   | Collection download (read-only server endpoint)    | idea    |                                 |                                      | Owner's answer 2026-10-28: later; replaces the dropped file export                                                         |
+| 8   | Third-party sign-in (Google/Discord)               | idea    |                                 | ADR 0003 Phase 2                     | Needs a BaaS decision (new ADR); import of local profiles                                                                  |
 
 ## Brainstorm seed (2026-10-28)
 
@@ -44,3 +48,18 @@ Blackjack and slots need something to wager, and packs should probably cost that
 ### Collection overview and profile: mostly design work
 
 Both are already possible with local state. Open questions: completion tracking (percentage of the 100-character pool? of all AniList? per anime?), sorting/filter model, what a profile shows when there is one user, whether "favourite card" is a thing.
+
+## Decisions from the 2026-10-28 brainstorm
+
+Recorded in ADR 0003 (accounts) and ADR 0004 (economy). In one line each:
+
+- Local profiles first, as a proof of concept; invite code at creation as a flow placeholder.
+- Third-party sign-in (Google/Discord, provider-side 2FA) later, behind a storage boundary built now.
+- Packs are free, one every 10 minutes (base), never bought with currency; winnable as game prizes.
+- Cards can be sold (to the system), recycled (crafting sink) and traded (local profiles only for now).
+
+Owner's answers (same day): starting parameters accepted provisionally (sell 10/50/300, 3 stored packs, 5-to-1 recycle, 3–5 % house edge), to be rebalanced once all mechanics exist; trade deferred until real accounts (item 8); build order **approved**: 1 → 2 → 3 + 4 → 5 → 6, then 7 after 8.
+
+### Sprint 1 (replanned 2026-10-28, same day)
+
+Original plan (local accounts PoC) superseded by ADR 0008: the owner wants all state server-side and protected from client manipulation. Sprint 1 is now **1a backend foundation → 1b server-side accounts → 1c server-side collection and packs**. The game is playable end to end again only at the end of 1c. Release per `docs/03-release-process.md` when all three are merged. Stack confirmed by the owner (ADR 0009 accepted).

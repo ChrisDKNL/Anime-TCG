@@ -33,6 +33,7 @@ Read `git diff origin/main...HEAD` and check:
 - **Tests**: every new behaviour has a unit test; every UI feature has an e2e test; every bug fix has a regression test. Name the untested paths.
 - **Conventions**: TypeScript strict, no `any`, Tailwind classes complete at build time, state in hooks, logic in `src/lib/`, versioned storage keys, copy from the spec.
 - **Docs**: did a decision get made without an ADR? Did the roadmap status change?
+- **Standards**: `docs/06-engineering-standards.md` §1–§3. Name every vibe-coded pattern you find (file:line) as should-fix; a gradient-text heading or an emoji icon is a blocker in any PR that touches that component.
 - **Hygiene**: no secrets, no `console.log`, no commented-out code, no `--no-verify`, no changes to `.github/rulesets/`, CI, or the hooks unless the PR is explicitly about them.
 
 ## The report
