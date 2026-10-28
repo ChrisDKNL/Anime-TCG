@@ -81,6 +81,8 @@ export class AccountService {
     if (!this.invites.accepts(body.inviteCode)) throw inviteInvalid();
     const login = validatedLogin(body.login);
     const loginNormalized = normalizeLogin(login);
+    // A roster already full is refused before the hash is paid for; the count under the lock below is the one that decides.
+    if (isCapReached(await this.countAccounts(this.db), this.cap)) throw capReached();
     // Hashing takes tens of milliseconds; it happens before the lock so no other registration waits on it.
     const passwordHash = await hashPassword(body.password);
     const account = await this.db.transaction(async (tx) => {
@@ -128,10 +130,11 @@ export class AccountService {
   async rename(log: AuditLog, accountId: string, body: RenameBody, now: Date): Promise<Account> {
     const login = validatedLogin(body.login);
     const loginNormalized = normalizeLogin(login);
-    return this.db.transaction(async (tx) => {
+    // `from` is null for the no-op, so the audit line below is written only for a rename that committed.
+    const { account, from } = await this.db.transaction(async (tx) => {
       await lockAccounts(tx);
       const current = await this.find(tx, accountId);
-      if (current.login === login) return current;
+      if (current.login === login) return { account: current, from: null };
       if (await this.loginTaken(tx, loginNormalized, accountId)) throw loginTaken();
       const renamed = single(
         await tx
@@ -140,9 +143,10 @@ export class AccountService {
           .where(eq(accounts.id, accountId))
           .returning(accountColumns),
       );
-      log.info({ accountId, from: current.login, login }, "account renamed");
-      return renamed;
+      return { account: renamed, from: current.login };
     });
+    if (from !== null) log.info({ accountId, from, login }, "account renamed");
+    return account;
   }
 
   async changePassword(log: AuditLog, accountId: string, body: ChangePasswordBody, now: Date): Promise<void> {

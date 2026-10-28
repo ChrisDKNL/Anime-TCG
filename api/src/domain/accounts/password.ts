@@ -42,6 +42,8 @@ const MAX_UINT32 = 4_294_967_295;
 const MAX_PARALLELISM = 16_777_215;
 const MIN_SALT_BYTES = 8;
 const MIN_TAG_BYTES = 4;
+/** Argon2's memory floor: 8 KiB for each lane. */
+const MIN_MEMORY_KIB_PER_LANE = 8;
 
 function encodeField(bytes: Buffer): string {
   return bytes.toString("base64").replace(/=+$/, "");
@@ -68,7 +70,7 @@ function parsePhc(phc: string): Argon2idHash | null {
     parallelism <= MAX_PARALLELISM &&
     passes >= 1 &&
     passes <= MAX_UINT32 &&
-    memoryKiB >= 8 * parallelism &&
+    memoryKiB >= MIN_MEMORY_KIB_PER_LANE * parallelism &&
     memoryKiB <= MAX_UINT32 &&
     salt.length >= MIN_SALT_BYTES &&
     tag.length >= MIN_TAG_BYTES;

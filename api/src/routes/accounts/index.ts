@@ -61,13 +61,13 @@ export const accountRoutes: FastifyPluginAsyncTypebox = async (app) => {
       config: { rateLimit: RENAME_RATE_LIMIT },
     },
     async (req, reply): Promise<AccountResponse> => {
-      const account = await requireAccount(req, reply);
+      const { account } = await requireAccount(req, reply);
       const renamed = await app.accounts.rename(req.log, account.id, req.body, new Date());
       return { account: toPublic(renamed) };
     },
   );
 
-  /** Every other session of the account ends; the current one is rotated, so the response carries the new cookie. */
+  /** Every other session of the account ends; the current one is kept for `createSession` to rotate, so the response carries the new cookie. */
   app.post(
     "/account/change-password",
     {
@@ -84,9 +84,9 @@ export const accountRoutes: FastifyPluginAsyncTypebox = async (app) => {
       config: { rateLimit: AUTH_RATE_LIMIT },
     },
     async (req, reply) => {
-      const account = await requireAccount(req, reply);
+      const { account, session } = await requireAccount(req, reply);
       await app.accounts.changePassword(req.log, account.id, req.body, new Date());
-      await app.sessions.destroyAllForAccount(account.id);
+      await app.sessions.destroyAllForAccount(account.id, session.id);
       await reply.createSession(account.id);
       return reply.code(204).send(null);
     },
@@ -109,7 +109,7 @@ export const accountRoutes: FastifyPluginAsyncTypebox = async (app) => {
       config: { rateLimit: AUTH_RATE_LIMIT },
     },
     async (req, reply) => {
-      const account = await requireAccount(req, reply);
+      const { account } = await requireAccount(req, reply);
       await app.accounts.deleteAccount(req.log, account.id, req.body, new Date());
       await reply.destroySession();
       return reply.code(204).send(null);
