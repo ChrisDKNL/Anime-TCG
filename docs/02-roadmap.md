@@ -7,7 +7,7 @@ Statuses: `idea` → `specced` → `building` → `testing` → `qc` → `securi
 | #   | Feature                          | Status  | Branch / PR                     | Spec                 | Notes                                              |
 | --- | -------------------------------- | ------- | ------------------------------- | -------------------- | -------------------------------------------------- |
 | 0   | Booster packs + local collection | shipped | `claude/anime-card-game-dapaop` | —                    | Pre-dates the workflow; no spec                    |
-| 0.1 | Team, gates, CI, ruleset         | pr      | `claude/anime-card-game-dapaop` | `docs/00`, `docs/01` | Needs the one-time admin setup in `docs/01`        |
+| 0.1 | Team, gates, CI, ruleset         | shipped | `main`                          | `docs/00`, `docs/01` | Admin setup done 2026-10-28 (ruleset id 26049188)  |
 | 1   | User accounts                    | idea    |                                 |                      | Needs the backend decision first (ADR)             |
 | 2   | Collection overview              | idea    |                                 |                      | Grid, filters, sort, search, completion stats      |
 | 3   | Profile                          | idea    |                                 |                      | Avatar from a card, stats, favourite card showcase |
