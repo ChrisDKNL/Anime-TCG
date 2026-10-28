@@ -2,9 +2,11 @@
 
 2026-10-28 · accepted (facts recorded from the owner; deployment files still to be committed)
 
+> The deployment hostname is intentionally omitted here because this repository is public. Keep it in private deploy notes or the environment, not in `docs/`.
+
 ## Context
 
-The owner runs the app in a Docker container on their own dev station, reachable from the internet at `tcg.private-0118.nl` (Cloudflare DNS, record pending as of 2026-10-28). A backend can run in the same container or alongside it. This was not known when ADR 0003 was written and it changes the cost of its Phase 2 options.
+The owner runs the app in a Docker container on their own dev station, reachable from the internet under a public hostname on the owner's own domain (Cloudflare DNS; the hostname is deliberately not recorded in this public repository, the owner has it). A backend can run in the same container or alongside it. This was not known when ADR 0003 was written and it changes the cost of its Phase 2 options.
 
 ## Decision
 

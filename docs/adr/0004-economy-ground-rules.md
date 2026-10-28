@@ -20,4 +20,4 @@ Blackjack and slots need stakes, and the owner wants cards to be sellable, trade
 
 - Currency, timers and sell/recycle are a prerequisite for both games and must be specced and built first.
 - Numbers (sell prices, cap on stored packs, game payouts) are parameters in one file, so they can be tuned without touching logic.
-- Trade in Phase 1 is a UI between two local profiles; it exists to prove the flow, not as a feature anyone will use.
+- Trade is not built until real accounts exist (roadmap item 7 after 8).
