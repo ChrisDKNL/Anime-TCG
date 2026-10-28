@@ -4,7 +4,15 @@ A solo, non-commercial anime card-collection game. Open booster packs of five
 characters pulled from the free [AniList GraphQL API](https://docs.anilist.co/),
 each rolled for a rarity tier, and build a collection that persists in your browser.
 
-Stack: Vite 8 · React 19 · TypeScript · Tailwind CSS 4. No backend, no auth, no API keys.
+Stack: Vite 8 · React 19 · TypeScript · Tailwind CSS 4, served from a hardened Caddy container (`docs/04-deployment.md`).
+
+## Status (2026-10-28)
+
+What is on `main` today is the **proof of concept**: packs, rarity rolls and a collection kept in the browser's `localStorage`. There is no backend, no accounts and no API key yet, and nothing in the browser is protected from manipulation. That is a known, temporary state.
+
+The decided direction is **server-authoritative** ([ADR 0008](docs/adr/0008-server-authoritative.md)): accounts, sessions, collection, pack grants, currency and every game outcome move to an API on the owner's NAS ([ADR 0007](docs/adr/0007-backend-on-nas.md)) built on Fastify, PostgreSQL and Drizzle ([ADR 0009](docs/adr/0009-backend-stack.md)); the web app becomes a thin UI. Sprint 1 is building that foundation (`docs/design/backend-foundation.md`); the roadmap and current status live in [`docs/02-roadmap.md`](docs/02-roadmap.md). The "How it works" section below describes the proof of concept and will be replaced when the API lands.
+
+Policies that apply to every change: [`docs/05-security.md`](docs/05-security.md) (controls, security tiers, change log) and [`docs/06-engineering-standards.md`](docs/06-engineering-standards.md) (modern code and UI, zero trust on the client). Team, gates and GitHub flow: [`docs/00-team-and-workflow.md`](docs/00-team-and-workflow.md), [`docs/01-github-flow.md`](docs/01-github-flow.md), releases: [`docs/03-release-process.md`](docs/03-release-process.md).
 
 ## Run it
 
