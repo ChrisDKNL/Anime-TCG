@@ -9,6 +9,15 @@ updates:
         dependency-type: development
       production:
         dependency-type: production
+    ignore:
+      # eslint-plugin-jsx-a11y does not yet support ESLint 10 (verified
+      # 2026-10-28: its peer range is ^3..^9). An ESLint 10 bump would make the
+      # whole dev-dependencies group a major and leave the plugin unresolvable;
+      # drop this block once the plugin declares ^10.
+      - dependency-name: eslint
+        update-types: ["version-update:semver-major"]
+      - dependency-name: "@eslint/js"
+        update-types: ["version-update:semver-major"]
   - package-ecosystem: github-actions
     directory: /
     schedule:
