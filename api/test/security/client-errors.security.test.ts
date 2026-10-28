@@ -12,12 +12,8 @@ import { createTestApp } from "../support.js";
  * and `shared/src/errors.ts` types `error` as an object, so these paths have to
  * keep that promise too.
  *
- * KNOWN FAILING on feat/backend-foundation (found 2026-10-28 by the tester):
- * `buildApp` leaves Fastify's default `clientErrorHandler` in place, which
- * answers `{"error":"Request Header Fields Too Large","message":...,"statusCode":431}`
- * (a string `error`, no `code`) with no `cache-control` or
- * `x-content-type-options` header. Fix: pass a `clientErrorHandler` to
- * `fastify()` in `api/src/app.ts` that writes the envelope and the headers.
+ * Regression (fixed in #20): Fastify's default `clientErrorHandler` answered
+ * these with its own shape (string `error`, no `code`) and none of our headers.
  */
 describe("client errors below the router, adversarial", () => {
   let app: App;

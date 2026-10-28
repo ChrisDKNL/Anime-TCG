@@ -12,7 +12,7 @@ import { expect, test } from "@playwright/test";
  * - GET /api/session is proxied to the api: {"signedIn":false}, no-store, nosniff,
  *   and Caddy's site-wide CSP and hardening headers on the proxied response too.
  * - The CSP is byte-for-byte the one in the Caddyfile (a silent relaxation would pass a looser check).
- * - No Server header leaks from either layer.
+ * - No Server or Via header leaks from either layer (mirrors the CI docker job).
  * - A POST without an Origin is refused by the api's CSRF check with the 403 envelope.
  * - The api's own /healthz is not reachable through Caddy (it is the container healthcheck, not public).
  * - The SPA shell is served for an unknown path with the no-cache policy.
@@ -32,6 +32,7 @@ test.describe("deployed stack through Caddy", () => {
     expect(res.status()).toBe(200);
     expect(await res.text()).toBe("ok");
     expect(res.headers()["server"]).toBeUndefined();
+    expect(res.headers()["via"]).toBeUndefined();
   });
 
   test("GET /api/session reaches the api and comes back signed out with the security headers", async ({
@@ -48,6 +49,7 @@ test.describe("deployed stack through Caddy", () => {
     expect(headers["referrer-policy"]).toBe("strict-origin-when-cross-origin");
     expect(headers["permissions-policy"]).toBe("camera=(), microphone=(), geolocation=()");
     expect(headers["server"]).toBeUndefined();
+    expect(headers["via"]).toBeUndefined();
     expect(headers["set-cookie"]).toBeUndefined();
   });
 
@@ -58,6 +60,7 @@ test.describe("deployed stack through Caddy", () => {
     expect(res.headers()["content-security-policy"]).toBe(EXPECTED_CSP);
     expect(res.headers()["cache-control"]).toBe("no-cache");
     expect(res.headers()["server"]).toBeUndefined();
+    expect(res.headers()["via"]).toBeUndefined();
     expect(await res.text()).toContain("<title>Anime TCG");
   });
 

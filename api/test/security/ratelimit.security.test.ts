@@ -69,17 +69,8 @@ describe("rate limit keying, adversarial", () => {
   });
 
   /**
-   * KNOWN FAILING on feat/backend-foundation (found 2026-10-28 by the tester).
-   * `api/src/plugins/security.ts` says the CSRF hook is "registered after the
-   * limiter so a flood of rejected cross-site requests still counts", but
-   * `@fastify/rate-limit` attaches its check per route (an `onRoute` hook), and
-   * route-level `onRequest` hooks run after instance-level ones; the 404
-   * handler's limiter is a `preHandler`. Either way the instance-level CSRF
-   * hook answers 403 first and the limiter never sees the request, so a
-   * cross-site POST flood is unlimited and carries no X-RateLimit headers.
-   * Spec §5: "100 req/min per IP for all routes". Fix: run the origin check
-   * where the limiter has already counted (e.g. a `preValidation` hook keeps
-   * it ahead of schema validation) and give the 404 handler the same order.
+   * Regression (fixed in #20): the CSRF hook used to run before the per-route
+   * limiter, so a cross-site POST flood was rejected with 403 but never counted.
    */
   it("counts rejected cross-site POSTs toward the limit, on existing and unknown routes", async () => {
     const existing = "203.0.113.100";

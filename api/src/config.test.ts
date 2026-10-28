@@ -155,13 +155,9 @@ describe("parseConfig edge cases", () => {
   });
 
   /**
-   * KNOWN FAILING on feat/backend-foundation (found 2026-10-28 by the tester).
-   * `Value.Convert` turns "3000.5" into 3000, "1e3" into 1 and "true" into 1 before the
-   * integer check runs, so a mistyped number is accepted as a different
-   * number instead of failing fast (spec §5, "fail fast on missing/invalid").
-   * Fix: convert integers with a strict parser (e.g. /^-?\d+$/ then Number)
-   * before `Value.Check`, or compare the converted value's string form back
-   * to the input.
+   * Regression (fixed in #20): TypeBox's `Value.Convert` used to coerce "3000.5",
+   * "1e3" and "true" to integers before validation, so a mistyped number was
+   * silently accepted as a different number instead of failing fast.
    */
   it("rejects a non-integer numeric string rather than silently truncating it", () => {
     for (const port of ["3000.5", "1e3", "true"]) {
