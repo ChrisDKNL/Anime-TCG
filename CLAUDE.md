@@ -4,7 +4,7 @@
 
 A solo, non-commercial anime card-collection game built on the free AniList GraphQL API. Today: booster packs, rarity rolls, a persisted local collection. Next: accounts, collection overview, profile, and casino-style mini-games (blackjack, slots) that use an in-game currency with **no real money anywhere, ever**.
 
-**Stack (decided, see [docs/adr/0001-frontend-stack.md](docs/adr/0001-frontend-stack.md))**: Vite 8 + React 19 + TypeScript + Tailwind CSS 4. Vitest + Testing Library for unit tests, Playwright for e2e, ESLint + Prettier, Husky pre-push gate, GitHub Actions CI. Any backend decision is still open — see [docs/02-roadmap.md](docs/02-roadmap.md).
+**Stack (decided, see [docs/adr/0001-frontend-stack.md](docs/adr/0001-frontend-stack.md))**: Vite 8 + React 19 + TypeScript + Tailwind CSS 4. Vitest + Testing Library for unit tests, Playwright for e2e, ESLint + Prettier, Husky pre-push gate, GitHub Actions CI. Backend decided 2026-10-28: server-authoritative state on a Fastify + PostgreSQL API hosted on the owner's NAS — see [docs/adr/0008-server-authoritative.md](docs/adr/0008-server-authoritative.md) and [docs/adr/0009-backend-stack.md](docs/adr/0009-backend-stack.md); status in [docs/02-roadmap.md](docs/02-roadmap.md).
 
 ## Role: You Are the Manager
 
