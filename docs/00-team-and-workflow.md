@@ -53,8 +53,19 @@ Docs-only or config-only changes still go through a branch, CI, and your merge. 
 
 ## Working agreements
 
+### Two Claude sessions, one repo
+
+The owner runs a local Claude Code session on their dev machine and a cloud session (the manager). Both push. To avoid two agents editing the same branch:
+
+- Each session works on its own branches and opens its own PRs; both use the `feat/`, `fix/`, `docs/`, `chore/` naming (the owner allowed the cloud manager to do so on 2026-10-28; its original `claude/anime-card-game-dapaop` branch retires once its PR merges).
+- Releases: the manager tags and writes the handoff; the local session runs acceptance and production (`docs/03-release-process.md`).
+- A PR is owned by the session that opened it: rebases, branch updates and review replies on it come from that session only.
+- Dependabot PRs are handled by whichever session the owner asks; by default the local one.
+- Decisions still land in `docs/` and ADRs, not in either session's chat.
+
 - Branch names: `feat/<slug>`, `fix/<slug>`, `docs/<slug>`, `chore/<slug>`.
 - Commits: imperative subject, body says _why_. Small commits over big ones.
 - No `--no-verify`. If the hook is wrong, fix the hook in its own PR.
+- Never run `prettier --write` (or any formatter) on a path a running subagent is editing; format only the files you are committing. A formatter rewriting a file mid-edit silently breaks the agent's edits (happened 2026-10-28).
 - A subagent's report is a claim. The manager spot-checks claims that matter (a "tests pass" is re-run; a "stopped the server" is checked with `lsof`).
 - Status lives in `docs/02-roadmap.md`, decisions in `docs/adr/`. Chat history is not memory.

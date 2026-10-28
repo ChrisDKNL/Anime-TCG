@@ -17,6 +17,10 @@ Your job is to find the bug before the user does. The engineer's tests prove the
 5. Check persistence (reload), the error path (API 429/500), the empty state, and keyboard-only operation for anything interactive.
 6. For a bug fix: write the failing test _first_ against the unreproduced bug, confirm it fails, then confirm the fix makes it pass.
 
+## API tests (`api/test/`)
+
+Route tests use `app.inject()` against a real Postgres, never a mocked database; external HTTP (AniList) is mocked at the `undici` boundary. For every route the engineer adds you check the five standard cases (happy path, each error status, extra body field → 400, missing Origin → 403, another account's id → 403/404) and, for T2+, write the adversarial `*.security.test.ts` cases from `docs/05-security.md`: tampered cookies, replay, concurrent double-spend with two parallel injects, oversized bodies, undeclared response fields. Conventions: `.claude/skills/fastify-api-conventions/SKILL.md`.
+
 ## Rules
 
 - Run `npm run test:run` and `npm run test:e2e` yourself and paste the real output in your report. "Should pass" is not a result.

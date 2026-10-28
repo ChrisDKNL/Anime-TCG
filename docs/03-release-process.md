@@ -1,0 +1,65 @@
+# Release Process: sprint → acceptance → production
+
+How finished work gets in front of the owner for approval and then into production. Two Claude sessions are involved: the **cloud manager** (this repo's workflow owner) and the **local Claude Code** on the owner's dev station, which runs Docker, maintenance, an acceptance instance and production.
+
+## Environments
+
+| Environment | Where                             | Runs                           | Who updates it    |
+| ----------- | --------------------------------- | ------------------------------ | ----------------- |
+| Preview     | Vite dev server / CI              | any branch                     | anyone            |
+| Acceptance  | Docker on the dev station         | the sprint's release candidate | local Claude Code |
+| Production  | Docker on the dev station, public | the last approved release tag  | local Claude Code |
+
+Deployment files (`Dockerfile`, `compose.yml`, proxy config without secrets) must live in this repo (roadmap item 0.2). Until they do, the first handoff asks the local session to commit them on a branch and open a PR.
+
+## Sprint
+
+A sprint is a named batch of roadmap items. It is finished when every item's PR is merged to `main`, CI is green on `main`, and the roadmap rows say `shipped`. The manager then:
+
+1. Tags the release candidate: `git tag -a vX.Y.Z-rc.N <main sha> -m "<sprint name>"` and pushes the tag (tags are not covered by the `main` ruleset; the manager may push them).
+2. Writes the handoff prompt (template below) to `docs/releases/vX.Y.Z.md` and gives it to the owner.
+3. The owner pastes the prompt into the local Claude Code session.
+
+## The handoff prompt (template)
+
+```
+Release handoff: <sprint name> — candidate <tag> (<sha>)
+
+You are the local Claude Code session on the dev station. Do the following in order and stop at every "WAIT".
+
+1. Fetch and check out the candidate: git fetch --tags origin && git checkout <tag>
+2. Build the acceptance image from the repo's Dockerfile and start the acceptance stack
+   (compose profile "acceptance", separate port/hostname from production, separate data volume).
+   Report the acceptance URL.
+3. Run the smoke checks below against acceptance and paste the results.
+4. WAIT: ask the owner to verify the acceptance checklist below in the browser and to reply
+   "approved <tag>" or "rejected <tag>: <reason>".
+5. On "approved": tag the release (git tag -a vX.Y.Z <sha> -m "approved by owner <date>" && git push origin vX.Y.Z),
+   build the production image from that tag, deploy it to the production stack, run the smoke
+   checks against production, and report. Keep the previous production image for rollback.
+6. On "rejected": stop the acceptance stack, open an issue titled "Release vX.Y.Z rejected: <reason>"
+   with the owner's words, and report. Do not deploy.
+
+Rollback: redeploy the previous production tag (<previous tag>) with the same compose command.
+
+Smoke checks (automated):
+- GET / returns 200 and the page title contains "Anime TCG"
+- the JS bundle loads without console errors (Playwright, or curl + grep for the asset path)
+- <sprint-specific checks: one line each>
+
+Acceptance checklist (owner, in the browser):
+- <one line per user-visible change in the sprint, phrased as "I can …">
+- <one line per bug fixed, phrased as "… no longer happens">
+
+What is in this release: <PR links, one line each>
+What is NOT in this release: <deferred items, so the owner does not look for them>
+Known limitations: <from the specs' "Out of scope" and the ADR caveats>
+```
+
+## Rules
+
+- Production only ever runs a tag that the owner approved in an acceptance round. No tag, no deploy.
+- The local session never merges PRs or pushes to `main`; it deploys what `main` already contains.
+- The manager never deploys; it hands off.
+- Every release gets a `docs/releases/vX.Y.Z.md` with the prompt and the owner's verdict, so a future session can see what went live when.
+- A rejected release goes back through the normal gate as fixes on a branch; the next candidate is `-rc.N+1`.
