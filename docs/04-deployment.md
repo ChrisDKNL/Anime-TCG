@@ -4,7 +4,7 @@ How to run the static build as a container on the NAS. The files this covers (`D
 
 ## What the image is
 
-Multi-stage `Dockerfile`: `node:22-alpine` runs `npm ci` (`HUSKY=0`, no `.git` in the build context) and `npm run build`; `caddy:2-alpine` serves the resulting `dist/` from `/srv` on port **8080** as an unprivileged user. Nothing else is in the final image. There is no backend: the browser calls AniList directly.
+Multi-stage `Dockerfile`: `node:22-alpine` runs `npm ci` (`HUSKY=0`, no `.git` in the build context) and `npm run build`; `caddy:2-alpine` serves the resulting `dist/` from `/srv` on port **8080** as an unprivileged user, with the `cap_net_bind_service` file capability that the base image sets on `/usr/bin/caddy` stripped (`setcap -r`), so the binary needs no capability at all and starts under `cap_drop: ALL`. Nothing else is in the final image. There is no backend: the browser calls AniList directly.
 
 `compose.yml` runs that image under one of two profiles. Nothing starts without a profile.
 

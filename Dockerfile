@@ -20,6 +20,14 @@ FROM caddy:2-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19
 # the public port are the host proxy's job (docs/04-deployment.md).
 RUN addgroup -S web && adduser -S -G web -H web \
 	&& chown -R web:web /data /config
+# caddy:2-alpine ships /usr/bin/caddy with the file capability
+# cap_net_bind_service=ep. compose.yml drops every capability, and the kernel
+# refuses to exec a binary whose file capabilities cannot be granted
+# ("operation not permitted"), so strip it: the service binds an unprivileged
+# port and the capability is dead weight. The base image already ships libcap
+# (it ran setcap itself); the add keeps this layer working should a future base
+# drop it, and the del removes libcap afterwards since nothing else needs it.
+RUN apk add --no-cache libcap && setcap -r /usr/bin/caddy && apk del libcap
 COPY --from=build --chown=web:web /app/dist /srv
 COPY --chown=web:web Caddyfile /etc/caddy/Caddyfile
 USER web
