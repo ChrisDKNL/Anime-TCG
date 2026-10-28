@@ -70,11 +70,17 @@ jobs:
           node-version: 26
           cache: npm
       - run: npm ci
+      - name: Create the app role
+        # What db/init/01-app-role.sh does on a compose volume; the service container has no init mount.
+        run: psql -v ON_ERROR_STOP=1 -h 127.0.0.1 -U anime -d anime -c "CREATE ROLE anime_app LOGIN PASSWORD 'anime_app'"
+        env:
+          PGPASSWORD: anime
       - name: Unit, route and security tests with coverage
         # Fails under the 85 % statement threshold in api/vitest.config.ts.
         run: npm run test:coverage --workspace api
         env:
-          DATABASE_URL: postgres://anime:anime@127.0.0.1:5432/anime
+          DATABASE_URL: postgres://anime_app:anime_app@127.0.0.1:5432/anime
+          MIGRATIONS_DATABASE_URL: postgres://anime:anime@127.0.0.1:5432/anime
       - uses: actions/upload-artifact@v7
         if: always()
         with:
@@ -145,6 +151,7 @@ jobs:
         run: |
           {
             echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)"
+            echo "APP_DB_PASSWORD=$(openssl rand -hex 24)"
             echo "SESSION_SECRET=$(openssl rand -base64 48)"
             echo "WEB_ORIGIN=http://127.0.0.1:8080"
           } > .env.ci

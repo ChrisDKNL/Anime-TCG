@@ -4,20 +4,23 @@ import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, type Db } from "../src/db/client.js";
 import { runMigrations } from "../src/db/migrate.js";
-import { testDatabaseUrl } from "./support.js";
+import { migrationsDatabaseUrl, testDatabaseUrl } from "./support.js";
 
-const MIGRATION_SQL = new URL("../src/db/migrations/0000_create_sessions.sql", import.meta.url);
+const MIGRATION_FILES = ["0000_create_sessions.sql", "0001_app_role_grants.sql"];
+const MIGRATION_WHEN = ["1793207773838", "1793217582152"];
 
 /**
  * Spec §5: migrations run at every start-up, so running them against an
  * already-migrated database must be a no-op, and the SQL that ran must be the
  * SQL that is committed. Drizzle records the sha256 of each applied file, which
- * makes the second property checkable without trusting the migrator.
+ * makes the second property checkable without trusting the migrator. The
+ * queries here run as the owner: `drizzle.__drizzle_migrations` is never
+ * granted to the app role (spec §4.1), which `db-role.test.ts` proves.
  */
 describe("migrations", () => {
   let db: Db;
   beforeAll(() => {
-    db = createDb(testDatabaseUrl());
+    db = createDb(migrationsDatabaseUrl());
   });
   afterAll(() => db.$client.end());
 
@@ -29,23 +32,29 @@ describe("migrations", () => {
   }
 
   it("is idempotent: a second run applies nothing and changes nothing", async () => {
-    await runMigrations(db);
+    await runMigrations(migrationsDatabaseUrl());
     const before = await appliedMigrations();
-    expect(before).toHaveLength(1);
+    expect(before).toHaveLength(MIGRATION_FILES.length);
 
-    await runMigrations(db);
-    await runMigrations(db);
+    await runMigrations(migrationsDatabaseUrl());
+    await runMigrations(migrationsDatabaseUrl());
     expect(await appliedMigrations()).toEqual(before);
   });
 
+  it("refuses to run as the app role, which cannot touch the migrations table", async () => {
+    await expect(runMigrations(testDatabaseUrl())).rejects.toMatchObject({ cause: { code: "42501" } });
+  });
+
   it("applied exactly the committed SQL, byte for byte", async () => {
-    const committed = createHash("sha256")
-      .update(await readFile(MIGRATION_SQL))
-      .digest("hex");
-    const [applied] = await appliedMigrations();
-    // A mismatch means a committed migration was edited after it ran somewhere; add a new file instead.
-    expect(applied?.hash).toBe(committed);
-    expect(String(applied?.created_at)).toBe("1793207773838");
+    const applied = await appliedMigrations();
+    for (const [index, file] of MIGRATION_FILES.entries()) {
+      const committed = createHash("sha256")
+        .update(await readFile(new URL(`../src/db/migrations/${file}`, import.meta.url)))
+        .digest("hex");
+      // A mismatch means a committed migration was edited after it ran somewhere; add a new file instead.
+      expect(applied[index]?.hash, file).toBe(committed);
+      expect(String(applied[index]?.created_at), file).toBe(MIGRATION_WHEN[index]);
+    }
   });
 
   it("produced the sessions table the schema and spec describe", async () => {

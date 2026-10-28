@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { ConfigError, EXAMPLE_SESSION_SECRET, parseConfig } from "./config.js";
+import { ConfigError, databaseUser, EXAMPLE_SESSION_SECRET, parseConfig } from "./config.js";
 
 const SECRET = "unit-test-session-secret-not-for-real-use-0123456789";
 
 const valid = {
-  DATABASE_URL: "postgres://anime:anime@127.0.0.1:5432/anime",
+  DATABASE_URL: "postgres://anime_app:anime_app@127.0.0.1:5432/anime",
+  MIGRATIONS_DATABASE_URL: "postgres://anime:anime@127.0.0.1:5432/anime",
   SESSION_SECRET: SECRET,
   API_ORIGIN: "http://localhost:3000",
   WEB_ORIGIN: "http://localhost:5173",
@@ -52,7 +53,7 @@ describe("parseConfig", () => {
     expect("UNRELATED" in config).toBe(false);
   });
 
-  it.each(["DATABASE_URL", "SESSION_SECRET", "API_ORIGIN", "WEB_ORIGIN"])(
+  it.each(["DATABASE_URL", "MIGRATIONS_DATABASE_URL", "SESSION_SECRET", "API_ORIGIN", "WEB_ORIGIN"])(
     "names %s when it is missing, without echoing any value",
     (name) => {
       const err = failure({ ...valid, [name]: undefined });
@@ -74,6 +75,39 @@ describe("parseConfig", () => {
 
   it("rejects a database url that is not postgres", () => {
     expect(failure({ ...valid, DATABASE_URL: "mysql://x" }).variable).toBe("DATABASE_URL");
+    expect(failure({ ...valid, MIGRATIONS_DATABASE_URL: "mysql://x" }).variable).toBe(
+      "MIGRATIONS_DATABASE_URL",
+    );
+  });
+
+  it("rejects the same role in DATABASE_URL and MIGRATIONS_DATABASE_URL, without echoing either", () => {
+    const err = failure({ ...valid, MIGRATIONS_DATABASE_URL: "postgres://anime_app:other@db:5432/anime" });
+    expect(err.variable).toBe("MIGRATIONS_DATABASE_URL");
+    expect(err.message).toMatch(/different role/);
+    expect(err.message).not.toContain("anime_app:");
+    expect(err.message).not.toContain("other");
+  });
+
+  it("compares the role only, not the password, host or database", () => {
+    const config = parseConfig({
+      ...valid,
+      DATABASE_URL: "postgresql://anime_app:pw1@[::1]:5433/other",
+      MIGRATIONS_DATABASE_URL: "postgres://anime:pw1@[::1]:5433/other",
+    });
+    expect(databaseUser(config.DATABASE_URL)).toBe("anime_app");
+    expect(databaseUser(config.MIGRATIONS_DATABASE_URL)).toBe("anime");
+  });
+
+  it("rejects a url that names no role at all", () => {
+    expect(failure({ ...valid, DATABASE_URL: "postgres://127.0.0.1:5432/anime" }).variable).toBe(
+      "DATABASE_URL",
+    );
+    expect(failure({ ...valid, DATABASE_URL: "postgres://:pw@127.0.0.1/anime" }).variable).toBe(
+      "DATABASE_URL",
+    );
+    expect(failure({ ...valid, MIGRATIONS_DATABASE_URL: "postgres://@db/anime" }).variable).toBe(
+      "MIGRATIONS_DATABASE_URL",
+    );
   });
 
   it("rejects a session secret shorter than 32 bytes", () => {
@@ -133,7 +167,8 @@ describe("parseConfig edge cases", () => {
 
   it("accepts the postgresql:// spelling and an IPv6 literal origin", () => {
     expect(
-      parseConfig({ ...valid, DATABASE_URL: "postgresql://anime:anime@[::1]:5432/anime" }).DATABASE_URL,
+      parseConfig({ ...valid, DATABASE_URL: "postgresql://anime_app:anime_app@[::1]:5432/anime" })
+        .DATABASE_URL,
     ).toMatch(/^postgresql:/);
     expect(parseConfig({ ...valid, WEB_ORIGIN: "http://[::1]:5173" }).WEB_ORIGIN).toBe("http://[::1]:5173");
   });
@@ -193,6 +228,7 @@ describe("parseConfig edge cases", () => {
       "DATABASE_URL",
       "HOST",
       "LOG_LEVEL",
+      "MIGRATIONS_DATABASE_URL",
       "NODE_ENV",
       "PORT",
       "RATE_LIMIT_MAX",

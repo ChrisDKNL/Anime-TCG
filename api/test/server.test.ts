@@ -35,6 +35,7 @@ function childEnv(overrides: Record<string, string> = {}): Record<string, string
     HOST: "127.0.0.1",
     PORT: "0",
     DATABASE_URL: config.DATABASE_URL,
+    MIGRATIONS_DATABASE_URL: config.MIGRATIONS_DATABASE_URL,
     SESSION_SECRET: config.SESSION_SECRET,
     API_ORIGIN: config.API_ORIGIN,
     WEB_ORIGIN: config.WEB_ORIGIN,
@@ -139,6 +140,7 @@ describe("server.ts as a process", () => {
     const everything = JSON.stringify(child.lines());
     expect(everything).not.toContain(childEnv().SESSION_SECRET);
     expect(everything).not.toContain("anime:anime@");
+    expect(everything).not.toContain("anime_app:anime_app@");
     expect(everything).not.toContain('"hostname"');
   });
 });

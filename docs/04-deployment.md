@@ -30,18 +30,33 @@ Every container runs with a read-only root filesystem, all capabilities dropped,
 
 Compose reads them from the shell or from a file passed with `--env-file`. Use a gitignored name such as `.env.acceptance.local` or `.env.production.local` (`.env`, `.env.*` and `*.local` are ignored; `.env.example` is the only exception and lists every variable with a placeholder). The file is read by compose only; `.dockerignore` excludes `**/.env*` and `**/*.local` from every build context, so it never enters an image.
 
-| Variable            | Required     | Meaning                                                                                                                                                                                                                                     |
-| ------------------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POSTGRES_PASSWORD` | yes          | Password of the `anime` database role, used only inside the compose network. `openssl rand -hex 24`: hex, because the value is embedded in the connection URL and base64 characters would break it.                                         |
-| `SESSION_SECRET`    | yes          | Key for the HMAC that protects session ids at rest. At least 32 bytes; the api refuses to start with fewer, or with the placeholder. `openssl rand -base64 48`                                                                              |
-| `WEB_ORIGIN`        | yes          | The origin browsers use for the site, exactly as they send it in the `Origin` header (`http://127.0.0.1:8080` for acceptance, the proxy's or tunnel's `https://...` for production). State-changing requests from any other origin get 403. |
-| `TAG`               | no (`local`) | Image tag for `anime-tcg-web` and `anime-tcg-api`; bake a date into production builds so you can roll back to it.                                                                                                                           |
-| `ACCEPTANCE_PORT`   | no (`8080`)  | Loopback port of the acceptance stack.                                                                                                                                                                                                      |
-| `PRODUCTION_PORT`   | no (`8081`)  | Loopback port of the production stack.                                                                                                                                                                                                      |
-| `LOG_LEVEL`         | no (`info`)  | Api log level (`fatal` … `trace`, `silent`).                                                                                                                                                                                                |
-| `DEV_DB_PORT`       | no (`5432`)  | Loopback port of the `dev`/`test` database.                                                                                                                                                                                                 |
+| Variable            | Required     | Meaning                                                                                                                                                                                                                                                     |
+| ------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POSTGRES_PASSWORD` | yes          | Password of the `anime` database role (the owner; runs the migrations), used only inside the compose network. `openssl rand -hex 24`: hex, because the value is embedded in the connection URL and base64 characters would break it.                        |
+| `APP_DB_PASSWORD`   | yes          | Password of the `anime_app` role the api serves requests as: `SELECT`/`INSERT`/`UPDATE`/`DELETE` on the tables and nothing else. Created by `db/init/01-app-role.sh` on the first start of an empty volume (see _Existing volumes_). `openssl rand -hex 24` |
+| `SESSION_SECRET`    | yes          | Key for the HMAC that protects session ids at rest. At least 32 bytes; the api refuses to start with fewer, or with the placeholder. `openssl rand -base64 48`                                                                                              |
+| `WEB_ORIGIN`        | yes          | The origin browsers use for the site, exactly as they send it in the `Origin` header (`http://127.0.0.1:8080` for acceptance, the proxy's or tunnel's `https://...` for production). State-changing requests from any other origin get 403.                 |
+| `TAG`               | no (`local`) | Image tag for `anime-tcg-web` and `anime-tcg-api`; bake a date into production builds so you can roll back to it.                                                                                                                                           |
+| `ACCEPTANCE_PORT`   | no (`8080`)  | Loopback port of the acceptance stack.                                                                                                                                                                                                                      |
+| `PRODUCTION_PORT`   | no (`8081`)  | Loopback port of the production stack.                                                                                                                                                                                                                      |
+| `LOG_LEVEL`         | no (`info`)  | Api log level (`fatal` … `trace`, `silent`).                                                                                                                                                                                                                |
+| `DEV_DB_PORT`       | no (`5432`)  | Loopback port of the `dev`/`test` database.                                                                                                                                                                                                                 |
 
-Compose derives the api's own environment from these: `NODE_ENV=production`, `HOST=0.0.0.0`, `PORT=3000`, `DATABASE_URL`, `API_ORIGIN` (same as `WEB_ORIGIN`, since the api is served under it) and the rate-limit defaults (100 requests per minute per client address). `api/.env.example` documents the full set for running the api outside compose. The api validates all of it at start-up and exits naming the variable, never the value, when something is missing or wrong.
+Compose derives the api's own environment from these: `NODE_ENV=production`, `HOST=0.0.0.0`, `PORT=3000`, `DATABASE_URL` (as `anime_app`, the pool every request runs on), `MIGRATIONS_DATABASE_URL` (as `anime`, one connection used by the migrations at start-up and closed afterwards), `API_ORIGIN` (same as `WEB_ORIGIN`, since the api is served under it) and the rate-limit defaults (100 requests per minute per client address). The api refuses to start when the two URLs name the same role.
+
+### Database roles
+
+Two roles, so a bug that reaches the database cannot change the schema or empty a table: `anime` owns the database and runs the migrations (`api/src/db/migrations/`, including `0001_app_role_grants.sql`, which grants the app role row access to every current and future table in `public`); `anime_app` is `LOGIN` only plus those grants, no `CREATE`, `TRUNCATE`, `REFERENCES`, and no access to `drizzle.__drizzle_migrations`. `db/init/01-app-role.sh` is mounted read-only into the Postgres entrypoint's init folder and creates `anime_app` with `APP_DB_PASSWORD`; the entrypoint runs it only when the data volume is empty.
+
+**Existing volumes** (the acceptance volume on the dev station predates this): create the role by hand once, _before_ starting an api image that carries migration `0001` (the migration grants to the role and fails, and so does the api, if the role does not exist):
+
+```bash
+docker compose --env-file .env.acceptance.local --profile acceptance up -d db-acceptance
+docker compose --env-file .env.acceptance.local --profile acceptance exec db-acceptance \
+  psql -U anime -d anime -c "CREATE ROLE anime_app LOGIN PASSWORD '<the APP_DB_PASSWORD from the env file>'"
+```
+
+(`db-production` and `.env.production.local` for production.) To change the password later: `ALTER ROLE anime_app PASSWORD '<new>'`, then update `APP_DB_PASSWORD` and recreate the api container. The grants themselves are applied by the next api start-up; nothing else needs running by hand. `api/.env.example` documents the full set for running the api outside compose. The api validates all of it at start-up and exits naming the variable, never the value, when something is missing or wrong.
 
 ## Acceptance
 
@@ -116,7 +131,7 @@ Re-run production with the previous tag and without a build:
 TAG=2026-10-21 docker compose --env-file .env.production.local --profile production up -d --no-build
 ```
 
-Compose recreates the containers from the older images. The database keeps its data; migrations are forward-only, so rolling back past a migration is safe only when that migration was additive (true of everything in Sprint 1a, which creates the `sessions` table and nothing else). Session rows survive a rollback; the browser-side collection is unaffected because it is not on the server yet.
+Compose recreates the containers from the older images. The database keeps its data; migrations are forward-only, so rolling back past a migration is safe only when that migration was additive (true of everything so far: `0000` creates the `sessions` table, `0001` grants the app role row access; an older api image that still connects as `anime` is unaffected by the grants). Session rows survive a rollback; the browser-side collection is unaffected because it is not on the server yet.
 
 ## Headers
 
@@ -137,7 +152,7 @@ Left to the proxy: TLS, `Strict-Transport-Security`, and anything that needs to 
 ## Development
 
 ```bash
-docker compose --profile dev up -d        # Postgres on 127.0.0.1:5432, role anime / password anime, database anime
+docker compose --profile dev up -d        # Postgres on 127.0.0.1:5432, database anime; roles anime / anime (owner) and anime_app / anime_app
 cp api/.env.example api/.env.local        # set SESSION_SECRET; the rest matches the dev database
 npm run dev                               # api on :3000 (node --watch, reloads on change) + Vite on :5173
 ```
@@ -153,14 +168,14 @@ npm run test:coverage -w api  # unit + routes with coverage; fails under 85 % st
 npm run test:e2e              # Playwright against the Vite dev server
 ```
 
-`docker compose --profile test up -d` starts the same loopback database as `dev` for the route tests; stop it with `--profile test down` (add `--volumes` to start fresh).
+`docker compose --profile test up -d` starts the same loopback database as `dev` for the route tests; stop it with `--profile test down` (add `--volumes` to start fresh). The route tests run the app pool as `anime_app` (`DATABASE_URL`) and the migrations as `anime` (`MIGRATIONS_DATABASE_URL`); a `db-local` volume created before the init script existed needs the `CREATE ROLE anime_app LOGIN PASSWORD 'anime_app'` statement once, or `--volumes` to recreate it. Test cleanup is `DELETE`, not `TRUNCATE`, because the app role is not granted the latter.
 
 ## CI
 
 `.github/workflows/ci.yml`:
 
 - `quality`: root `format:check`, `lint`, `typecheck`, the web unit tests with coverage, the api unit tests, `build`.
-- `api-tests`: a `postgres:16-alpine` service container; `npm run test:coverage -w api` with `DATABASE_URL` pointing at it runs the unit, route and adversarial suites and enforces the 85 % statement threshold from `api/vitest.config.ts`.
+- `api-tests`: a `postgres:16-alpine` service container in which a `psql` step creates `anime_app` (the service container has no init mount); `npm run test:coverage -w api` with `DATABASE_URL` (app role) and `MIGRATIONS_DATABASE_URL` (owner) pointing at it runs the unit, route and adversarial suites and enforces the 85 % statement threshold from `api/vitest.config.ts`.
 - `e2e`: Playwright against the Vite dev server.
 - `security`: `npm audit` (high and above) and gitleaks over the full history.
-- `docker`: writes throwaway `POSTGRES_PASSWORD` and `SESSION_SECRET` values to `.env.ci` at run time, runs `docker compose --env-file .env.ci --profile acceptance up -d --build --wait --wait-timeout 120` with `TAG=ci`, and asserts with `docker inspect` that all three containers run read-only, non-root, with every capability dropped, `no-new-privileges` and their pid limits, that Caddy is bound to `127.0.0.1` and that the api and db publish nothing. It then checks `/healthz` and the app `<title>` through Caddy, the exact `Content-Security-Policy`, that `/api/session` answers `{"signedIn":false}` with `Cache-Control: no-store`, `X-Content-Type-Options: nosniff` and neither a `Server` nor a `Via` header, that a POST without `Origin` gets 403, that the api's own `/healthz` reports `db: ok` from inside the network, that a request sent with `X-Forwarded-For: 203.0.113.9` is logged by the api with that `remoteAddress` (the `trusted_proxies` proof), and that the api image has no `node_modules/typescript` (no dev modules at runtime). Compose logs are printed on failure and the stack is always torn down with `--volumes`. The checkout step uses `persist-credentials: false` so the workflow token is never in a build context. `docker` is one of the required checks in the ruleset (`docs/01-github-flow.md`).
+- `docker`: writes throwaway `POSTGRES_PASSWORD`, `APP_DB_PASSWORD` and `SESSION_SECRET` values to `.env.ci` at run time, runs `docker compose --env-file .env.ci --profile acceptance up -d --build --wait --wait-timeout 120` with `TAG=ci`, and asserts with `docker inspect` that all three containers run read-only, non-root, with every capability dropped, `no-new-privileges` and their pid limits, that Caddy is bound to `127.0.0.1` and that the api and db publish nothing. It then checks `/healthz` and the app `<title>` through Caddy, the exact `Content-Security-Policy`, that `/api/session` answers `{"signedIn":false}` with `Cache-Control: no-store`, `X-Content-Type-Options: nosniff` and neither a `Server` nor a `Via` header, that a POST without `Origin` gets 403, that the api's own `/healthz` reports `db: ok` from inside the network, that a request sent with `X-Forwarded-For: 203.0.113.9` is logged by the api with that `remoteAddress` (the `trusted_proxies` proof), and that the api image has no `node_modules/typescript` (no dev modules at runtime). Compose logs are printed on failure and the stack is always torn down with `--volumes`. The checkout step uses `persist-credentials: false` so the workflow token is never in a build context. `docker` is one of the required checks in the ruleset (`docs/01-github-flow.md`).

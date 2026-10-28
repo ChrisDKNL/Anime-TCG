@@ -9,9 +9,14 @@ export const TEST_SESSION_SECRET = "route-test-session-secret-not-for-real-use-0
 export const WEB_ORIGIN = "http://localhost:5173";
 export const FOREIGN_ORIGIN = "http://evil.example";
 
-/** CI points this at its service container; locally the compose `test` profile or any Postgres with these credentials. */
+/** The app role, as the api runs it. CI points this at its service container; locally the compose `test` profile. */
 export function testDatabaseUrl(): string {
-  return process.env.DATABASE_URL ?? "postgres://anime:anime@127.0.0.1:5432/anime";
+  return process.env.DATABASE_URL ?? "postgres://anime_app:anime_app@127.0.0.1:5432/anime";
+}
+
+/** The owner role: migrations and anything a test must read that the app role is not granted. */
+export function migrationsDatabaseUrl(): string {
+  return process.env.MIGRATIONS_DATABASE_URL ?? "postgres://anime:anime@127.0.0.1:5432/anime";
 }
 
 export function testConfig(overrides: Partial<Record<keyof Config, string>> = {}): Config {
@@ -19,6 +24,7 @@ export function testConfig(overrides: Partial<Record<keyof Config, string>> = {}
     NODE_ENV: "test",
     LOG_LEVEL: "silent",
     DATABASE_URL: testDatabaseUrl(),
+    MIGRATIONS_DATABASE_URL: migrationsDatabaseUrl(),
     SESSION_SECRET: TEST_SESSION_SECRET,
     API_ORIGIN: "http://localhost:3000",
     WEB_ORIGIN,
@@ -36,6 +42,7 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<App> 
   return buildApp({ config, db, ...rest });
 }
 
+/** DELETE rather than TRUNCATE: the app role has row access only, so the cleanup runs on the same pool the app uses. */
 export async function clearSessions(db: Db): Promise<void> {
   await db.delete(sessions);
 }

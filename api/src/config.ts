@@ -9,6 +9,7 @@ const LOG_LEVELS = ["fatal", "error", "warn", "info", "debug", "trace", "silent"
 export type LogLevel = (typeof LOG_LEVELS)[number];
 
 const Origin = Type.String({ pattern: "^https?://[^/\\s]+$" });
+const PostgresUrl = Type.String({ pattern: "^postgres(ql)?://" });
 
 const ConfigSchema = Type.Object(
   {
@@ -22,7 +23,10 @@ const ConfigSchema = Type.Object(
     HOST: Type.String({ minLength: 1, default: "127.0.0.1" }),
     // 0 lets the OS pick a free port, which the start-up test relies on.
     PORT: Type.Integer({ minimum: 0, maximum: 65535, default: 3000 }),
-    DATABASE_URL: Type.String({ pattern: "^postgres(ql)?://" }),
+    /** The app role (`anime_app`, row access only): the pool every request runs on. */
+    DATABASE_URL: PostgresUrl,
+    /** The owner role (`anime`): one connection for `runMigrations` at start-up, closed afterwards. */
+    MIGRATIONS_DATABASE_URL: PostgresUrl,
     SESSION_SECRET: Type.String(),
     API_ORIGIN: Origin,
     WEB_ORIGIN: Origin,
@@ -81,7 +85,33 @@ export function parseConfig(env: Env): Config {
   assertStrongSessionSecret(candidate.SESSION_SECRET);
   assertExactOrigin("API_ORIGIN", candidate.API_ORIGIN);
   assertExactOrigin("WEB_ORIGIN", candidate.WEB_ORIGIN);
+  assertDistinctDatabaseRoles(candidate.DATABASE_URL, candidate.MIGRATIONS_DATABASE_URL);
   return Object.freeze(candidate);
+}
+
+/** The user part of a `postgres://user:password@host/db` URL, before any decoding; empty when there is no userinfo. */
+export function databaseUser(url: string): string {
+  return /^postgres(?:ql)?:\/\/([^:@/?#]*)(?::[^@/?#]*)?@/.exec(url)?.[1] ?? "";
+}
+
+/**
+ * The split in docs/design/accounts-api.md §4.1 only protects anything if the
+ * two URLs really are two roles: the same name in both means every request
+ * runs with the owner's rights and the migration grants are theatre.
+ */
+function assertDistinctDatabaseRoles(appUrl: string, migrationsUrl: string): void {
+  const app = databaseUser(appUrl);
+  const owner = databaseUser(migrationsUrl);
+  if (app === "") throw new ConfigError("DATABASE_URL", "must name the app role (postgres://<role>:...)");
+  if (owner === "") {
+    throw new ConfigError("MIGRATIONS_DATABASE_URL", "must name the owner role (postgres://<role>:...)");
+  }
+  if (app === owner) {
+    throw new ConfigError(
+      "MIGRATIONS_DATABASE_URL",
+      "must name a different role than DATABASE_URL (owner for migrations, app role for requests)",
+    );
+  }
 }
 
 function assertStrongSessionSecret(secret: string): void {
