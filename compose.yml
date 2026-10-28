@@ -1,53 +1,184 @@
-# One image, two ways to run it on the NAS. Nothing starts without a profile;
-# that is deliberate so a bare `docker compose up` cannot pick one for you.
+# Three services (caddy, api, db) under one profile each for acceptance and
+# production, plus a loopback-only Postgres for `dev` and `test`. Nothing
+# starts without a profile; that is deliberate so a bare `docker compose up`
+# cannot pick one for you.
 #
-#   docker compose --profile acceptance up -d --build   # build and run the throwaway check
-#   docker compose --profile production up -d           # run the tag you already accepted
+#   docker compose --env-file .env.acceptance.local --profile acceptance up -d --build
+#   docker compose --env-file .env.production.local --profile production up -d
+#   docker compose --profile dev up -d       # just Postgres on 127.0.0.1:5432 for `npm run dev`
+#   docker compose --profile test up -d      # the same, for `npm run test:routes -w api`
 #
-# Variables (all optional): TAG, ACCEPTANCE_PORT, PRODUCTION_PORT. Set them in
-# the shell or in `.env.local` (gitignored via `*.local`) passed with
-# `--env-file .env.local`. The env file is read by compose only, to substitute
-# these variables; it never enters the image (.dockerignore excludes `.env*`
-# and `*.local` from the build context). There is no `.env` in the repo on
-# purpose.
+# Variables come from the shell or from a gitignored env file passed with
+# `--env-file` (`.env.example` lists every one). Required by acceptance and
+# production: POSTGRES_PASSWORD, SESSION_SECRET, WEB_ORIGIN. Optional: TAG,
+# ACCEPTANCE_PORT, PRODUCTION_PORT, LOG_LEVEL, DEV_DB_PORT. Env files are read
+# by compose only; `.dockerignore` keeps them out of every build context.
 
-x-web: &web
-  image: anime-tcg-web:${TAG:-local}
-  build: .
-  # The container only serves files. Caddy's own state dirs get a throwaway
-  # tmpfs so the root filesystem can stay read-only. The mounts rely on
-  # Docker's default 1777 mode so the non-root `web` user can write to them.
+x-hardened: &hardened
   read_only: true
-  tmpfs:
-    - /data:noexec,nosuid,size=16m
-    - /config:noexec,nosuid,size=16m
   security_opt:
     - no-new-privileges:true
   cap_drop:
     - ALL
-  mem_limit: 128m
   pids_limit: 64
 
+x-caddy: &caddy
+  <<: *hardened
+  image: anime-tcg-web:${TAG:-local}
+  build: .
+  # Serves web/dist and proxies /api/* to the `api` alias. Caddy's own state
+  # dirs get a throwaway tmpfs so the root filesystem can stay read-only; the
+  # mounts rely on Docker's default 1777 mode so the non-root user can write.
+  tmpfs:
+    - /data:noexec,nosuid,size=16m
+    - /config:noexec,nosuid,size=16m
+  mem_limit: 128m
+
+x-api: &api
+  <<: *hardened
+  image: anime-tcg-api:${TAG:-local}
+  build:
+    context: .
+    dockerfile: api/Dockerfile
+  # No published port: only Caddy, on the same network, can reach it.
+  mem_limit: 256m
+  environment:
+    NODE_ENV: production
+    HOST: 0.0.0.0
+    PORT: "3000"
+    DATABASE_URL: postgres://anime:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in the env file}@db:5432/anime
+    SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in the env file to 32+ random bytes}
+    # The browser's Origin on state-changing requests must equal this exactly.
+    WEB_ORIGIN: ${WEB_ORIGIN:?set WEB_ORIGIN to the public origin, e.g. https://anime.example.com}
+    API_ORIGIN: ${WEB_ORIGIN}
+    LOG_LEVEL: ${LOG_LEVEL:-info}
+
+x-db: &db
+  <<: *hardened
+  # Pinned to the multi-arch index digest; Dependabot (docker) proposes bumps.
+  image: postgres:16-alpine@sha256:0cefaabd882e42bcb2a2f3dc56d3ce4770560ba62fd7f197f1a2e008fd5731ab
+  # Running as the image's `postgres` user from the start means the entrypoint
+  # never needs root or the capabilities we drop; the data volume is created
+  # with that owner from the image.
+  user: postgres
+  tmpfs:
+    - /var/run/postgresql:nosuid,size=16m
+    - /tmp:noexec,nosuid,size=64m
+  shm_size: 128m
+  mem_limit: 256m
+  pids_limit: 128
+  healthcheck:
+    test: ["CMD-SHELL", "pg_isready -U anime -d anime"]
+    interval: 5s
+    timeout: 3s
+    retries: 12
+    start_period: 10s
+
 services:
-  web-acceptance:
-    <<: *web
+  db-acceptance:
+    <<: *db
+    profiles: [acceptance]
+    container_name: anime-tcg-db-acceptance
+    environment:
+      POSTGRES_USER: anime
+      POSTGRES_DB: anime
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in the env file}
+    volumes:
+      - db-acceptance:/var/lib/postgresql/data
+    networks:
+      acceptance:
+        aliases: [db]
+
+  api-acceptance:
+    <<: *api
+    profiles: [acceptance]
+    container_name: anime-tcg-api-acceptance
+    depends_on:
+      db-acceptance:
+        condition: service_healthy
+    networks:
+      acceptance:
+        aliases: [api]
+
+  caddy-acceptance:
+    <<: *caddy
     profiles: [acceptance]
     container_name: anime-tcg-acceptance
+    depends_on:
+      api-acceptance:
+        condition: service_healthy
+    networks: [acceptance]
     # Loopback only: acceptance exists for the owner's own checks on the host
     # and must be unreachable from the LAN and the internet.
     ports:
       - "127.0.0.1:${ACCEPTANCE_PORT:-8080}:8080"
 
-  web-production:
-    <<: *web
+  db-production:
+    <<: *db
+    profiles: [production]
+    container_name: anime-tcg-db-production
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: anime
+      POSTGRES_DB: anime
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in the env file}
+    volumes:
+      - db-production:/var/lib/postgresql/data
+    networks:
+      production:
+        aliases: [db]
+
+  api-production:
+    <<: *api
+    profiles: [production]
+    container_name: anime-tcg-api-production
+    restart: unless-stopped
+    depends_on:
+      db-production:
+        condition: service_healthy
+    networks:
+      production:
+        aliases: [api]
+
+  caddy-production:
+    <<: *caddy
     profiles: [production]
     container_name: anime-tcg-production
     restart: unless-stopped
+    depends_on:
+      api-production:
+        condition: service_healthy
+    networks: [production]
     # Loopback only, with no variable to widen it: production is reached
     # through a reverse proxy or Cloudflare Tunnel on the same host. Docker's
     # published ports bypass ufw/firewalld unless the DOCKER-USER chain is
     # configured, so "the host firewall will cover it" is not a safe default.
-    # A containerised proxy should join this project's network and address
-    # the service by name instead (docs/04-deployment.md).
+    # A containerised proxy should join the `production` network and address
+    # `caddy-production:8080` by name instead (docs/04-deployment.md).
     ports:
       - "127.0.0.1:${PRODUCTION_PORT:-8081}:8080"
+
+  # Postgres alone, on loopback, for `npm run dev` and the api route tests.
+  # Throwaway credentials on purpose: it is reachable from this host only and
+  # holds nothing worth protecting.
+  db:
+    <<: *db
+    profiles: [dev, test]
+    container_name: anime-tcg-db-local
+    environment:
+      POSTGRES_USER: anime
+      POSTGRES_DB: anime
+      POSTGRES_PASSWORD: anime
+    volumes:
+      - db-local:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:${DEV_DB_PORT:-5432}:5432"
+
+volumes:
+  db-acceptance:
+  db-production:
+  db-local:
+
+networks:
+  acceptance:
+  production:

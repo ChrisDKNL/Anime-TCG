@@ -6,18 +6,18 @@
 # (package-ecosystem: docker) proposes bumps.
 FROM node:22-alpine@sha256:fe4f6d74e20370acb04ad889077d14d0f64a9c8ea6a42bc60cddf1e844699914 AS build
 WORKDIR /app
-# `npm ci` runs the `prepare` script, which installs Husky hooks. There is no
-# .git in the build context (.dockerignore) and hooks are meaningless in an
-# image, so tell Husky to skip.
-ENV HUSKY=0
+# The root (TypeScript), `shared` and `api` are installed for the build;
+# --ignore-scripts: no package gets to run code during the build (the root
+# `prepare` would install Husky hooks, meaningless in an image). The second
+# install below keeps only the runtime dependencies of `shared` and `api`.
 COPY package.json package-lock.json tsconfig.base.json ./
 COPY shared/package.json shared/
 COPY api/package.json api/
-RUN npm ci --workspace shared --workspace api
+RUN npm ci --include-workspace-root --workspace shared --workspace api --ignore-scripts
 COPY shared shared
 COPY api api
 RUN npm run build --workspace shared --workspace api \
-	&& npm ci --workspace shared --workspace api --omit=dev
+	&& npm ci --workspace shared --workspace api --omit=dev --ignore-scripts
 
 # Stage 2: the compiled service, its production modules and nothing else,
 # owned by root and run by an unprivileged user so the process cannot modify

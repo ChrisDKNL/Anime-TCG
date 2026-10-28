@@ -4,17 +4,17 @@
 # (package-ecosystem: docker) proposes bumps.
 FROM node:22-alpine@sha256:fe4f6d74e20370acb04ad889077d14d0f64a9c8ea6a42bc60cddf1e844699914 AS build
 WORKDIR /app
-# `npm ci` runs the `prepare` script, which installs Husky hooks. There is no
-# .git in the build context (.dockerignore) and hooks are meaningless in an
-# image, so tell Husky to skip.
-ENV HUSKY=0
 # Manifests first so the dependency layer is cached until a manifest changes.
-# Only the workspaces this image needs are installed: `shared` (the contract
-# and constants the web app imports) and `web` itself; `api` has its own image.
+# Only what this image needs is installed: the root (TypeScript and the other
+# build tooling), `shared` (the contract and constants the web app imports)
+# and `web` itself; `api` has its own image. --ignore-scripts: no package
+# gets to run code during the build (the root `prepare` would install Husky
+# hooks, meaningless in an image); everything here ships its native binaries
+# as optional dependencies, not postinstall downloads.
 COPY package.json package-lock.json tsconfig.base.json ./
 COPY shared/package.json shared/
 COPY web/package.json web/
-RUN npm ci --workspace shared --workspace web
+RUN npm ci --include-workspace-root --workspace shared --workspace web --ignore-scripts
 COPY shared shared
 COPY web web
 RUN npm run build --workspace shared --workspace web

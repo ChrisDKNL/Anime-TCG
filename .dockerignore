@@ -3,6 +3,7 @@
 **/coverage
 **/playwright-report
 **/test-results
+**/*.tsbuildinfo
 .git
 docs
 **/e2e

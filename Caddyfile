@@ -32,6 +32,14 @@
 		respond "ok" 200
 	}
 
+	# The api owns everything under /api. Caddy only forwards, so the browser
+	# sees one origin and connect-src stays 'self'. `api` is a network alias
+	# compose.yml gives the api service of each profile; the api's own
+	# /healthz is not under /api and stays reachable only inside the network.
+	handle /api/* {
+		reverse_proxy api:3000
+	}
+
 	# Vite content-hashes everything under /assets, so a file at a given name
 	# never changes and can be cached forever; a new build gets new names.
 	handle /assets/* {
