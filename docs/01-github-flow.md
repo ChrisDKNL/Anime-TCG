@@ -7,11 +7,12 @@ What is enforced, by what, and the one-time setup you (the repo owner) have to d
 1. Branch off `main`: `feat/<slug>`, `fix/<slug>`, `docs/<slug>`, `chore/<slug>`.
 2. Commit. **Pre-commit** (Husky + lint-staged) lints and format-checks staged files.
 3. Push. **Pre-push** (Husky) runs `npm run check`: format, lint, typecheck, unit tests, build. A failure aborts the push.
-4. Open a pull request against `main` using the template. **CI** runs three required jobs:
+4. Open a pull request against `main` using the template. **CI** runs four required jobs:
    - `quality` — format, lint, typecheck, unit tests + coverage, build
    - `e2e` — Playwright against a mocked AniList
    - `security` — `npm audit` (high+) and a gitleaks secret scan
-5. The branch ruleset blocks the merge button until all three are green, the branch is up to date with `main`, and every review thread is resolved.
+   - `docker` — builds the image, starts it and smoke-tests `/healthz`, the app's `<title>` and the exact `Content-Security-Policy` header (`docs/04-deployment.md`)
+5. The branch ruleset blocks the merge button until all four are green, the branch is up to date with `main`, and every review thread is resolved.
 6. **You merge.** Squash or merge commit, then delete the branch. Nothing else can merge: there are no bypass actors in the ruleset, and `CLAUDE.md` forbids the manager from calling the merge API.
 
 ## Layers of enforcement
@@ -44,7 +45,9 @@ Then **Settings → General → Default branch** → switch to `main`.
 
 **Settings → Rules → Rulesets → New ruleset ▾ → Import a ruleset** → upload `.github/rulesets/main-protection.json`. Review and **Create**.
 
-What it enforces on `main`: pull request required, all review threads resolved, required checks `quality` / `e2e` / `security` green on an up-to-date branch, linear history, no force-push, no deletion, no bypass actors.
+What it enforces on `main`: pull request required, all review threads resolved, required checks `quality` / `e2e` / `security` / `docker` green on an up-to-date branch, linear history, no force-push, no deletion, no bypass actors.
+
+If you imported the ruleset before the `docker` job existed, **owner action**: add `docker` to the required checks in the ruleset settings (**Settings → Rules → Rulesets → Protect main → Require status checks to pass**).
 
 ### 3. Decide on the approval count
 
@@ -59,6 +62,6 @@ The ruleset ships with `required_approving_review_count: 0`. Reason: GitHub does
 
 ## Verifying the setup
 
-Open a trivial PR (a typo fix). You should see three required checks, a blocked merge button until they pass, and the button turning green only for you. Try `git push origin main` from a clone: it must be rejected.
+Open a trivial PR (a typo fix). You should see four required checks, a blocked merge button until they pass, and the button turning green only for you. Try `git push origin main` from a clone: it must be rejected.
 
 Verified as of 2026-10-28 against GitHub's ruleset import format; if the import rejects the JSON after a GitHub change, recreate the same rules by hand from the list in step 2.
