@@ -59,7 +59,9 @@ export const securityPlugin = fp<SecurityPluginOptions>(
     const globalLimiter = app.rateLimit();
     app.addHook("onRoute", (routeOptions) => {
       const override = routeOptions.config?.rateLimit;
-      if (typeof override !== "object" || routeOptions.config === undefined) return;
+      if (override === null || typeof override !== "object" || routeOptions.config === undefined) {
+        return;
+      }
       // `app.rateLimit(options)` merges `options` over the global settings
       // (same key generator and error envelope) and gives it a child store,
       // so the bucket is the route's own.
