@@ -18,6 +18,8 @@ export default defineConfig({
       include: ["src/**/*.ts"],
       exclude: ["src/**/*.test.ts"],
       reporter: ["text", "html"],
+      // Spec §8: at least 85 % of api/src statements; `npm run test:coverage -w api` fails below it.
+      thresholds: { statements: 85 },
     },
     projects: [
       {

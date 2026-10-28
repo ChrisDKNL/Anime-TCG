@@ -32,15 +32,54 @@ jobs:
         run: npm run lint
       - name: Typecheck
         run: npm run typecheck
-      - name: Unit tests
-        run: npm run test:coverage
+      - name: Unit tests (web, with coverage)
+        run: npm run test:coverage --workspace web
+      - name: Unit tests (api)
+        # Route tests need Postgres and run in `api-tests`, with the api coverage report.
+        run: npm run test:run --workspace api
       - name: Build
         run: npm run build
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: coverage
+          name: coverage-web
           path: web/coverage
+          retention-days: 7
+
+  api-tests:
+    name: api-tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: anime
+          POSTGRES_PASSWORD: anime
+          POSTGRES_DB: anime
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U anime -d anime"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Unit, route and security tests with coverage
+        # Fails under the 85 % statement threshold in api/vitest.config.ts.
+        run: npm run test:coverage --workspace api
+        env:
+          DATABASE_URL: postgres://anime:anime@127.0.0.1:5432/anime
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-api
+          path: api/coverage
           retention-days: 7
 
   e2e:
@@ -92,7 +131,7 @@ jobs:
     env:
       # Must match the Caddyfile byte for byte; the smoke test asserts it.
       EXPECTED_CSP: "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https://s4.anilist.co; connect-src 'self' https://graphql.anilist.co; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
-      # Read by compose.yml: the job builds and runs anime-tcg-web:ci.
+      # Read by compose.yml: the job builds and runs anime-tcg-web:ci and anime-tcg-api:ci.
       TAG: ci
     steps:
       - uses: actions/checkout@v5
@@ -100,28 +139,44 @@ jobs:
           # Nothing here needs the token after checkout; keep it out of .git
           # and away from anything the image build or container could read.
           persist-credentials: false
-      - name: Build image and start acceptance container
+      - name: Throwaway secrets for this run
+        # Generated here so no secret-looking value is ever committed; the
+        # file is read by compose only and is in .dockerignore (`**/.env*`).
+        run: |
+          {
+            echo "POSTGRES_PASSWORD=$(openssl rand -hex 24)"
+            echo "SESSION_SECRET=$(openssl rand -base64 48)"
+            echo "WEB_ORIGIN=http://127.0.0.1:8080"
+          } > .env.ci
+      - name: Build images and start the acceptance stack
         id: up
         # The real runtime path, not a bare `docker run`: compose.yml's
         # acceptance profile, so the hardening it declares (read-only root,
         # cap_drop ALL, no-new-privileges, pids_limit, noexec tmpfs mounts,
-        # loopback publish) is what the checks below run against. Every
-        # compose variable has a default, so no env file is needed. --wait
-        # returns once the image HEALTHCHECK reports healthy and fails if the
-        # container exits first; either way the container is left in place
-        # for the logs step. Cleanup is explicit at the end.
-        run: docker compose --profile acceptance up -d --build --wait --wait-timeout 60
+        # loopback publish, no published api or db port) is what the checks
+        # below run against. --wait returns once every container's
+        # HEALTHCHECK reports healthy (db, then api, then caddy) and fails if
+        # one exits first; either way the containers are left in place for
+        # the logs step. Cleanup is explicit at the end.
+        run: docker compose --env-file .env.ci --profile acceptance up -d --build --wait --wait-timeout 120
       - name: Hardening is live
         run: |
-          expected='true 64 127.0.0.1'
-          actual="$(docker inspect anime-tcg-acceptance --format '{{.HostConfig.ReadonlyRootfs}} {{.HostConfig.PidsLimit}} {{index .HostConfig.PortBindings "8080/tcp" 0 "HostIp"}}')"
-          if [ "$actual" != "$expected" ]; then
-            echo "hardening mismatch (ReadonlyRootfs PidsLimit HostIp)" >&2
-            echo "expected: $expected" >&2
-            echo "actual:   $actual" >&2
-            exit 1
-          fi
-      - name: Smoke test
+          check() {
+            if [ "$2" != "$3" ]; then
+              echo "$1: hardening mismatch" >&2
+              echo "expected: $3" >&2
+              echo "actual:   $2" >&2
+              exit 1
+            fi
+          }
+          fmt='{{.HostConfig.ReadonlyRootfs}} {{.HostConfig.PidsLimit}} {{.Config.User}} {{.HostConfig.CapDrop}} {{.HostConfig.SecurityOpt}}'
+          check caddy "$(docker inspect anime-tcg-acceptance --format "$fmt")" 'true 64 web [ALL] [no-new-privileges:true]'
+          check api "$(docker inspect anime-tcg-api-acceptance --format "$fmt")" 'true 64 api [ALL] [no-new-privileges:true]'
+          check db "$(docker inspect anime-tcg-db-acceptance --format "$fmt")" 'true 128 postgres [ALL] [no-new-privileges:true]'
+          check caddy-bind "$(docker inspect anime-tcg-acceptance --format '{{index .HostConfig.PortBindings "8080/tcp" 0 "HostIp"}}')" '127.0.0.1'
+          check api-ports "$(docker port anime-tcg-api-acceptance)" ''
+          check db-ports "$(docker port anime-tcg-db-acceptance)" ''
+      - name: Smoke test through Caddy
         run: |
           curl -fsS http://127.0.0.1:8080/healthz && echo
           curl -fsS http://127.0.0.1:8080/ | grep -q '<title>Anime TCG'
@@ -132,9 +187,24 @@ jobs:
             echo "actual:   $actual" >&2
             exit 1
           fi
+          headers="$(curl -sD - -o session.json http://127.0.0.1:8080/api/session | tr -d '\r')"
+          echo "$headers" | grep -qi '^cache-control: no-store$'
+          echo "$headers" | grep -qi '^x-content-type-options: nosniff$'
+          echo "$headers" | grep -qi '^content-security-policy: '
+          if ! echo "$headers" | grep -qi '^server:' ; then :; else echo "Server header leaked" >&2; exit 1; fi
+          [ "$(cat session.json)" = '{"signedIn":false}' ] || { echo "unexpected /api/session body: $(cat session.json)" >&2; exit 1; }
+          status="$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8080/api/session)"
+          [ "$status" = "403" ] || { echo "POST without Origin answered $status, expected 403" >&2; exit 1; }
+      - name: The api reaches the database (internal probe)
+        # The api's /healthz is not routed through Caddy on purpose; it is the
+        # container's own healthcheck. Asking it from inside proves the
+        # api -> db hop with an explicit assertion rather than only --wait.
+        run: |
+          body="$(docker compose --env-file .env.ci --profile acceptance exec -T api-acceptance wget -qO- http://127.0.0.1:3000/healthz)"
+          [ "$body" = '{"status":"ok","db":"ok"}' ] || { echo "unexpected api /healthz body: $body" >&2; exit 1; }
       - name: Container logs
         if: failure() && steps.up.outcome != 'skipped'
-        run: docker compose --profile acceptance logs --no-color
+        run: docker compose --env-file .env.ci --profile acceptance logs --no-color
       - name: Tear down
         if: always() && steps.up.outcome != 'skipped'
-        run: docker compose --profile acceptance down --volumes --remove-orphans
+        run: docker compose --env-file .env.ci --profile acceptance down --volumes --remove-orphans
