@@ -116,31 +116,35 @@ describe("server.ts as a process", () => {
     expect(child.lines().find((line) => line.level === 60)).toMatchObject({ variable: "DATABASE_URL" });
   });
 
-  it("migrates, listens, serves, and on SIGTERM drains, closes and exits 0", async () => {
-    child = startChild(childEnv());
-    await child.waitFor((line) => line.msg === "migrations applied");
-    const listening = await child.waitFor((line) => /^Server listening at /.test(String(line.msg)));
-    const url = String(listening.msg).replace(/^Server listening at /, "");
+  // Windows has no signal delivery to child processes (kill() force-terminates), so graceful shutdown is only provable on Linux/CI.
+  it.skipIf(process.platform === "win32")(
+    "migrates, listens, serves, and on SIGTERM drains, closes and exits 0",
+    async () => {
+      child = startChild(childEnv());
+      await child.waitFor((line) => line.msg === "migrations applied");
+      const listening = await child.waitFor((line) => /^Server listening at /.test(String(line.msg)));
+      const url = String(listening.msg).replace(/^Server listening at /, "");
 
-    const res = await fetch(`${url}/api/session`);
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ signedIn: false });
-    expect(res.headers.get("cache-control")).toBe("no-store");
+      const res = await fetch(`${url}/api/session`);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ signedIn: false });
+      expect(res.headers.get("cache-control")).toBe("no-store");
 
-    child.process.kill("SIGTERM");
-    const { code, signal } = await child.exited;
-    expect(signal).toBeNull();
-    expect(code).toBe(0);
-    expect(child.lines()).toContainEqual(
-      expect.objectContaining({ signal: "SIGTERM", msg: "shutting down" }),
-    );
-    await expect(fetch(`${url}/healthz`)).rejects.toThrow();
+      child.process.kill("SIGTERM");
+      const { code, signal } = await child.exited;
+      expect(signal).toBeNull();
+      expect(code).toBe(0);
+      expect(child.lines()).toContainEqual(
+        expect.objectContaining({ signal: "SIGTERM", msg: "shutting down" }),
+      );
+      await expect(fetch(`${url}/healthz`)).rejects.toThrow();
 
-    // Nothing in a whole start-up and shutdown at `info` names the secret, the database password or the host.
-    const everything = JSON.stringify(child.lines());
-    expect(everything).not.toContain(childEnv().SESSION_SECRET);
-    expect(everything).not.toContain("anime:anime@");
-    expect(everything).not.toContain("anime_app:anime_app@");
-    expect(everything).not.toContain('"hostname"');
-  });
+      // Nothing in a whole start-up and shutdown at `info` names the secret, the database password or the host.
+      const everything = JSON.stringify(child.lines());
+      expect(everything).not.toContain(childEnv().SESSION_SECRET);
+      expect(everything).not.toContain("anime:anime@");
+      expect(everything).not.toContain("anime_app:anime_app@");
+      expect(everything).not.toContain('"hostname"');
+    },
+  );
 });
