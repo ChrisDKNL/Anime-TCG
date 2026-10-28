@@ -6,8 +6,12 @@ import { createDb, type Db } from "../src/db/client.js";
 import { runMigrations } from "../src/db/migrate.js";
 import { migrationsDatabaseUrl, testDatabaseUrl } from "./support.js";
 
-const MIGRATION_FILES = ["0000_create_sessions.sql", "0001_app_role_grants.sql"];
-const MIGRATION_WHEN = ["1793207773838", "1793217582152"];
+const MIGRATION_FILES = [
+  "0000_create_sessions.sql",
+  "0001_app_role_grants.sql",
+  "0002_accounts_and_throttle.sql",
+];
+const MIGRATION_WHEN = ["1793207773838", "1793217582152", "1793220843481"];
 
 /**
  * Spec §5: migrations run at every start-up, so running them against an
@@ -81,6 +85,27 @@ describe("migrations", () => {
       "sessions_expires_at_idx",
       "sessions_pkey",
     ]);
+  });
+
+  it("produced the accounts and auth_throttle tables, with sessions cascading from accounts", async () => {
+    const tables = await db.execute<{ table_name: string }>(sql`
+      select table_name from information_schema.tables
+      where table_schema = 'public' order by table_name
+    `);
+    expect(tables.rows.map((row) => row.table_name)).toEqual(["accounts", "auth_throttle", "sessions"]);
+
+    const unique = await db.execute<{ constraint_name: string }>(sql`
+      select constraint_name from information_schema.table_constraints
+      where table_schema = 'public' and table_name = 'accounts' and constraint_type = 'UNIQUE'
+    `);
+    expect(unique.rows.map((row) => row.constraint_name)).toEqual(["accounts_login_normalized_unique"]);
+
+    const cascade = await db.execute<{ delete_rule: string }>(sql`
+      select rc.delete_rule from information_schema.referential_constraints rc
+      join information_schema.table_constraints tc on tc.constraint_name = rc.constraint_name
+      where tc.table_schema = 'public' and tc.table_name = 'sessions'
+    `);
+    expect(cascade.rows).toEqual([{ delete_rule: "CASCADE" }]);
   });
 
   it("the purge query can use the expires_at index rather than scanning every session", async () => {

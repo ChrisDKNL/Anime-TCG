@@ -2,7 +2,8 @@ import { Type } from "@sinclair/typebox";
 import { type App, type BuildAppOptions, buildApp } from "../src/app.js";
 import { type Config, parseConfig } from "../src/config.js";
 import { createDb, type Db } from "../src/db/client.js";
-import { sessions } from "../src/db/schema.js";
+import { accounts, authThrottle, sessions } from "../src/db/schema.js";
+import { DUMMY_HASH } from "../src/domain/accounts/password.js";
 
 /** Obviously fake; only has to be 32+ bytes and not the .env.example placeholder. */
 export const TEST_SESSION_SECRET = "route-test-session-secret-not-for-real-use-0123456789";
@@ -45,6 +46,31 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<App> 
 /** DELETE rather than TRUNCATE: the app role has row access only, so the cleanup runs on the same pool the app uses. */
 export async function clearSessions(db: Db): Promise<void> {
   await db.delete(sessions);
+}
+
+/** Everything the account routes write; sessions first only for clarity, the foreign key would cascade anyway. */
+export async function clearAccountData(db: Db): Promise<void> {
+  await db.delete(sessions);
+  await db.delete(authThrottle);
+  await db.delete(accounts);
+}
+
+/**
+ * An account row for tests that only need a real id (sessions reference
+ * accounts). Its password hash is the dummy, so nothing can sign in as it.
+ */
+export async function insertAccount(db: Db, login: string): Promise<string> {
+  const [row] = await db
+    .insert(accounts)
+    .values({
+      login,
+      loginNormalized: login.toLowerCase(),
+      passwordHash: DUMMY_HASH,
+      inviteCodeHash: "fixture",
+    })
+    .returning({ id: accounts.id });
+  if (row === undefined) throw new Error("account insert returned no row");
+  return row.id;
 }
 
 const EchoBody = Type.Object({ name: Type.String({ minLength: 1 }) }, { additionalProperties: false });

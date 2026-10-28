@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../../src/app.js";
@@ -7,9 +6,10 @@ import { sessions } from "../../src/db/schema.js";
 import { hashSessionId, newSessionId } from "../../src/domain/session/ids.js";
 import { SESSION_ABSOLUTE_LIFETIME_MS } from "../../src/domain/session/policy.js";
 import {
-  clearSessions,
+  clearAccountData,
   cookieHeader,
   createTestApp,
+  insertAccount,
   registerProbeRoutes,
   sessionCookieFrom,
   TEST_SESSION_SECRET,
@@ -29,7 +29,7 @@ describe("session cookie, adversarial", () => {
     app = await createTestApp();
     registerProbeRoutes(app);
   });
-  beforeEach(() => clearSessions(app.db));
+  beforeEach(() => clearAccountData(app.db));
   afterAll(() => app.close());
 
   async function signIn(accountId?: string): Promise<string> {
@@ -153,7 +153,7 @@ describe("session cookie, adversarial", () => {
     const planted = await signIn();
     expect(await whoami(planted)).not.toBeNull();
 
-    const accountId = randomUUID();
+    const accountId = await insertAccount(app.db, "rotated");
     const res = await app.inject({
       method: "POST",
       url: "/test/sessions",
@@ -183,7 +183,7 @@ describe("session cookie, adversarial", () => {
   });
 
   it("absolute lifetime: constant activity cannot keep a session alive past 90 days", async () => {
-    const value = await signIn(randomUUID());
+    const value = await signIn(await insertAccount(app.db, "longlived"));
     const id = hashSessionId(TEST_SESSION_SECRET, value);
     const now = Date.now();
     // As an attacker who touches the session every few minutes would leave it: fresh expiry, recent activity.
@@ -203,8 +203,8 @@ describe("session cookie, adversarial", () => {
   });
 
   it("destroyAllForAccount ends exactly that account's sessions and keeps the excepted one", async () => {
-    const victim = randomUUID();
-    const bystander = randomUUID();
+    const victim = await insertAccount(app.db, "victim");
+    const bystander = await insertAccount(app.db, "bystander");
     const [current, laptop, phone, other, anonymous] = await Promise.all([
       signIn(victim),
       signIn(victim),
@@ -230,7 +230,7 @@ describe("session cookie, adversarial", () => {
     expect(await app.sessions.destroyAllForAccount(victim)).toBe(1);
     expect(await whoami(current)).toBeNull();
     expect(await app.sessions.destroyAllForAccount(victim)).toBe(0);
-    expect(await app.sessions.destroyAllForAccount(randomUUID())).toBe(0);
+    expect(await app.sessions.destroyAllForAccount("00000000-0000-4000-8000-000000000000")).toBe(0);
     expect(await app.db.select({ id: sessions.id }).from(sessions)).toHaveLength(2);
   });
 
