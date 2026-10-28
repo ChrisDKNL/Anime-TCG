@@ -16,6 +16,7 @@ Statuses: `idea` → `specced` → `building` → `testing` → `qc` → `securi
 | 6   | Slots                                              | idea    |                                 |                                      | Reel symbols = card art; published paytable                         |
 | 7   | Trade between local profiles                       | idea    |                                 |                                      | Flow placeholder only; real trading needs ADR 0003 Phase 2          |
 | 0.2 | Deployment files (Dockerfile, compose, deploy doc) | idea    |                                 | ADR 0005                             | Owner's Docker setup must be committed so it is reproducible        |
+| 9   | Collection download (read-only server endpoint)    | idea    |                                 |                                      | Owner's answer 2026-10-28: later; replaces the dropped file export  |
 | 8   | Third-party sign-in (Google/Discord)               | idea    |                                 | ADR 0003 Phase 2                     | Needs a BaaS decision (new ADR); import of local profiles           |
 
 ## Brainstorm seed (2026-10-28)
@@ -61,4 +62,4 @@ Owner's answers (same day): starting parameters accepted provisionally (sell 10/
 
 ### Sprint 1 (replanned 2026-10-28, same day)
 
-Original plan (local accounts PoC) superseded by ADR 0008: the owner wants all state server-side and protected from client manipulation. Sprint 1 is now **1a backend foundation → 1b server-side accounts → 1c server-side collection and packs**. The game is playable end to end again only at the end of 1c. Release per `docs/03-release-process.md` when all three are merged. Stack confirmation (ADR 0009) is the first gate.
+Original plan (local accounts PoC) superseded by ADR 0008: the owner wants all state server-side and protected from client manipulation. Sprint 1 is now **1a backend foundation → 1b server-side accounts → 1c server-side collection and packs**. The game is playable end to end again only at the end of 1c. Release per `docs/03-release-process.md` when all three are merged. Stack confirmed by the owner (ADR 0009 accepted).

@@ -14,7 +14,7 @@ The owner (and anyone they hand the URL and an invite code to) gets an **account
 ## 2. Out of scope
 
 - Third-party sign-in (Google/Discord). ADR 0008 §3 adds it later as an additional provider; this spec must not block it, and does not design it.
-- Password reset or recovery. There is no email. See open question 1 for the owner-side alternative.
+- Self-service password reset or recovery. There is no email. The owner can set a new password for a login with an owner-only command on the server (API path specced with the backend); the UI only carries the copy line below.
 - Password composition rules beyond length (no "must contain a digit"). Length only, 8–128.
 - "Remember me" toggles and session lifetime. The session is a server-side cookie (ADR 0008 §4); how long it lives is the API's decision. The UI only has to cope with it ending (§4.8).
 - Migrating the pre-accounts `localStorage` collection (it was a PoC; the server cannot trust client-held data). The first server-side account starts empty (ADR 0008 §7).
@@ -311,20 +311,20 @@ Exact strings. `<login>` is the account login, `<N>` a number, `<S>` the countdo
 
 **Log in**
 
-| Element                 | Copy                                                                                                                                                                                                                                                                    |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Heading                 | `Log in`                                                                                                                                                                                                                                                                |
-| Login label             | `Login`                                                                                                                                                                                                                                                                 |
-| Password label          | `Password`                                                                                                                                                                                                                                                              |
-| Buttons                 | `Log in` / while checking `Logging in…` · `Back`                                                                                                                                                                                                                        |
-| Countdown button        | `Try again in <S> s`                                                                                                                                                                                                                                                    |
-| Error: empty login      | `Enter your login.`                                                                                                                                                                                                                                                     |
-| Error: empty password   | `Enter your password.`                                                                                                                                                                                                                                                  |
-| Error: incorrect        | `Login or password is incorrect.`                                                                                                                                                                                                                                       |
-| login-breather (status) | `Five misses in a row. Take ten seconds, check the spelling of your login and whether caps lock is on, then try again.`                                                                                                                                                 |
-| Wait over (live)        | `You can try again now.`                                                                                                                                                                                                                                                |
-| Forgotten password line | `There is no way to recover a forgotten password.` (ADR 0006 §5's first sentence; its second sentence, "You can delete the account from this device.", is dropped because the account is no longer on the device and delete requires the password. See open question 1) |
-| Live region on success  | `Logged in. You're now on <login>.`                                                                                                                                                                                                                                     |
+| Element                 | Copy                                                                                                                                                                                                        |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Heading                 | `Log in`                                                                                                                                                                                                    |
+| Login label             | `Login`                                                                                                                                                                                                     |
+| Password label          | `Password`                                                                                                                                                                                                  |
+| Buttons                 | `Log in` / while checking `Logging in…` · `Back`                                                                                                                                                            |
+| Countdown button        | `Try again in <S> s`                                                                                                                                                                                        |
+| Error: empty login      | `Enter your login.`                                                                                                                                                                                         |
+| Error: empty password   | `Enter your password.`                                                                                                                                                                                      |
+| Error: incorrect        | `Login or password is incorrect.`                                                                                                                                                                           |
+| login-breather (status) | `Five misses in a row. Take ten seconds, check the spelling of your login and whether caps lock is on, then try again.`                                                                                     |
+| Wait over (live)        | `You can try again now.`                                                                                                                                                                                    |
+| Forgotten password line | `There is no way to recover a forgotten password yourself. Ask the owner to set a new one.` (owner-side reset confirmed 2026-10-28; the reset path is owner-only, server-side, and never exposed in the UI) |
+| Live region on success  | `Logged in. You're now on <login>.`                                                                                                                                                                         |
 
 **Account menu actions**
 
@@ -383,5 +383,7 @@ Everything else in the current UI (tabs, pack button, odds line, empty collectio
 
 ## 9. Open questions
 
-1. **Forgotten password: can you, as the owner, reset one?** With the server in your hands this is now possible (a command on the NAS that sets a new password for a login). If yes, the forgotten-password line becomes `There is no way to recover a forgotten password yourself. Ask the owner to set a new one.` and the API needs an owner-only reset path (specced with the backend, not here). If no, the line stays `There is no way to recover a forgotten password.` and a forgotten password means a dead account until you delete it in the database. The spec ships the shorter line until you choose.
-2. **Collection download.** Export and import of collection files are dropped (import can't be trusted; export went with it). Do you want a read-only `Download my collection` back as a server endpoint in a later item (a one-line menu entry and a copy row here), or is the NAS backup (ADR 0007 §6) enough?
+None. Resolved 2026-10-28 by the owner:
+
+1. Forgotten password: the owner can reset one with an owner-only server command. Copy updated in §8; the API path is specced with the backend foundation.
+2. Collection download: a read-only `Download my collection` server endpoint is a later roadmap item, not part of this feature.

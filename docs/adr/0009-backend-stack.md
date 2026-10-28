@@ -1,12 +1,12 @@
 # 0009 — Backend stack
 
-2026-10-28 · **proposed** (manager's recommendation; becomes accepted when the owner confirms)
+2026-10-28 · accepted (proposed by the manager, confirmed by the owner the same day)
 
 ## Context
 
 ADR 0008 requires a server that owns all game state, running in Docker on a NAS (ADR 0007), maintained by a one-person team plus Claude agents. The frontend is TypeScript/React.
 
-## Decision (proposed)
+## Decision
 
 | Concern        | Choice                                                                                                                                    | Why                                                                                                                                       |
 | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
