@@ -24,6 +24,19 @@ export default defineConfig({
         extends: true,
         test: { name: "unit", include: ["src/**/*.test.ts"] },
       },
+      {
+        // Needs a real Postgres (DATABASE_URL, or the compose `test` profile's defaults). Files share one
+        // `sessions` table and truncate it, so they run one at a time.
+        extends: true,
+        test: {
+          name: "routes",
+          include: ["test/**/*.test.ts"],
+          globalSetup: ["./test/global-setup.ts"],
+          fileParallelism: false,
+          testTimeout: 15_000,
+          hookTimeout: 15_000,
+        },
+      },
     ],
   },
 });

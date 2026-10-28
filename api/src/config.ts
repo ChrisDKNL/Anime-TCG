@@ -20,7 +20,8 @@ const ConfigSchema = Type.Object(
       { default: "info" },
     ),
     HOST: Type.String({ minLength: 1, default: "127.0.0.1" }),
-    PORT: Type.Integer({ minimum: 1, maximum: 65535, default: 3000 }),
+    // 0 lets the OS pick a free port, which the start-up test relies on.
+    PORT: Type.Integer({ minimum: 0, maximum: 65535, default: 3000 }),
     DATABASE_URL: Type.String({ pattern: "^postgres(ql)?://" }),
     SESSION_SECRET: Type.String(),
     API_ORIGIN: Origin,
