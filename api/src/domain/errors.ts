@@ -30,6 +30,7 @@ interface ThrownError {
 
 const FIXED_MESSAGES: Partial<Record<number, { code: ErrorCode; message: string }>> = {
   413: { code: "payload_too_large", message: "Request body is too large" },
+  431: { code: "header_too_large", message: "Request headers are too large" },
   415: { code: "unsupported_media_type", message: "Unsupported content type" },
   429: { code: "rate_limited", message: "Too many requests; slow down" },
 };

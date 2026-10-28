@@ -1,7 +1,7 @@
 import { Writable } from "node:stream";
 import type { Logger } from "pino";
 import { describe, expect, it } from "vitest";
-import { createLogger } from "./logging.js";
+import { createLogger, quieterOf } from "./logging.js";
 
 function capture(): { logger: Logger; lines: () => Record<string, unknown>[] } {
   const chunks: string[] = [];
@@ -59,6 +59,13 @@ describe("log redaction", () => {
     logger.info("hello");
     expect(lines()[0]).not.toHaveProperty("hostname");
     expect(lines()[0]).toHaveProperty("pid");
+  });
+
+  it("quieterOf picks the more restrictive level", () => {
+    expect(quieterOf("info", "warn")).toBe("warn");
+    expect(quieterOf("error", "warn")).toBe("error");
+    expect(quieterOf("silent", "warn")).toBe("silent");
+    expect(quieterOf("trace", "trace")).toBe("trace");
   });
 
   it("createLogger honours the level", () => {

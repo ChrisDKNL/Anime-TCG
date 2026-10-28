@@ -73,12 +73,12 @@ describe("client errors below the router, adversarial", () => {
     const res = await raw(
       `GET /api/session HTTP/1.1\r\nHost: localhost\r\nX-Pad: ${"a".repeat(20_000)}\r\n\r\n`,
     );
-    expectEnvelope(res, 431, "bad_request");
+    expectEnvelope(res, 431, "header_too_large");
   });
 
   it("a malformed request line gets the 400 envelope with the api's headers", async () => {
     const res = await raw("GET /\u0001 HTTP/1.1\r\nHost: localhost\r\n\r\n");
-    expectEnvelope(res, 400, "validation_failed");
+    expectEnvelope(res, 400, "bad_request");
   });
 
   it("a header with a bare LF, which smuggling attempts rely on, is refused rather than parsed leniently", async () => {

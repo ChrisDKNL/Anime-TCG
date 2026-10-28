@@ -42,6 +42,7 @@ describe("errorEnvelopeFor", () => {
 
   it.each([
     [413, "payload_too_large"],
+    [431, "header_too_large"],
     [415, "unsupported_media_type"],
     [429, "rate_limited"],
   ])("maps a %s thrown by the framework to %s with a fixed message", (statusCode, code) => {
@@ -58,11 +59,8 @@ describe("errorEnvelopeFor", () => {
   });
 
   it("maps any other 4xx to bad_request without its message", () => {
-    const { statusCode, body } = errorEnvelopeFor({
-      statusCode: 431,
-      message: "headers too big: cookie=abc",
-    });
-    expect(statusCode).toBe(431);
+    const { statusCode, body } = errorEnvelopeFor({ statusCode: 406, message: "not acceptable: cookie=abc" });
+    expect(statusCode).toBe(406);
     expect(body.error.code).toBe("bad_request");
     expect(body.error.message).not.toContain("cookie");
   });

@@ -16,6 +16,22 @@ export const REDACT_PATHS = [
   ...SENSITIVE_KEYS.flatMap((key) => [key, `*.${key}`, `*.*.${key}`]),
 ];
 
+/** Higher means fewer lines; pino's own numeric levels, with `silent` above everything. */
+const QUIETNESS: Record<LogLevel, number> = {
+  trace: 10,
+  debug: 20,
+  info: 30,
+  warn: 40,
+  error: 50,
+  fatal: 60,
+  silent: 70,
+};
+
+/** The more restrictive of two levels, so a per-route quieting never overrides an operator's `LOG_LEVEL=error`. */
+export function quieterOf(a: LogLevel, b: LogLevel): LogLevel {
+  return QUIETNESS[a] >= QUIETNESS[b] ? a : b;
+}
+
 /** JSON lines with the pid but not the hostname: a container id tells an attacker more than it tells us. */
 export function createLogger(level: LogLevel, destination?: DestinationStream): Logger {
   return pino(

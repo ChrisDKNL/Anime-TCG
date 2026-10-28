@@ -40,8 +40,11 @@
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"
 		Permissions-Policy "camera=(), microphone=(), geolocation=()"
-		# A version banner only helps someone probing the server.
+		# A version banner only helps someone probing the server. The Via line
+		# is Caddy's own, added by reverse_proxy after the backend's headers, so
+		# it has to go here rather than in a `header_down` of that block.
 		-Server
+		-Via
 	}
 
 	# Liveness probe for the image HEALTHCHECK and the CI smoke test.

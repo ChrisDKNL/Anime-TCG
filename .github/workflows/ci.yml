@@ -75,7 +75,7 @@ jobs:
         run: npm run test:coverage --workspace api
         env:
           DATABASE_URL: postgres://anime:anime@127.0.0.1:5432/anime
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: coverage-api
@@ -192,6 +192,7 @@ jobs:
           echo "$headers" | grep -qi '^x-content-type-options: nosniff$'
           echo "$headers" | grep -qi '^content-security-policy: '
           if ! echo "$headers" | grep -qi '^server:' ; then :; else echo "Server header leaked" >&2; exit 1; fi
+          if ! echo "$headers" | grep -qi '^via:' ; then :; else echo "Via header leaked" >&2; exit 1; fi
           [ "$(cat session.json)" = '{"signedIn":false}' ] || { echo "unexpected /api/session body: $(cat session.json)" >&2; exit 1; }
           status="$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8080/api/session)"
           [ "$status" = "403" ] || { echo "POST without Origin answered $status, expected 403" >&2; exit 1; }
