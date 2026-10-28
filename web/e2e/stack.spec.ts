@@ -14,6 +14,8 @@ import { expect, test } from "@playwright/test";
  * - The CSP is byte-for-byte the one in the Caddyfile (a silent relaxation would pass a looser check).
  * - No Server or Via header leaks from either layer (mirrors the CI docker job).
  * - A POST without an Origin is refused by the api's CSRF check with the 403 envelope.
+ * - POST /api/session/login with a foreign Origin is 403 bad_origin through Caddy and sets no
+ *   cookie: the origin check runs before any credential is looked at (accounts-api spec §9, e2e).
  * - The api's own /healthz is not reachable through Caddy (it is the container healthcheck, not public).
  * - The SPA shell is served for an unknown path with the no-cache policy.
  */
@@ -79,6 +81,21 @@ test.describe("deployed stack through Caddy", () => {
       headers: { origin: "http://evil.example" },
     });
     expect(res.status()).toBe(403);
+  });
+
+  test("POST /api/session/login with a foreign Origin is 403 bad_origin and sets no cookie", async ({
+    request,
+  }) => {
+    const res = await request.post(`${STACK_URL}/api/session/login`, {
+      data: { login: "nobody", password: "not a password" },
+      headers: { origin: "http://evil.example" },
+    });
+    expect(res.status()).toBe(403);
+    expect(await res.json()).toEqual({
+      error: { code: "bad_origin", message: "Cross-origin request rejected" },
+    });
+    expect(res.headers()["set-cookie"]).toBeUndefined();
+    expect(res.headers()["cache-control"]).toBe("no-store");
   });
 
   test("an unknown api route answers the 404 envelope, not the SPA shell", async ({ request }) => {
