@@ -11,12 +11,15 @@
 	encode zstd gzip
 
 	header {
-		# style-src needs 'unsafe-inline': CharacterCard sets an inline style
-		# attribute (animationDelay) and Vite's tooling can inject <style>
-		# elements. Scripts stay strict because Vite emits no inline scripts.
+		# style-src is strict on purpose. React applies the `style` prop through
+		# the CSSOM (element.style.setProperty), which CSP does not govern, and
+		# the production build links its CSS via <link> with no inline <style>.
+		# The dev server, which does inject <style>, never runs behind this
+		# Caddyfile. Revisit this if SSR or a `?inline` CSS import is ever
+		# introduced: both would need inline style allowances (a nonce or hash).
 		# img-src and connect-src list the only remote hosts the app talks to
 		# (src/lib/anilist.ts).
-		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https://s4.anilist.co data:; connect-src 'self' https://graphql.anilist.co; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https://s4.anilist.co; connect-src 'self' https://graphql.anilist.co; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"
 		Permissions-Policy "camera=(), microphone=(), geolocation=()"

@@ -8,14 +8,14 @@ Multi-stage `Dockerfile`: `node:22-alpine` runs `npm ci` (`HUSKY=0`, no `.git` i
 
 `compose.yml` runs that image under one of two profiles. Nothing starts without a profile.
 
-| Profile      | Container              | Published on                                          | Restart          |
-| ------------ | ---------------------- | ----------------------------------------------------- | ---------------- |
-| `acceptance` | `anime-tcg-acceptance` | `127.0.0.1:${ACCEPTANCE_PORT:-8080}`                  | no               |
-| `production` | `anime-tcg-production` | `${BIND_ADDRESS:-127.0.0.1}:${PRODUCTION_PORT:-8081}` | `unless-stopped` |
+| Profile      | Container              | Published on                         | Restart          |
+| ------------ | ---------------------- | ------------------------------------ | ---------------- |
+| `acceptance` | `anime-tcg-acceptance` | `127.0.0.1:${ACCEPTANCE_PORT:-8080}` | no               |
+| `production` | `anime-tcg-production` | `127.0.0.1:${PRODUCTION_PORT:-8081}` | `unless-stopped` |
 
-Both run with a read-only root filesystem, all capabilities dropped, `no-new-privileges`, a tmpfs for Caddy's `/data` and `/config`, and a 128 MB memory limit.
+Both run with a read-only root filesystem, all capabilities dropped, `no-new-privileges`, a 16 MB `noexec,nosuid` tmpfs for each of Caddy's `/data` and `/config`, a 128 MB memory limit and a 64-process limit.
 
-Variables are read from the shell or from a file passed with `--env-file`. Use `.env.local` for that: it is gitignored (`*.local`). There is no `.env` in the repo.
+Variables are read from the shell or from a file passed with `--env-file`. Use `.env.local` for that: it is gitignored (`*.local`, and `.env` / `.env.*` for good measure). The file is read by compose only, to substitute the variables above; `.dockerignore` excludes `.env*` and `*.local` from the build context, so it never enters the image. There is no `.env` in the repo.
 
 ## Acceptance
 
@@ -44,7 +44,7 @@ This builds `anime-tcg-web:2026-10-28` and starts `anime-tcg-production` on `127
 
 ### Network exposure
 
-Production defaults to loopback because a reverse proxy or Cloudflare Tunnel on the same host is the only client it should have. `BIND_ADDRESS=0.0.0.0` publishes it on every interface; do that only when the host firewall is the intended boundary and you have checked that it is.
+Production is published on loopback only and is reached through a reverse proxy or Cloudflare Tunnel on the same host. There is no variable to widen the bind address, on purpose: Docker's published ports bypass `ufw` / `firewalld` unless the `DOCKER-USER` chain is configured, so a `0.0.0.0` binding would be reachable from the LAN (or the internet, if the host is) regardless of the host firewall's rules. If the proxy runs as a container, attach it to this compose project's network (`docker network connect <project>_default <proxy>`, where `<project>` is the checkout's directory name in lowercase, or declare that network as `external` in the proxy's own compose file) and reference the service by name, `http://web-production:8080`, instead of publishing any port.
 
 ### Reverse proxy or tunnel
 
@@ -71,13 +71,13 @@ ingress:
 
 On every response:
 
-- `Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https://s4.anilist.co data:; connect-src 'self' https://graphql.anilist.co; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'`
+- `Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https://s4.anilist.co; connect-src 'self' https://graphql.anilist.co; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'`
 - `X-Content-Type-Options: nosniff`
 - `Referrer-Policy: strict-origin-when-cross-origin`
 - `Permissions-Policy: camera=(), microphone=(), geolocation=()`
 - No `Server` header.
 
-`style-src` carries `'unsafe-inline'` because `CharacterCard` sets an inline `style` attribute (`animationDelay`) and Vite's tooling can inject `<style>` elements. `script-src` stays strict; Vite emits no inline scripts. `img-src` and `connect-src` name the only remote hosts the app uses (`src/lib/anilist.ts`); adding a new remote host means updating `Caddyfile`.
+`style-src` is `'self'` with no `'unsafe-inline'`: React applies the `style` prop (`CharacterCard`'s `animationDelay`) through the CSSOM, which CSP does not govern, and the production build links its CSS via `<link>` with no inline `<style>`. The dev server, which does inject `<style>` elements, never runs behind this `Caddyfile`. If SSR or a `?inline` CSS import is ever introduced, this must be revisited (a nonce or hash, not `'unsafe-inline'`). `script-src` stays strict; Vite emits no inline scripts. `img-src` and `connect-src` name the only remote hosts the app uses (`src/lib/anilist.ts`), with no `data:` scheme; adding a new remote host means updating `Caddyfile`, `docs/04-deployment.md` and `EXPECTED_CSP` in `.github/workflows/ci.yml` together.
 
 Caching: `/assets/*` is content-hashed by Vite and served with `Cache-Control: public, max-age=31536000, immutable`; everything else (`index.html` included) is `no-cache`, so a new deploy is picked up on the next load.
 
@@ -95,4 +95,4 @@ Compose recreates `anime-tcg-production` from the older image. Nothing persists 
 
 ## CI
 
-The `docker` job in `.github/workflows/ci.yml` builds the image, starts it, waits up to 30 s for `/healthz`, checks that `/` serves the app's `<title>` with a `Content-Security-Policy` header, prints the container logs on failure, and removes the container. It is not in the ruleset's required checks (`docs/01-github-flow.md`); add it there if a broken image should block merges.
+The `docker` job in `.github/workflows/ci.yml` builds the image, starts it on `127.0.0.1:8080` of the runner, waits up to 30 s for `/healthz`, checks that `/` serves the app's `<title>` and that the `Content-Security-Policy` header equals `EXPECTED_CSP` (declared once at the top of the job and kept identical to the `Caddyfile`), prints the container logs on failure, and removes the container. The checkout step uses `persist-credentials: false` so the workflow token is never in the build context. The job is one of the four required checks in the ruleset (`docs/01-github-flow.md`), so a broken image or a drifted CSP blocks merges.

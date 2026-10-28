@@ -89,27 +89,34 @@ jobs:
   docker:
     name: docker
     runs-on: ubuntu-latest
+    env:
+      # Must match the Caddyfile byte for byte; the smoke test asserts it.
+      EXPECTED_CSP: "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https://s4.anilist.co; connect-src 'self' https://graphql.anilist.co; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
     steps:
       - uses: actions/checkout@v5
+        with:
+          # Nothing here needs the token after checkout; keep it out of .git
+          # and away from anything the image build or container could read.
+          persist-credentials: false
       - name: Build image
         run: docker build -t anime-tcg-web:ci .
       - name: Start container
         id: start
         # No --rm: a container that crashes on start must still be around for
         # the logs step below. Cleanup is explicit at the end.
-        run: docker run -d -p 8080:8080 --name smoke anime-tcg-web:ci
+        run: docker run -d -p 127.0.0.1:8080:8080 --name smoke anime-tcg-web:ci
       - name: Wait for healthz
         run: |
           for _ in $(seq 1 30); do
-            if curl -fsS http://localhost:8080/healthz; then exit 0; fi
+            if curl -fsS http://127.0.0.1:8080/healthz; then exit 0; fi
             sleep 1
           done
           echo "healthz did not answer within 30 s" >&2
           exit 1
       - name: Smoke test
         run: |
-          curl -fsS http://localhost:8080/ | grep -q '<title>Anime TCG'
-          curl -sI http://localhost:8080/ | grep -i '^content-security-policy:'
+          curl -fsS http://127.0.0.1:8080/ | grep -q '<title>Anime TCG'
+          curl -sI http://127.0.0.1:8080/ | grep -i '^content-security-policy:' | grep -F -- "$EXPECTED_CSP"
       - name: Container logs
         if: failure() && steps.start.outcome == 'success'
         run: docker logs smoke
