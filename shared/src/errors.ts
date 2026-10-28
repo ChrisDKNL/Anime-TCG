@@ -9,6 +9,7 @@ export const ERROR_CODES = [
   "bad_origin",
   "not_found",
   "payload_too_large",
+  "header_too_large",
   "unsupported_media_type",
   "rate_limited",
   "bad_request",

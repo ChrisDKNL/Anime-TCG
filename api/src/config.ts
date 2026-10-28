@@ -48,6 +48,13 @@ export class ConfigError extends Error {
 type Env = Readonly<Record<string, string | undefined>>;
 
 /**
+ * `Value.Convert` is lenient with numeric strings ("3000.5" becomes 3000,
+ * "1e3" becomes 1), so integers are checked as text first.
+ */
+const INTEGER_VARIABLES = ["PORT", "RATE_LIMIT_MAX", "RATE_LIMIT_WINDOW_MS"] as const;
+const WHOLE_NUMBER = /^\d+$/;
+
+/**
  * Builds the typed config from an environment map. Unknown variables are
  * ignored and empty strings count as unset, so a compose file that passes
  * `FOO=${FOO:-}` behaves like one that omits FOO.
@@ -58,6 +65,11 @@ export function parseConfig(env: Env): Config {
       .filter((name) => env[name] !== undefined && env[name] !== "")
       .map((name) => [name, env[name]]),
   );
+  for (const name of INTEGER_VARIABLES) {
+    const raw = present[name];
+    if (raw !== undefined && !WHOLE_NUMBER.test(raw))
+      throw new ConfigError(name, "must be a whole number (digits only)");
+  }
   const candidate: unknown = Value.Default(ConfigSchema, Value.Convert(ConfigSchema, present));
   if (!Value.Check(ConfigSchema, candidate)) {
     const first = Value.Errors(ConfigSchema, candidate).First();

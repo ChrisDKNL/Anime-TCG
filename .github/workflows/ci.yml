@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 26
           cache: npm
       - run: npm ci
       - name: Format check
@@ -67,7 +67,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 26
           cache: npm
       - run: npm ci
       - name: Unit, route and security tests with coverage
@@ -89,7 +89,7 @@ jobs:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 26
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
@@ -115,7 +115,7 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
-          node-version: 22
+          node-version: 26
           cache: npm
       - run: npm ci
       - name: Dependency audit (high+)
@@ -192,6 +192,7 @@ jobs:
           echo "$headers" | grep -qi '^x-content-type-options: nosniff$'
           echo "$headers" | grep -qi '^content-security-policy: '
           if ! echo "$headers" | grep -qi '^server:' ; then :; else echo "Server header leaked" >&2; exit 1; fi
+          if ! echo "$headers" | grep -qi '^via:' ; then :; else echo "Via header leaked" >&2; exit 1; fi
           [ "$(cat session.json)" = '{"signedIn":false}' ] || { echo "unexpected /api/session body: $(cat session.json)" >&2; exit 1; }
           status="$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8080/api/session)"
           [ "$status" = "403" ] || { echo "POST without Origin answered $status, expected 403" >&2; exit 1; }
@@ -202,6 +203,16 @@ jobs:
         run: |
           body="$(docker compose --env-file .env.ci --profile acceptance exec -T api-acceptance wget -qO- http://127.0.0.1:3000/healthz)"
           [ "$body" = '{"status":"ok","db":"ok"}' ] || { echo "unexpected api /healthz body: $body" >&2; exit 1; }
+      - name: The api sees the real client address
+        # Caddy trusts X-Forwarded-For from private ranges (the host proxy or
+        # tunnel) and appends its own view; the api logs the resulting
+        # remoteAddress. Without `trusted_proxies` every client would appear
+        # as the Docker gateway and share one rate-limit bucket.
+        run: |
+          curl -fsS -H 'X-Forwarded-For: 203.0.113.9' http://127.0.0.1:8080/api/session > /dev/null
+          docker compose --env-file .env.ci --profile acceptance logs --no-color api-acceptance | grep -q '"remoteAddress":"203.0.113.9"'
+      - name: The runtime image carries no dev modules
+        run: docker compose --env-file .env.ci --profile acceptance exec -T api-acceptance test ! -e node_modules/typescript
       - name: Container logs
         if: failure() && steps.up.outcome != 'skipped'
         run: docker compose --env-file .env.ci --profile acceptance logs --no-color

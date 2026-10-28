@@ -21,6 +21,12 @@ x-hardened: &hardened
   cap_drop:
     - ALL
   pids_limit: 64
+  # Bounded logs: a chatty or attacked container cannot fill the NAS disk.
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
 
 x-caddy: &caddy
   <<: *hardened
@@ -86,7 +92,7 @@ services:
     volumes:
       - db-acceptance:/var/lib/postgresql/data
     networks:
-      acceptance:
+      acceptance-back:
         aliases: [db]
 
   api-acceptance:
@@ -97,8 +103,9 @@ services:
       db-acceptance:
         condition: service_healthy
     networks:
-      acceptance:
+      acceptance-front:
         aliases: [api]
+      acceptance-back: {}
 
   caddy-acceptance:
     <<: *caddy
@@ -107,7 +114,7 @@ services:
     depends_on:
       api-acceptance:
         condition: service_healthy
-    networks: [acceptance]
+    networks: [acceptance-front]
     # Loopback only: acceptance exists for the owner's own checks on the host
     # and must be unreachable from the LAN and the internet.
     ports:
@@ -125,7 +132,7 @@ services:
     volumes:
       - db-production:/var/lib/postgresql/data
     networks:
-      production:
+      production-back:
         aliases: [db]
 
   api-production:
@@ -137,8 +144,9 @@ services:
       db-production:
         condition: service_healthy
     networks:
-      production:
+      production-front:
         aliases: [api]
+      production-back: {}
 
   caddy-production:
     <<: *caddy
@@ -148,13 +156,13 @@ services:
     depends_on:
       api-production:
         condition: service_healthy
-    networks: [production]
+    networks: [production-front]
     # Loopback only, with no variable to widen it: production is reached
     # through a reverse proxy or Cloudflare Tunnel on the same host. Docker's
     # published ports bypass ufw/firewalld unless the DOCKER-USER chain is
     # configured, so "the host firewall will cover it" is not a safe default.
-    # A containerised proxy should join the `production` network and address
-    # `caddy-production:8080` by name instead (docs/04-deployment.md).
+    # A containerised proxy should join the `production-front` network only
+    # and address `caddy-production:8080` by name instead (docs/04-deployment.md).
     ports:
       - "127.0.0.1:${PRODUCTION_PORT:-8081}:8080"
 
@@ -179,6 +187,13 @@ volumes:
   db-production:
   db-local:
 
+# Two networks per profile: `front` carries caddy -> api, `back` carries
+# api -> db and is internal, so the database has no route out of the host and
+# nothing but the api can reach it. A proxy container joins `front` only.
 networks:
-  acceptance:
-  production:
+  acceptance-front:
+  acceptance-back:
+    internal: true
+  production-front:
+  production-back:
+    internal: true

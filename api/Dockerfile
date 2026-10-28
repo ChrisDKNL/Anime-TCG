@@ -4,7 +4,7 @@
 # production-only modules so the final image carries no compiler or test tool.
 # Base images are pinned to their multi-arch index digest; Dependabot
 # (package-ecosystem: docker) proposes bumps.
-FROM node:22-alpine@sha256:fe4f6d74e20370acb04ad889077d14d0f64a9c8ea6a42bc60cddf1e844699914 AS build
+FROM node:26-alpine@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797 AS build
 WORKDIR /app
 # The root (TypeScript), `shared` and `api` are installed for the build;
 # --ignore-scripts: no package gets to run code during the build (the root
@@ -22,7 +22,7 @@ RUN npm run build --workspace shared --workspace api \
 # Stage 2: the compiled service, its production modules and nothing else,
 # owned by root and run by an unprivileged user so the process cannot modify
 # its own code even if the root filesystem were writable.
-FROM node:22-alpine@sha256:fe4f6d74e20370acb04ad889077d14d0f64a9c8ea6a42bc60cddf1e844699914
+FROM node:26-alpine@sha256:40cd011b55415bc894e45b02fdd5a5dfde056921b7d23a64c74f80497af48797
 ENV NODE_ENV=production
 WORKDIR /app
 RUN addgroup -S api && adduser -S -G api -H api
