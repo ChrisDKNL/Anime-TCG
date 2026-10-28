@@ -190,10 +190,36 @@ volumes:
 # Two networks per profile: `front` carries caddy -> api, `back` carries
 # api -> db and is internal, so the database has no route out of the host and
 # nothing but the api can reach it. A proxy container joins `front` only.
+#
+# Every subnet is pinned. Left to Docker, a new network takes the next free
+# block of the daemon's default pool, and on 2026-10-28 that pool was exhausted
+# on the owner's host: `acceptance-front` landed on 192.168.0.0/20, which
+# covers the home LAN, and every container on the host lost the LAN until the
+# network was removed. 172.16.0.0/16 is reserved for this project; it must stay
+# outside the LAN, the VPN and Docker Desktop's own ranges on the host that runs
+# the stack (docs/04-deployment.md). Compose never changes the subnet of an
+# existing network: `down` the profile once after this change.
 networks:
+  # The implicit network of the `dev`/`test` database.
+  default:
+    ipam:
+      config:
+        - subnet: 172.16.30.0/24
   acceptance-front:
+    ipam:
+      config:
+        - subnet: 172.16.10.0/24
   acceptance-back:
     internal: true
+    ipam:
+      config:
+        - subnet: 172.16.11.0/24
   production-front:
+    ipam:
+      config:
+        - subnet: 172.16.20.0/24
   production-back:
     internal: true
+    ipam:
+      config:
+        - subnet: 172.16.21.0/24
