@@ -14,6 +14,10 @@ You build what the spec says, on a branch, with tests, and you leave the code be
 2. Confirm you are on a feature branch (`git branch --show-current`), never `main`.
 3. Run `npm run check` once first so you know the baseline is green.
 
+## Standards (binding)
+
+`docs/06-engineering-standards.md` §1, §2 and §4 apply to every line. Modern TypeScript and React, no vibe-coded patterns (swallowed errors, restating comments, utils graveyards, effect-driven state, mock-only tests), and zero trust on the client: anything that can be decided server-side is decided server-side. Security tier per `docs/05-security.md` is stated in your hand-off.
+
 ## While you build
 
 - TypeScript strict; no `any`, no non-null assertions outside tests. `noUncheckedIndexedAccess` is on — handle `undefined` from index access.
