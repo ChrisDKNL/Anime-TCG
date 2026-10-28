@@ -46,7 +46,7 @@ grep -E '^(TAG|ACCEPTANCE_PORT|WEB_ORIGIN|LOG_LEVEL)=' .env.acceptance.local
 git status --short   # must print nothing: the env file is ignored
 ```
 
-`WEB_ORIGIN` stays `http://127.0.0.1:8080`. Report only the four non-secret lines.
+`WEB_ORIGIN` stays `http://127.0.0.1:8080`. If loopback port 8080 is taken on the host, set `ACCEPTANCE_PORT` to a free port and `WEB_ORIGIN` to match, and use that port in every command below. Report only the four non-secret lines.
 
 ## 4. Build and start
 
@@ -78,7 +78,7 @@ Through Caddy:
 curl -fsS http://127.0.0.1:8080/healthz; echo
 curl -fsS http://127.0.0.1:8080/ | grep -o '<title>[^<]*</title>'
 curl -sI http://127.0.0.1:8080/ | grep -iE '^(content-security-policy|x-content-type-options|referrer-policy|server|via):'
-curl -sD - http://127.0.0.1:8080/api/session | tr -d '\r' | grep -iE '^(HTTP|cache-control|x-content-type-options|server|via|set-cookie):|^\{'
+curl -sD - http://127.0.0.1:8080/api/session | tr -d '\r' | grep -iE '^HTTP/|^(cache-control|x-content-type-options|server|via|set-cookie):|^\{'
 curl -s -o /dev/null -w 'POST without Origin: %{http_code}\n' -X POST http://127.0.0.1:8080/api/session
 curl -s -o /dev/null -w 'POST with foreign Origin: %{http_code}\n' -X POST -H 'Origin: https://evil.example' http://127.0.0.1:8080/api/session
 curl -s -o /dev/null -w 'unknown route: %{http_code}\n' http://127.0.0.1:8080/api/nope
@@ -90,11 +90,11 @@ Inside the stack:
 
 ```bash
 docker compose --env-file .env.acceptance.local --profile acceptance exec -T api-acceptance wget -qO- http://127.0.0.1:3000/healthz; echo
-docker compose --env-file .env.acceptance.local --profile acceptance exec -T db-acceptance psql -U anime -d anime -c '\dt'
+docker compose --env-file .env.acceptance.local --profile acceptance exec -T db-acceptance psql -U anime -d anime -c '\dt *.*'
 docker compose --env-file .env.acceptance.local --profile acceptance exec -T api-acceptance test ! -e node_modules/typescript && echo "no dev modules in the api image"
 ```
 
-Expected: `{"status":"ok","db":"ok"}`; a table list containing `sessions` and the migrations bookkeeping table (the api applied `0000_create_sessions.sql` at start-up); the dev-modules line.
+Expected: `{"status":"ok","db":"ok"}`; `public.sessions` and `drizzle.__drizzle_migrations` in the table list (the api applied `0000_create_sessions.sql` at start-up); the dev-modules line.
 
 Rate limiter keyed per client (the fix #20 exists for). From the host, Caddy sees a private-range peer and therefore trusts `X-Forwarded-For`, so two forged clients can be told apart:
 
@@ -123,7 +123,7 @@ Then open http://127.0.0.1:8080 in a headless browser (Playwright is fine) and c
 Ask the owner to open http://127.0.0.1:8080 and check:
 
 - [ ] I can open a booster pack and see five cards; the collection survives a reload (still browser-side, as before)
-- [ ] The browser's network tab shows `GET /api/session` answering `{"signedIn":false}` on page load, with no `Set-Cookie`
+- [ ] `curl -i http://127.0.0.1:8080/api/session` answers `{"signedIn":false}` with no `Set-Cookie` (the web app does not call the api until 1b wires the account flow; the browser's network tab shows only AniList and static assets)
 - [ ] Nothing in the UI mentions accounts, login, money or buying: the account flow is Sprint 1b, not this candidate
 - [ ] The smoke-check output above shows the rate limiter telling two clients apart and the database reachable only from the api
 
@@ -158,4 +158,10 @@ Reply **"acceptance ok eda4968"** or **"acceptance rejected eda4968: <reason>"**
 
 ## Verdict
 
-_Pending: the owner runs the handoff above and the verdict is recorded here by the next session._
+**Acceptance OK, 2026-10-28** ("acceptance ok eda4968"), relayed by the owner's local Claude Code session in [the evidence comment on PR #22](https://github.com/ChrisDKNL/Anime-TCG/pull/22#issuecomment-6478904574). The three-container stack built in 118 s (web image 169 MB, api image 314 MB), came up healthy on loopback, and every smoke check matched the expected output: hardening on all three containers, exact CSP, no `Server` or `Via` header, `/api/session` signed-out with `no-store` and no cookie, 403 on both cross-site POSTs, 404 envelope on an unknown route, the api's database probe `ok`, `public.sessions` and `drizzle.__drizzle_migrations` present, no dev modules in the api image, the rate limiter answering 100 × 200 then 429 for one forwarded client and 200 for another (102 log lines carrying the forwarded address), no secret value in the logs, a headless browser opening a pack to five cards with zero console errors, and `web/e2e/stack.spec.ts` 7/7 against the stack. The acceptance stack was left running; no production profile, tag, merge or push.
+
+Deviations recorded by the local session, all folded into the runbook above after the run:
+
+- Loopback port 8080 on the dev station is taken by other services, so the stack ran on `ACCEPTANCE_PORT=8180` with `WEB_ORIGIN` matched. Still bound to `127.0.0.1`; the runbook now says to pick a free port.
+- The web app at this commit makes no request to `/api/` (it still runs the browser-local proof of concept), so the original checklist line "network tab shows `GET /api/session`" could not be met in the browser. The endpoint was verified with curl and the stack spec instead; the checklist line was corrected. Wiring the web app to the api is Sprint 1b.
+- Two runbook command fixes: the `/api/session` header grep hid the status line, and `\dt` had to be `\dt *.*` to show the Drizzle schema.
