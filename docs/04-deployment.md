@@ -152,10 +152,13 @@ Left to the proxy: TLS, `Strict-Transport-Security`, and anything that needs to 
 ## Development
 
 ```bash
-docker compose --profile dev up -d        # Postgres on 127.0.0.1:5432, database anime; roles anime / anime (owner) and anime_app / anime_app
+POSTGRES_PASSWORD=x APP_DB_PASSWORD=x SESSION_SECRET=x WEB_ORIGIN=x \
+  docker compose --profile dev up -d      # Postgres on 127.0.0.1:5432, database anime; roles anime / anime (owner) and anime_app / anime_app
 cp api/.env.example api/.env.local        # set SESSION_SECRET; the rest matches the dev database
 npm run dev                               # api on :3000 (node --watch, reloads on change) + Vite on :5173
 ```
+
+The four throwaway values are needed even though the `dev` and `test` profiles start Postgres alone: compose interpolates every service in the file before applying the profile filter, and the `:?` guards on the acceptance and production services fail on a missing value ("required variable POSTGRES_PASSWORD is missing a value"). The local database ignores them; its credentials are fixed in `compose.yml`. Put `DEV_DB_PORT=55432` (any free port) in front as well when something else already listens on 5432, and point `DATABASE_URL` and `MIGRATIONS_DATABASE_URL` in `api/.env.local` (or the shell, for the route tests) at that port.
 
 Vite proxies `/api` to `localhost:3000`, so the browser sees one origin in development as well. `api/.env.local` is loaded by `node --env-file-if-exists`; `server.ts` is the only file that reads the environment. The database schema is applied by the api at start-up. After changing `api/src/db/schema.ts`, run `npm run db:generate -w api` and commit the SQL it writes under `api/src/db/migrations/`; never edit a committed migration.
 
@@ -168,7 +171,7 @@ npm run test:coverage -w api  # unit + routes with coverage; fails under 85 % st
 npm run test:e2e              # Playwright against the Vite dev server
 ```
 
-`docker compose --profile test up -d` starts the same loopback database as `dev` for the route tests; stop it with `--profile test down` (add `--volumes` to start fresh). The route tests run the app pool as `anime_app` (`DATABASE_URL`) and the migrations as `anime` (`MIGRATIONS_DATABASE_URL`); a `db-local` volume created before the init script existed needs the `CREATE ROLE anime_app LOGIN PASSWORD 'anime_app'` statement once, or `--volumes` to recreate it. Test cleanup is `DELETE`, not `TRUNCATE`, because the app role is not granted the latter.
+`POSTGRES_PASSWORD=x APP_DB_PASSWORD=x SESSION_SECRET=x WEB_ORIGIN=x docker compose --profile test up -d` starts the same loopback database as `dev` for the route tests (same throwaway values, same reason as above; add `DEV_DB_PORT=55432` when 5432 is taken and export the two URLs with that port before running the tests); stop it with the same prefix and `--profile test down` (add `--volumes` to start fresh). The route tests run the app pool as `anime_app` (`DATABASE_URL`) and the migrations as `anime` (`MIGRATIONS_DATABASE_URL`); a `db-local` volume created before the init script existed needs the `CREATE ROLE anime_app LOGIN PASSWORD 'anime_app'` statement once, or `--volumes` to recreate it. Test cleanup is `DELETE`, not `TRUNCATE`, because the app role is not granted the latter.
 
 ## CI
 
