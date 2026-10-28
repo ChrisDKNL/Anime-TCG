@@ -12,12 +12,12 @@ What is enforced, by what, and the one-time setup you (the repo owner) have to d
    - `e2e` — Playwright against a mocked AniList
    - `security` — `npm audit` (high+) and a gitleaks secret scan
    - `docker` — builds the image, starts it and smoke-tests `/healthz`, the app's `<title>` and the exact `Content-Security-Policy` header (`docs/04-deployment.md`)
-5. The branch ruleset blocks the merge button until all four are green, the branch is up to date with `main`, and every review thread is resolved.
+5. The branch ruleset blocks the merge button until all four are green on the branch's own head and every review thread is resolved. The branch does not have to contain the latest `main` (see _Keeping branches current_ below); it does have to merge without conflicts.
 6. **You merge.** Squash or merge commit, then delete the branch. Nothing else can merge: there are no bypass actors in the ruleset, and `CLAUDE.md` forbids the manager from calling the merge API. The one exception is Dependabot auto-merge, below.
 
 ### Dependabot auto-merge
 
-Owner decision 2026-10-28: Dependabot pull requests merge without a human click when, and only when, every required check is green. `.github/workflows/dependabot-auto-merge.yml` enables GitHub's auto-merge (squash) on qualifying PRs. The workflow can only ask GitHub to merge; the ruleset decides. If the PR is already green, `gh` merges it on the spot; otherwise GitHub merges once the required checks pass and the branch is up to date. Either way it is the ruleset being satisfied, never the workflow bypassing it.
+Owner decision 2026-10-28: Dependabot pull requests merge without a human click when, and only when, every required check is green. `.github/workflows/dependabot-auto-merge.yml` enables GitHub's auto-merge (squash) on qualifying PRs. The workflow can only ask GitHub to merge; the ruleset decides. If the PR is already green, `gh` merges it on the spot; otherwise GitHub merges once the required checks pass. Either way it is the ruleset being satisfied, never the workflow bypassing it.
 
 Merges automatically:
 
@@ -30,7 +30,7 @@ Does not:
 - ESLint 10 is not even proposed: `.github/dependabot.yml` ignores majors of `eslint` and `@eslint/js` until `eslint-plugin-jsx-a11y` supports it (peer range `^3..^9`, verified 2026-10-28)
 - Majors of `gitleaks/gitleaks-action` and `dependabot/fetch-metadata` (security review 2026-10-28): a gitleaks major can stop scanning and still report green, and a fetch-metadata major changes the verification this very workflow relies on
 - `docker` bumps, in practice: a digest-only bump has no `update-type`, and a tag change such as `22-alpine` → `26-alpine` (#10) parses as major, so both stay manual
-- Anything whose required checks fail or whose branch is behind `main`: auto-merge waits, and Dependabot rebases on conflict or at its next scheduled run
+- Anything whose required checks fail or whose branch conflicts with `main`: auto-merge waits, and Dependabot rebases on conflict or at its next scheduled run
 - Anything not opened by `dependabot[bot]` in this repository: the job is skipped, and `fetch-metadata` additionally leaves its outputs empty unless the PR author and the first commit's author are `dependabot[bot]` and that commit's signature is verified
 
 Two things to know:
@@ -39,6 +39,18 @@ Two things to know:
 - PRs that were already open when the workflow landed only get auto-merge on their next `pull_request` event: comment `@dependabot rebase`, or close and reopen.
 
 Prerequisites, both done by the owner on 2026-10-28: **Settings → General → Pull Requests → Allow auto-merge** is enabled (without it `gh pr merge --auto` fails and every Dependabot PR stays manual, the safe failure), and `docker` is a required check in the live ruleset (one-time setup, step 2 below). The second matters because without it an image-breaking base-image or Caddy bump that passes `quality`, `e2e` and `security` could auto-merge.
+
+### Keeping branches current
+
+Owner decision 2026-10-28: the ruleset no longer requires a branch to contain the latest `main` before it can merge (`strict_required_status_checks_policy: false` in `.github/rulesets/main-protection.json`, changed in the live ruleset the same day). With that setting on, every merge made every other open pull request "out of date", each needing a manual **Update branch** click and a full CI rerun before its merge button came back; with four Dependabot PRs and one feature PR open at once that was a click-and-wait loop with no end.
+
+What the setting bought and what replaces it:
+
+- It guaranteed that the checks you see ran against exactly the tree that `main` will become. Without it, two PRs that are each green against an older `main` can combine into a red `main` (for example one renames a function the other calls). GitHub still refuses a merge with textual conflicts; it is only the semantic case that gets through.
+- The `push: main` CI run is the backstop: it runs the same four jobs on every merge. A red `main` is fixed forward with a `fix/` PR, never by force-pushing `main` (the ruleset forbids it anyway). The manager checks the `main` run after each merge it asked for and reports a failure immediately.
+- For a change where the combination risk is real (a refactor touching code another open PR also edits), the manager merges `main` into the branch before marking the PR ready and says so in the PR; that is a judgement call, not a rule.
+
+Why not a merge queue: GitHub's merge queue would restore the guarantee without the clicks (it builds each candidate on top of the queue ahead of it), but it is only offered on public repositories owned by an **organization**, or private ones on GitHub Enterprise Cloud ([managing a merge queue](https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue), verified 2026-10-28). This repository is owned by a personal account, where the `merge_queue` ruleset rule is rejected on import and the **Require merge queue** option does not appear. Making the repository private would not help; it would also lose the free CodeQL and Dependabot features. The one route to a queue is transferring the repository to a free organization; not worth it for a solo project today. Revisit if red-`main` incidents actually happen.
 
 ## Layers of enforcement
 
@@ -72,7 +84,7 @@ Then **Settings → General → Default branch** → switch to `main`.
 
 **Settings → Rules → Rulesets → New ruleset ▾ → Import a ruleset** → upload `.github/rulesets/main-protection.json`. Review and **Create**.
 
-What it enforces on `main`: pull request required, all review threads resolved, required checks `quality` / `e2e` / `security` / `docker` green on an up-to-date branch, linear history, no force-push, no deletion, no bypass actors.
+What it enforces on `main`: pull request required, all review threads resolved, required checks `quality` / `e2e` / `security` / `docker` green on the branch head (not required to be up to date with `main`, see _Keeping branches current_), linear history, no force-push, no deletion, no bypass actors.
 
 The ruleset was imported before the `docker` job existed; `docker` was added to the required checks by hand on 2026-10-28 (**Settings → Rules → Rulesets → Protect main → Require status checks to pass**). If you ever re-import the JSON, it already includes `docker`.
 

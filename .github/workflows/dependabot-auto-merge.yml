@@ -5,7 +5,7 @@
 # This workflow can only ask GitHub to merge; the branch ruleset on `main`
 # decides. `gh pr merge --auto` merges on the spot if the PR is already green
 # and otherwise waits for the required checks `quality`, `e2e`, `security` and
-# `docker`, an up-to-date branch and resolved review threads. If any of those
+# `docker` and resolved review threads. If any of those
 # fail the PR simply stays open. The ruleset is what makes this safe; this
 # file only decides which PRs qualify.
 #
