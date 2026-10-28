@@ -1,0 +1,12 @@
+node_modules
+dist
+coverage
+playwright-report
+test-results
+.git
+docs
+e2e
+.github
+.husky
+.claude
+*.md

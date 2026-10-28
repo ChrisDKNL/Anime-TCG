@@ -81,3 +81,34 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  docker:
+    name: docker
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Build image
+        run: docker build -t anime-tcg-web:ci .
+      - name: Start container
+        id: start
+        # No --rm: a container that crashes on start must still be around for
+        # the logs step below. Cleanup is explicit at the end.
+        run: docker run -d -p 8080:8080 --name smoke anime-tcg-web:ci
+      - name: Wait for healthz
+        run: |
+          for _ in $(seq 1 30); do
+            if curl -fsS http://localhost:8080/healthz; then exit 0; fi
+            sleep 1
+          done
+          echo "healthz did not answer within 30 s" >&2
+          exit 1
+      - name: Smoke test
+        run: |
+          curl -fsS http://localhost:8080/ | grep -q '<title>Anime TCG'
+          curl -sI http://localhost:8080/ | grep -i '^content-security-policy:'
+      - name: Container logs
+        if: failure() && steps.start.outcome == 'success'
+        run: docker logs smoke
+      - name: Stop container
+        if: always() && steps.start.outcome == 'success'
+        run: docker rm -f smoke

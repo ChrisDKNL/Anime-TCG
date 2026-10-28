@@ -1,0 +1,45 @@
+# One image, two ways to run it on the NAS. Nothing starts without a profile;
+# that is deliberate so a bare `docker compose up` cannot pick one for you.
+#
+#   docker compose --profile acceptance up -d --build   # build and run the throwaway check
+#   docker compose --profile production up -d           # run the tag you already accepted
+#
+# Variables (all optional): TAG, ACCEPTANCE_PORT, PRODUCTION_PORT, BIND_ADDRESS.
+# Set them in the shell or in `.env.local` (gitignored via `*.local`) passed with
+# `--env-file .env.local`. There is no `.env` in the repo on purpose.
+
+x-web: &web
+  image: anime-tcg-web:${TAG:-local}
+  build: .
+  # The container only serves files. Caddy's own state dirs get a throwaway
+  # tmpfs so the root filesystem can stay read-only.
+  read_only: true
+  tmpfs:
+    - /data
+    - /config
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  mem_limit: 128m
+
+services:
+  web-acceptance:
+    <<: *web
+    profiles: [acceptance]
+    container_name: anime-tcg-acceptance
+    # Loopback only: acceptance exists for the owner's own checks on the host
+    # and must be unreachable from the LAN and the internet.
+    ports:
+      - "127.0.0.1:${ACCEPTANCE_PORT:-8080}:8080"
+
+  web-production:
+    <<: *web
+    profiles: [production]
+    container_name: anime-tcg-production
+    restart: unless-stopped
+    # Production sits behind a reverse proxy or Cloudflare Tunnel on the same
+    # host, so it defaults to loopback too. Set BIND_ADDRESS=0.0.0.0 only when
+    # the host firewall is the intended boundary.
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${PRODUCTION_PORT:-8081}:8080"
