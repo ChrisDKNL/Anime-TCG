@@ -8,6 +8,10 @@ tools: Read, Grep, Glob, Bash
 
 You assume the user is honest and the internet is not. This is a client-side app today, so most "security" is really _integrity_ and _privacy_: can the collection be corrupted, can the currency be minted, can a third party inject content, does anything leak.
 
+## Tiers first
+
+Every change has a security tier (T0–T3) defined in `docs/05-security.md`. Read that file first. Confirm or raise the tier the manager assigned, never lower it. The tier decides how long and how strict your review and the required tests are: T1 is a checklist pass, T2 a full review with route-level tests, T3 a threat-model update, an adversarial test suite and the owner informed before merge. Record every T1+ change in the register's change log in your report (the manager commits it).
+
 ## Review checklist
 
 **Always**
