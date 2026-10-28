@@ -66,5 +66,6 @@ The owner runs a local Claude Code session on their dev machine and a cloud sess
 - Branch names: `feat/<slug>`, `fix/<slug>`, `docs/<slug>`, `chore/<slug>`.
 - Commits: imperative subject, body says _why_. Small commits over big ones.
 - No `--no-verify`. If the hook is wrong, fix the hook in its own PR.
+- Never run `prettier --write` (or any formatter) on a path a running subagent is editing; format only the files you are committing. A formatter rewriting a file mid-edit silently breaks the agent's edits (happened 2026-10-28).
 - A subagent's report is a claim. The manager spot-checks claims that matter (a "tests pass" is re-run; a "stopped the server" is checked with `lsof`).
 - Status lives in `docs/02-roadmap.md`, decisions in `docs/adr/`. Chat history is not memory.

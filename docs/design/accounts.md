@@ -1,200 +1,209 @@
-# Local profiles (invite code)
+# Accounts (invite code, login + password)
 
-Roadmap item 1 · implements [ADR 0003](../adr/0003-accounts-local-first.md) Phase 1 · leaves room for [ADR 0004](../adr/0004-economy-ground-rules.md) · written 2026-10-28
+Amended 2026-10-28 for ADR 0006 (login + password)
+Amended again 2026-10-28 for ADR 0008 (server-authoritative state; the web app is a thin UI)
+
+Roadmap item 1 · implements [ADR 0008](../adr/0008-server-authoritative.md) §3–4 (which supersedes [ADR 0003](../adr/0003-accounts-local-first.md) Phase 1 and [ADR 0006](../adr/0006-local-credentials.md)) · leaves room for [ADR 0004](../adr/0004-economy-ground-rules.md) · written 2026-10-28
+
+> **Amendment note.** The first version of this spec designed password-less local _profiles_ with a header switcher. ADR 0006 replaced that with _accounts_ that have a login and a password and a Log in / Register flow. ADR 0008 then moved every piece of state to the server. What survives from the earlier versions is the UI: the Account control, the Account screen, the Register and Log in forms, their errors, copy and accessibility. What is gone: the profile switcher, `localStorage` keys, the `StorageAdapter`, browser-side hashing, cross-tab storage events, export/import of collection files, and the migration of the pre-accounts collection. "Profile" no longer appears in UI copy; "account" does.
 
 ## 1. Goal
 
-The owner (and anyone they hand the URL and an invite code to) can keep several separate card collections on one device, each under a named **profile**, and always see whose collection is on screen. Profiles live in `localStorage`, have no password, and are created only with an invite code that is a client-side placeholder for the real gate a backend will add later (ADR 0003 §2). The existing single collection must land in the first profile with zero data loss. The one piece that has to be built properly is the `StorageAdapter` boundary (`src/lib/storage/`): hooks and components never touch `localStorage` directly, so Phase 2 can swap the implementation without touching the UI.
+The owner (and anyone they hand the URL and an invite code to) gets an **account** on the owner's server, identified by a login and opened with a password, and always sees whose collection is on screen. Registering needs an invite code; the server checks it. The web app is a thin UI: it shows forms, calls the API, and renders what the server returns. Persistence and credentials are server-side (ADR 0008); the UI calls an API and never stores account or collection data in the browser beyond the session.
 
 ## 2. Out of scope
 
-- Third-party sign-in, sync, 2FA, importing a local profile into a cloud account (ADR 0003 Phase 2, roadmap 8). This spec must not block it, and does not design it.
-- Trade between profiles (roadmap 7).
+- Third-party sign-in (Google/Discord). ADR 0008 §3 adds it later as an additional provider; this spec must not block it, and does not design it.
+- Password reset or recovery. There is no email. See open question 1 for the owner-side alternative.
+- Password composition rules beyond length (no "must contain a digit"). Length only, 8–128.
+- "Remember me" toggles and session lifetime. The session is a server-side cookie (ADR 0008 §4); how long it lives is the API's decision. The UI only has to cope with it ending (§4.8).
+- Migrating the pre-accounts `localStorage` collection (it was a PoC; the server cannot trust client-held data). The first server-side account starts empty (ADR 0008 §7).
+- Export and import of a collection as a file. Import is client-held data the server cannot trust (the same reasoning as the point above); export was the matching half and goes with it. A read-only download can return later as a server endpoint; see open question 2.
+- Cross-tab synchronisation. There is no `storage` event to listen to any more; a tab that is logged out elsewhere finds out on its next API call (§4.8).
+- Trade between accounts (roadmap 7).
 - The Profile page: avatar from a card, stats, showcase, balance, next-pack timer (roadmap 4). The initial-letter avatar here is a placeholder that item 4 replaces.
-- Currency balance, pack timer, sell/recycle (roadmap 2). The data model leaves named slots for them (see §3.7); nothing is shown.
-- Merging two collections on import. Import always creates a new profile.
-- Per-profile settings of any kind (there are none yet).
-- Any security claim. Names, codes and collections are editable in DevTools; the copy never says "secure", "verified", "protected" or "private".
-- Concurrent edits to the _same_ profile from two tabs. This is a pre-existing limitation of the write-whole-array model and is unchanged; only the _active profile pointer_ is kept consistent across tabs (§4.7).
-- Passwords, PINs, profile locking, profile avatars, profile colours.
+- Currency balance, pack timer, sell/recycle (roadmap 2). Nothing is shown.
+- Per-account settings of any kind (there are none yet).
+- Any security claim in the UI. The copy never says "secure", "verified", "protected", "safe" or "private". The failure wait on Log in is enforced by the server's rate limiting (ADR 0008 §5) but is _presented_ as a nudge against typo loops, and the copy says exactly that (§8).
+- The API's shape (paths, payloads, status codes), the Argon2id parameters, rate limits, CSP. Those are `api/` concerns under ADR 0008 and ADR 0009; this spec only names what the UI needs back from each call.
+- Account avatars, colours, more than one signed-in account per tab.
 
 ## 3. Flow
 
+Terms: **signed out** = the server reports no session; **signed in** = the server reports a session for an account. **Account screen** = the signed-out main area (§4.3). **Account control** = the header button (§4.5). Every "the server says" below is a response from the API; the UI holds the signed-in account's `login` and `createdAt` in React state for the page's lifetime and nothing else.
+
 ### 3.1 Boot (every launch)
 
-1. The app reads the profile index through the adapter. Until that resolves, nothing game-related renders (no flash of an empty collection). `localStorage` is synchronous so this is normally instant; the loading state in §4.1 exists for a future async adapter.
-2. Branch on what is found:
-   - **Profile index exists** → go to 3.6 (normal app) with the stored active profile. The legacy key, if it still exists, is ignored and left alone.
-   - **No profile index, legacy collection `anime-tcg:inventory:v1` holds one or more cards** → 3.2 (migration).
-   - **No profile index, legacy key missing, empty (`[]`) or unparseable** → 3.3 (first launch, create). An unparseable legacy value is left untouched (its bytes are not ours to lose); an empty array is removed.
-   - **Storage unavailable** (reading throws) → 3.6 in memory with the storage-blocked banner (§4.1). No migration is attempted.
+1. The app asks the server whether the cookie it may hold belongs to a live session. Until that resolves, nothing game-related renders (no flash of an empty collection); the loading state in §4.1 appears only if it takes longer than 300 ms.
+2. Branch on the answer:
+   - **Session for an account** → signed in → 3.6 (normal app).
+   - **No session** → signed out → 3.2 (Account screen).
+   - **Server unreachable or errored** → signed out, Account screen, with the unreachable banner (§4.1). The forms stay usable; each submit retries the network.
+3. Nothing is read from `localStorage` at boot. The old `anime-tcg:inventory:v1` key, if present, is ignored and left alone (its bytes are not ours to delete; nothing reads them).
 
-### 3.2 Migration of the existing collection (first launch with legacy data)
+### 3.2 Signed out: the Account screen
 
-Automatic; no invite code; no user action can abort it half-way.
+1. The header renders with title, subtitle and the Account control (§4.5), no view tabs.
+2. The main area shows the **Account screen** (§4.3): heading, one-line intro, two actions **Log in** and **Register**. Below it, the attribution footer, unchanged.
+3. Nothing belonging to any account is rendered signed out, and this is server-enforced: without a session the API refuses every account and collection call, so the UI has nothing to show even if it asked. No login list, no card counts, no "last pack".
+4. `Log in` → 3.4. `Register` → 3.3. The header Account control, while signed out, returns to this screen from either sub-step (and focuses its heading).
 
-1. Create profile `Player 1` with the legacy cards as its inventory, through the adapter, in this order: write the profile inventory, write the profile index with `Player 1` active, read both back and compare counts.
-2. Only if the read-back matches, remove `anime-tcg:inventory:v1`. If any write or read-back fails, nothing is removed and the app shows the migration-error state (§4.2), which offers an export of the legacy collection as the escape hatch.
-3. On success the app renders normally (Booster tab) and opens the one-time **welcome dialog** (§4.2) offering to rename `Player 1`. Dismissing it keeps the name. The dialog is not shown again; rename stays available in Manage profiles.
+### 3.3 Register (two steps)
 
-The character-pool cache `anime-tcg:character-pool:v1` is device-global and is not touched.
+1. **Step 1, invite code**: one field, `Continue`, `Back`. The value is trimmed and sent to the server, which checks it case-insensitively against its own list (Phase 1 seeds the single code `ANIME-TCG-2026`; the UI never holds a code list). Codes are reusable unless the server decides otherwise. Validation on submit, not keystroke: empty is a client-side error; invalid, cap reached and unreachable come from the server (§8). No attempt counter on this step.
+2. **Step 2, credentials**: `Login`, `Password`, `Confirm password`, `Register`, `Back` (to step 1, code kept). Password rules are printed under the Password field _before_ the user types (§8 "password-rules").
+   - Login: trimmed; 3–24 characters; any characters; internal whitespace kept as typed; the server enforces uniqueness case-insensitively on the trimmed value. The login **is** the display name.
+   - Password: 8–128 characters, any characters, **never trimmed**. Confirm must match exactly. Length and match are checked client-side first so the server is not called for a typo; the server checks them again and the UI maps its answer to the same messages.
+3. On submit the UI sends the invite code, login and password together; the server creates the account, starts the session and answers with the account. The code is re-checked by the server at this point, so a code that became invalid between the steps produces the step-1 error on step 2 (§4.4-A).
+4. Success: signed in, Booster tab, header shows the login, live region announces. Focus moves to the pack button. The new collection is empty (ADR 0008 §7).
+5. **Cap**: the server holds at most **10 accounts** in Phase 1 (the owner's number, kept). The UI learns of the cap only from the server's answer; it shows the cap error on whichever step returned it and offers `Back`.
 
-### 3.3 First launch, no collection (create the first profile)
+### 3.4 Log in
 
-1. The header renders (title and subtitle only; no view tabs, no profile button).
-2. The main area shows the **create-profile screen** (§4.3): name, invite code, `Create profile`, and a secondary `Import a profile file` link that opens the import flow (3.5, step 4 onwards) without a code.
-3. On success the app renders normally on the Booster tab, with the new profile active.
+1. `Login` and `Password` fields, `Log in`, `Back`. Password rules are _not_ shown here (the user already chose it). Below the form, the forgotten-password line (§8).
+2. Login is trimmed; password is not. Empty fields are client-side errors. The server answers unknown login and wrong password with one failure, and the UI shows one message: `Login or password is incorrect.` The form never says which.
+3. **Wait after repeated failures**, server-enforced: after **5 consecutive** failures for a login, the server refuses further attempts for **10 seconds** and tells the UI how many seconds remain. The UI disables `Log in`, counts down from that number (`Try again in <S> s`), and shows the nudge message (§8 "login-breather"), which talks about spelling and caps lock and never about attempts, blocking or protection. A reload does not reset the wait (the server remembers); the UI simply asks again on the next submit and gets a fresh remaining-seconds answer. The same server rule and the same copy family apply to every password check (change password, delete).
+4. Success: signed in, Booster tab (the last-used tab is not remembered; a fresh session starts at the pack), header shows the login, live region announces, focus on the pack button.
 
-### 3.4 Create another profile (profiles exist)
+### 3.5 Signed in: Account control and menu
 
-1. Switcher menu → `New profile…` opens the **create-profile dialog** (§4.3, same form, plus `Cancel`).
-2. Validation on submit, not on keystroke. Errors are inline (§8).
-3. On success: the dialog closes, the new profile becomes active, the app shows the Booster tab (a new profile is empty, so the pack is the only useful thing), focus returns to the profile button, the live region announces it.
+1. The **Account control** in the header shows the avatar placeholder, the login and a chevron. Activating it opens a menu with exactly two items: `Manage account…`, `Log out`. It is disabled while a pack is mid-open (`opening === true`).
+2. `Log out` calls the server (which invalidates the session, ADR 0008 §4), then: the reveal grid is cleared, the view returns to the Account screen, `document.title` resets, focus moves to the Account screen heading, live region announces. No confirmation (nothing is lost). If the call fails, the UI still drops to the Account screen and shows the unreachable banner (the cookie may still be live; the next boot will find out).
+3. `Manage account…` opens the **Manage account dialog** (§4.6):
+   - **Login** section: current login prefilled in a field, `Save`. Same rules as Register (the server excludes the account itself from the duplicate check). Saving updates the header, `document.title` and the live region.
+   - **Password** section: `Current password`, `New password`, `Confirm new password`, rules line under New password, `Change password`. Errors: wrong current password (server), new too short/long, confirm mismatch (client first, server again). Success clears the three fields and announces.
+   - **Delete** section: `Delete account…` replaces the dialog body with a confirmation panel: heading, body stating that the account and every card in it are deleted and that there is no undo, a `Password` field, buttons `Delete <login>` (danger), `Cancel`. The delete button is enabled only once the password field is non-empty; a wrong password is an inline error on the field. On success the server ends the session; the UI is signed out on the Account screen, live region announces.
 
-If the device already holds the maximum of **10 profiles** (my decision: keeps the switcher readable and stays well inside the `localStorage` quota), the menu item is disabled with the reason as its tooltip and the dialog cannot be opened.
+### 3.6 Normal app (signed in)
 
-### 3.5 Switch, manage, export, import
+Identical to today plus: the Account control in the header, `document.title` = `<login> · Anime TCG`, the Inventory `Reset` confirm names the login (§8). The Collection tab keeps its `Collection (N)` label; N comes from the server's collection response. (Moving the collection and pack opening themselves to the server is roadmap work under ADR 0008 and is specced separately; this spec only requires that nothing account-scoped renders without a session.)
 
-1. The **profile button** in the header opens the **switcher menu** (§4.4): one radio item per profile (name, card count, check on the active one), then `New profile…` and `Manage profiles…`.
-2. Choosing a profile switches immediately; there is no confirmation because switching loses nothing. The current view tab is kept; the "last pack" reveal grid is cleared (it belonged to the previous profile). The switcher is disabled while a pack is mid-open (`opening === true`).
-3. `Manage profiles…` opens the **Manage profiles dialog** (§4.5): a list with per-row `Rename`, `Export`, `Delete`, and footer actions `New profile` and `Import from file`.
-4. **Export** downloads one JSON file immediately (no dialog): `anime-tcg-<name-slug>-<YYYY-MM-DD>.json`, format in §3.7.
-5. **Import**: file picker (`.json`) → parse and validate → **import preview** (name field prefilled from the file and editable, card count, rarity breakdown, export date) → `Import` creates a new profile, switches to it, closes the dialog. A malformed file shows one specific error and writes nothing (§4.6).
-6. **Rename** is inline in the row (text field, `Save`, `Cancel`); same rules as create (duplicate check excludes the profile itself).
-7. **Delete** replaces the dialog body with a confirmation panel that states the card count and offers `Export first`. After deleting the active profile the app switches to the most recently used remaining profile; after deleting the last profile the dialog closes and the create-profile screen (3.3) appears.
+### 3.7 Persistence
 
-### 3.6 Normal app
-
-Identical to today plus: the profile button in the header, `document.title` = `<name> · Anime TCG`, the Inventory `Reset` confirm names the profile (§8). The Collection tab keeps its `Collection (N)` label; N is the active profile's count.
-
-### 3.7 Data ownership and what the adapter must expose
-
-**Per-profile vs device-global** (the question every later feature will ask):
-
-| Data                                          | Scope         | Key (contract, also used by e2e seeding)       | Notes                                                                       |
-| --------------------------------------------- | ------------- | ---------------------------------------------- | --------------------------------------------------------------------------- |
-| Profile index: list + active profile id       | device-global | `anime-tcg:profiles:v1`                        | `{ version: 1, activeId, profiles: [{ id, name, createdAt, lastUsedAt }] }` |
-| Collection (cards)                            | per-profile   | `anime-tcg:profile:<id>:inventory:v1`          | Same `Card[]` shape as today                                                |
-| Currency balance, unclaimed packs, pack timer | per-profile   | `anime-tcg:profile:<id>:economy:v1` (reserved) | Roadmap 2 defines the contents; this PR must not create it                  |
-| Character-pool cache                          | device-global | `anime-tcg:character-pool:v1`                  | Unchanged; shared by all profiles, never migrated or deleted                |
-| Invite codes                                  | bundle        | `src/lib/invites.ts`                           | Not storage; a plain exported list                                          |
-| Legacy collection                             | device-global | `anime-tcg:inventory:v1`                       | Read once by migration, then removed (only on verified success)             |
-
-Profile `id` is a random UUID (never the name), so rename is free and keys are stable. Deleting a profile deletes every `anime-tcg:profile:<id>:*` key.
-
-**Adapter surface, from the UX point of view** (names are suggestions; behaviour is the contract):
-
-- `listProfiles()` → the index in creation order; `getActiveId()`.
-- `createProfile(name)` → new profile; the adapter enforces nothing about invite codes (that check is UI/`src/lib/invites.ts`, so Phase 2 can replace it with a server call without touching the adapter).
-- `setActive(id)` (also bumps `lastUsedAt`), `renameProfile(id, name)`, `deleteProfile(id)`.
-- `getInventory(id)`, `setInventory(id, cards)`.
-- `exportProfile(id)` → JSON string; `importProfile(json, nameOverride?)` → new profile, or a typed error naming which of the §4.6 reasons failed. Import validates before writing; a failed import writes nothing.
-- `migrateLegacy()` → `{ migrated: false } | { migrated: true, profileId, cardCount } | { error }`; idempotent (a second call is a no-op once the index exists).
-- `subscribe(listener)` → fires when another tab changes the index (`storage` event). Needed for §4.7.
-- **Every write reports failure** (quota, blocked storage) instead of swallowing it as `useInventory` does today. The UI turns that into the save-failure banner (§4.7). An adapter that cannot read at all reports `unavailable` once at boot.
-
-**Export file format** (version 1):
-
-```json
-{
-  "format": "anime-tcg-profile",
-  "version": 1,
-  "exportedAt": 1761609600000,
-  "profile": { "name": "Chris", "createdAt": 1761609600000, "cards": [/* Card[] */] }
-}
-```
-
-Import accepts `version <= 1`, ignores unknown extra fields inside `profile` (so a later export with `economy` still imports here, minus that part, and the preview says so), and rejects `version > 1`. Roadmap 2 bumps the version when it adds economy fields.
+Persistence and credentials are server-side (ADR 0008); the UI calls an API and never stores account or collection data in the browser beyond the session. The session itself is an `HttpOnly` cookie the UI cannot read; the UI's only memory of "who is signed in" is the account object the server returned, held in React state and discarded on reload. From the UX side the API must give back, for each call, exactly one of: success with the data the states in §4 render; a typed failure that maps to one §8 message (`invalid-code`, `cap-reached`, `duplicate-login`, `bad-credentials`, `wrong-password`, `wait` with seconds remaining, `validation` with the field); `unauthenticated` (session ended); or a network/server failure. The web app maps those and nothing else; it never invents an outcome.
 
 ## 4. States
 
 ### 4.1 Boot
 
-| State               | User sees                                                                                                                                                                                                                                   | User can do                          |
-| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
-| loading             | Header; main area shows `Loading your profiles…` (`text-sm text-zinc-500`, `aria-live="polite"`) only if boot takes longer than 300 ms, otherwise nothing                                                                                   | Wait                                 |
-| storage unavailable | App renders normally in memory. Banner above the main area, `role="alert"`, same red style as the AniList error banner, copy §8 "storage-blocked". The profile button and all flows work as normal for the tab's lifetime; nothing persists | Everything, knowing nothing persists |
-| ready               | Normal app (3.6)                                                                                                                                                                                                                            | Everything                           |
+| State       | User sees                                                                                                                                                                                                   | User can do             |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| loading     | Header (title block only); main area shows `Loading…` (`text-sm text-zinc-500`, `aria-live="polite"`) only if the session check takes longer than 300 ms, otherwise nothing                                 | Wait                    |
+| unreachable | Account screen with the unreachable banner above it, `role="alert"`, same red style as the AniList error banner, copy §8 "unreachable", button `Try again` (repeats the session check). Forms remain usable | Retry, log in, register |
+| signed out  | Account screen (4.3)                                                                                                                                                                                        | Log in, register        |
+| signed in   | Normal app (3.6)                                                                                                                                                                                            | Everything              |
 
-### 4.2 Migration
+### 4.2 Pre-accounts collection
 
-| State                       | User sees                                                                                                                                                                                                                    | User can do                                                                                            |
-| --------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| not needed                  | Nothing. Index exists or there is nothing to migrate                                                                                                                                                                         | —                                                                                                      |
-| migrating                   | Same as boot loading; in practice sub-frame                                                                                                                                                                                  | Wait                                                                                                   |
-| success                     | Normal app on the Booster tab with `Player 1` active, Collection tab shows `Collection (N)` with the old N, and the **welcome dialog** (modal): heading, body naming N, name field prefilled `Player 1`, `Save`, `Skip`      | Rename now or skip. Either closes the dialog; data was already safe before it opened                   |
-| success, empty name on Save | Inline error under the field; dialog stays                                                                                                                                                                                   | Fix the name or `Skip`                                                                                 |
-| error                       | Full-main-area panel (same card style as the create screen): heading, body with the reason, `Try again` (primary), `Export my collection` (secondary; downloads the legacy array in the §3.7 envelope under name `Player 1`) | Retry, or export. The legacy key is untouched; no profile index exists yet, so the next launch retries |
+| State   | User sees     | User can do |
+| ------- | ------------- | ----------- |
+| present | Nothing extra | —           |
 
-### 4.3 Create profile (screen on first launch; dialog otherwise)
+There is no migration, no note and no welcome dialog (ADR 0008 §7). The old key is not read and not deleted.
 
-| State                 | User sees                                                                                                                                                                                          | User can do                          |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
-| idle                  | Heading, one-line intro, `Name` field (autofocused), `Invite code` field with hint below, primary `Create profile`. Screen variant adds `Import a profile file` link; dialog variant adds `Cancel` | Type, submit, (dialog) cancel/Escape |
-| submitting            | Button text `Creating…`, button and fields disabled. Sub-frame in practice                                                                                                                         | Wait                                 |
-| error: empty name     | `Name` gets `aria-invalid`, red border, message below (§8). Focus moves to the field                                                                                                               | Fix and resubmit                     |
-| error: name too long  | Same treatment, message §8. Limit is 24 characters after trimming                                                                                                                                  | Fix and resubmit                     |
-| error: duplicate name | Same treatment, message names the clash. Comparison is case-insensitive on the trimmed value                                                                                                       | Fix and resubmit                     |
-| error: empty code     | `Invite code` gets the invalid treatment, message §8                                                                                                                                               | Fix and resubmit                     |
-| error: invalid code   | Same, message §8. No attempt counter, no lockout, no delay (it is not security and must not pretend to be)                                                                                         | Fix and resubmit                     |
-| error: both invalid   | Both fields marked; focus goes to `Name` (first invalid in DOM order)                                                                                                                              | Fix and resubmit                     |
-| error: at profile cap | Only reachable by racing another tab; dialog body is replaced by the cap message (§8) and a single `Close` button                                                                                  | Close                                |
-| error: save failed    | Form stays filled; banner inside the form (`role="alert"`), copy §8 "save-failed-create"                                                                                                           | Retry; nothing was written           |
-| success               | Dialog closes / screen is replaced by the app on the Booster tab, new profile active, header button shows it, live region announces                                                                | Open a pack                          |
+### 4.3 Account screen (signed out)
 
-Invite-code input rules: trimmed, compared case-insensitively against `INVITE_CODES` in `src/lib/invites.ts`; codes are reusable (a client cannot consume them). Name rules: trimmed; 1–24 characters; any characters allowed; internal whitespace kept as typed.
+| State             | User sees                                                                                                                                                                           | User can do    |
+| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| choice            | One centred panel: heading, intro line, primary `Log in`, secondary `Register`; attribution footer below the panel as today. No view tabs. No account names, counts or art anywhere | Pick an action |
+| log in form       | 4.4-B                                                                                                                                                                               |                |
+| register step 1/2 | 4.4-A                                                                                                                                                                               |                |
 
-### 4.4 Switcher menu
+The UI does not know whether any accounts exist or whether the cap is reached, and does not ask; both buttons are always enabled, and the server's answer to a submit is the only source of those facts.
 
-| State             | User sees                                                                                                                                                                             | User can do                                           |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| closed            | Profile button: avatar circle with the first character of the name, the name, card count (hidden on phone), chevron                                                                   | Open                                                  |
-| open              | Menu anchored below the button, right-aligned: one row per profile in creation order (avatar, name, `N cards`, check mark on the active), divider, `New profile…`, `Manage profiles…` | Pick a profile, pick an action, Escape, click outside |
-| open, one profile | Same; the single profile row is still shown and checked, so the pattern is learnable before a second profile exists                                                                   | Same                                                  |
-| open, at cap      | `New profile…` disabled, `title` = cap message                                                                                                                                        | Everything else                                       |
-| disabled          | Button `disabled` while a pack is opening                                                                                                                                             | Wait ~350 ms                                          |
-| switched          | Menu closes, focus back on the button, button shows the new name and count, Collection tab count updates, reveal grid clears, `document.title` updates, live region announces         | Continue                                              |
+### 4.4 Forms
 
-### 4.5 Manage profiles dialog
+**A. Register**
 
-| State          | User sees                                                                                                                                                                                                                            | User can do                                                       |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------- |
-| list           | Modal titled `Profiles`, close button, rows (avatar, name, `Active` pill on the active one, `N cards`, `Created <date>`; actions `Rename`, `Export`, `Delete`), footer `New profile`, `Import from file`, counter `N of 10 profiles` | Any action, close, Escape                                         |
-| list, at cap   | Footer buttons `New profile` and `Import from file` disabled, counter reads `10 of 10 profiles`, helper line with the cap copy                                                                                                       | Rename/Export/Delete                                              |
-| rename editing | The row's name becomes a text field prefilled with the name, `Save` and `Cancel` replace the row actions. Enter saves, Escape cancels (and does **not** close the dialog)                                                            | Save, cancel                                                      |
-| rename error   | Same inline error treatment as create (empty / too long / duplicate)                                                                                                                                                                 | Fix, cancel                                                       |
-| rename saved   | Row shows the new name; header button updates if it was the active profile; live region announces                                                                                                                                    | Continue                                                          |
-| export done    | File download starts; the row's `Export` button is unchanged (no spinner, download is synchronous); live region announces                                                                                                            | Continue                                                          |
-| export failed  | Only possible if serialisation throws; inline error under the row, copy §8                                                                                                                                                           | Retry                                                             |
-| delete confirm | Dialog body replaced by: heading `Delete <name>?`, body naming the card count and "no undo", note if it is the only profile, buttons `Export first`, `Delete <name>` (danger), `Cancel`                                              | Export (stays on the panel), delete, cancel/Escape (back to list) |
-| delete done    | Back to the list without the row; if the active profile was deleted, the header button shows the new active one; if the last one, the dialog closes and the create screen appears; live region announces                             | Continue                                                          |
-| delete failed  | Stays on the confirm panel with an inline error (§8 "save-failed-generic"). Nothing partially deleted: the adapter deletes the inventory key only after updating the index                                                           | Retry, cancel                                                     |
+| State                          | User sees                                                                                                                                                                       | User can do            |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
+| step 1 idle                    | Heading `Register`, step indicator `Step 1 of 2`, `Invite code` field (autofocused) with hint, `Continue`, `Back`                                                               | Type, continue, back   |
+| step 1 checking                | `Checking…`, button and field disabled                                                                                                                                          | Wait                   |
+| step 1 error: empty code       | Field `aria-invalid`, red border, message below (§8), focus to the field. No server call                                                                                        | Fix                    |
+| step 1 error: invalid code     | Same treatment, message §8 (from the server). No counter, no delay in the UI                                                                                                    | Fix                    |
+| step 1 error: cap reached      | Form body replaced by the cap message (§8) and `Back`                                                                                                                           | Back                   |
+| step 1 error: unreachable      | Banner inside the form (`role="alert"`), §8 "unreachable-form"; field keeps its value                                                                                           | Retry                  |
+| step 2 idle                    | `Step 2 of 2`, `Login` (autofocused) with hint, `Password` with the rules line _under it before typing_ and a `Show` toggle, `Confirm password` with toggle, `Register`, `Back` | Type, submit, back     |
+| step 2 error: empty login      | Invalid treatment, §8                                                                                                                                                           | Fix                    |
+| step 2 error: login length     | Invalid treatment, §8 (too short / too long are one message)                                                                                                                    | Fix                    |
+| step 2 error: duplicate        | Invalid treatment, message names the clash (from the server)                                                                                                                    | Fix                    |
+| step 2 error: empty password   | Invalid treatment, §8                                                                                                                                                           | Fix                    |
+| step 2 error: password length  | Invalid treatment, §8 (too short / too long are one message)                                                                                                                    | Fix                    |
+| step 2 error: mismatch         | `Confirm password` invalid, §8; the Password field keeps its value                                                                                                              | Fix                    |
+| step 2 error: several          | All marked; focus to the first invalid in DOM order                                                                                                                             | Fix                    |
+| step 2 error: code now invalid | The server rejected the code at submit time: back to step 1 with the invalid-code error shown and the code field focused; the login stays filled for when the user returns      | Fix the code           |
+| step 2 error: cap reached      | Form body replaced by the cap message and `Back`                                                                                                                                | Back                   |
+| step 2 error: unreachable      | Form stays filled; banner inside the form, §8 "unreachable-form"                                                                                                                | Retry; nothing created |
+| submitting                     | `Registering…`, button, fields and toggles disabled                                                                                                                             | Wait                   |
+| success                        | Normal app on the Booster tab, header shows the login, live region announces                                                                                                    | Open a pack            |
 
-### 4.6 Import (from the Manage dialog or the first-launch screen)
+**B. Log in**
 
-| State                     | User sees                                                                                                                                                                                                                                                                                                                                | User can do                           |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
-| picking                   | Native file picker (`accept=".json,application/json"`)                                                                                                                                                                                                                                                                                   | Pick, cancel (no UI change on cancel) |
-| reading                   | Button text `Reading file…` on the trigger, disabled; for files under a few MB this is sub-frame                                                                                                                                                                                                                                         | Wait                                  |
-| error: not a profile file | Dialog body shows an error panel (`role="alert"`): heading, reason (§8), `Choose another file`, `Back`                                                                                                                                                                                                                                   | Pick again, back to the list/screen   |
-| error: newer version      | Same panel, §8 copy                                                                                                                                                                                                                                                                                                                      | Same                                  |
-| error: damaged cards      | Same panel, §8 copy naming how many cards failed validation. The whole file is rejected; no partial import                                                                                                                                                                                                                               | Same                                  |
-| error: at cap             | Same panel, cap copy                                                                                                                                                                                                                                                                                                                     | Back                                  |
-| preview                   | Heading `Import profile`, `Name` field prefilled with the file's name (editable, same validation), summary line `N cards · L Legendary · R Rare · C Common` using the Inventory header pill style, `Exported <date>`; if the file carried fields this version ignores, a one-line note (§8 "import-partial"); buttons `Import`, `Cancel` | Edit name, import, cancel             |
-| preview, duplicate name   | Inline error on the name field                                                                                                                                                                                                                                                                                                           | Fix                                   |
-| importing                 | `Import` reads `Importing…`, disabled                                                                                                                                                                                                                                                                                                    | Wait                                  |
-| error: save failed        | Preview stays, banner with §8 "save-failed-create"                                                                                                                                                                                                                                                                                       | Retry, cancel                         |
-| success                   | Dialog/screen closes, imported profile is active, current tab kept (first-launch: Booster), live region announces                                                                                                                                                                                                                        | Continue                              |
+| State                 | User sees                                                                                                                                                                                            | User can do   |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
+| idle                  | Heading `Log in`, `Login` (autofocused), `Password` with `Show` toggle, `Log in`, `Back`, forgotten-password line beneath the form                                                                   | Type, submit  |
+| error: empty login    | Invalid treatment, §8. No server call                                                                                                                                                                | Fix           |
+| error: empty password | Invalid treatment, §8. No server call                                                                                                                                                                | Fix           |
+| error: incorrect      | Both fields get the invalid border; one message under the password field: `Login or password is incorrect.`; password field cleared; focus to `Login`                                                | Fix           |
+| checking              | `Logging in…`, disabled                                                                                                                                                                              | Wait          |
+| wait (server says so) | `Log in` disabled and reads `Try again in <S> s` (S from the server's remaining seconds down to 1, `tabular-nums`); message `role="status"` §8 "login-breather" announced once; fields stay editable | Re-read, wait |
+| wait over             | Button reads `Log in` again; live region `You can try again now.`                                                                                                                                    | Submit        |
+| error: unreachable    | Banner inside the form, §8 "unreachable-form"; fields keep their values                                                                                                                              | Retry         |
+| success               | Normal app on the Booster tab, live region announces                                                                                                                                                 | Play          |
 
-Card validation for import: each entry must have string `uid`, number `characterId`, string `name`, string `imageUrl`, `rarity` in `common | rare | legendary`, number `pulledAt`; `animeTitle` string, `animeTitleNative` string or null. Duplicate `uid`s inside one file are regenerated, not rejected. `imageUrl` must be an `https:` URL (it is rendered into an `<img>`; `security-officer` will ask).
+**C. Change password** (inside Manage account)
 
-### 4.7 Cross-cutting
+| State                  | User sees                                                                                                            | User can do  |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------- | ------------ |
+| idle                   | `Current password`, `New password` with rules line and toggle, `Confirm new password` with toggle, `Change password` | Type, submit |
+| error: wrong current   | `Current password` invalid, §8 "wrong-current"; field cleared                                                        | Fix          |
+| error: new length      | `New password` invalid, same length message as Register                                                              | Fix          |
+| error: mismatch        | `Confirm new password` invalid, same mismatch message                                                                | Fix          |
+| error: same as current | Not an error; allowed. No message                                                                                    | —            |
+| wait                   | Same server-enforced wait, countdown and copy family as Log in, on the `Change password` button                      | Wait         |
+| submitting             | `Changing…`, disabled                                                                                                | Wait         |
+| error: unreachable     | Inline banner §8 "unreachable-form"                                                                                  | Retry        |
+| success                | Fields cleared, inline confirmation line `Password changed.` and live region announces                               | Continue     |
 
-| State                                 | User sees                                                                                                                                                                              | User can do                 |
-| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------- |
-| save failed (any later write)         | Persistent banner above the main area, `role="alert"`, red style, copy §8 "save-failed-banner" with `Export <name>` and `Try again`. Clears automatically on the next successful write | Export, retry, keep playing |
-| active profile changed in another tab | This tab follows: header button, counts and views update; live region `Switched to <name> in another tab.` Any in-progress rename/create dialog stays open on its own data             | Continue                    |
-| active profile deleted in another tab | This tab switches to whatever the other tab made active; if none remain, the create screen appears                                                                                     | Continue                    |
+### 4.5 Account control (header)
+
+| State             | User sees                                                                                                                        | User can do                         |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| signed out        | Button labelled `Account` (no avatar, no chevron). Activating it shows the Account screen "choice" state and focuses its heading | Return to the choice screen         |
+| signed in, closed | Avatar circle with the first character of the login, the login, chevron                                                          | Open                                |
+| signed in, open   | Menu anchored below the button, right-aligned: `Manage account…`, divider, `Log out`                                             | Pick an item, Escape, click outside |
+| disabled          | Button `disabled` while a pack is opening                                                                                        | Wait ~350 ms                        |
+| logging out       | Menu closed; control disabled until the server answers (sub-second)                                                              | Wait                                |
+| after Log out     | Account screen, choice state; `document.title` = `Anime TCG`; focus on the screen heading; live region `Logged out.`             | Log in, register                    |
+
+### 4.6 Manage account dialog
+
+| State           | User sees                                                                                                                                                                                                                                     | User can do                          |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| open            | Modal titled `Manage account`, close button, avatar + login + `Created <date>` + `<N cards>` at the top, then three sections in order: **Login**, **Password**, **Delete account**                                                            | Any action, close, Escape            |
+| login editing   | `Login` field prefilled; `Save` enabled once the value differs from the current login                                                                                                                                                         | Save                                 |
+| login error     | Same inline treatment as Register (empty / length / duplicate)                                                                                                                                                                                | Fix                                  |
+| login saving    | `Saving…`, disabled                                                                                                                                                                                                                           | Wait                                 |
+| login saved     | Header, `document.title` and the dialog header update; live region `Login changed to <login>.`                                                                                                                                                | Continue                             |
+| password        | 4.4-C                                                                                                                                                                                                                                         |                                      |
+| delete confirm  | Dialog body replaced by: heading `Delete <login>?`, body naming the card count and "no undo", `Password` field (autofocused, `current-password`, toggle), buttons `Delete <login>` (danger, enabled only with a non-empty password), `Cancel` | Delete, cancel/Escape (back to list) |
+| delete wrong pw | Password field invalid, §8 "wrong-current"; field cleared; same server-enforced wait on the delete button after repeated misses                                                                                                               | Retry, cancel                        |
+| deleting        | `Deleting…`, disabled                                                                                                                                                                                                                         | Wait                                 |
+| delete done     | Dialog closes; app is signed out on the Account screen; live region `Deleted <login>.`                                                                                                                                                        | Log in, register                     |
+| delete failed   | Stays on the confirm panel with the inline banner (§8 "unreachable-form"). The server deletes atomically or not at all; the UI never shows a half-deleted account                                                                             | Retry, cancel                        |
+| session ended   | Any `unauthenticated` answer closes the dialog and applies §4.8                                                                                                                                                                               | Log in                               |
+
+### 4.7 (reserved)
+
+Import from a file was §4.7 in the previous version and is out of scope now (§2). The number is kept so cross-references in review comments stay valid.
+
+### 4.8 Cross-cutting
+
+| State                                                     | User sees                                                                                                                                                                                              | User can do |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------- |
+| session ended (server says `unauthenticated` on any call) | The UI drops to the Account screen, closes any dialog, clears the reveal grid and all account state; banner above the panel, `role="status"`, §8 "session-ended"; the Log in form is one click away    | Log in      |
+| server unreachable (any later call)                       | Persistent banner above the main area, `role="alert"`, red style, copy §8 "unreachable" with `Try again`. The game state on screen is whatever the server last returned; no action pretends to succeed | Retry, wait |
+| logged out in another tab                                 | Nothing until this tab's next API call, which returns `unauthenticated` and triggers "session ended" above. This is accepted (§2)                                                                      | Log in      |
 
 ## 5. Layout
 
@@ -202,172 +211,177 @@ Breakpoints are Tailwind defaults: phone `< 640`, `sm ≥ 640`, `lg ≥ 1024`. T
 
 **Header**
 
-- Phone (stacked, `flex-col gap-4`): row 1 title + subtitle (unchanged); row 2 `flex items-center justify-between`: view tabs left, profile button right. The profile button hides the card count and truncates the name at `max-w-[8rem]`.
-- `sm` and up: title block left; right side is `flex items-end gap-3`: view tabs, then the profile button. Name truncates at `max-w-[10rem]`; card count visible.
-- The first-launch screen renders the header without the view tabs and without the profile button; the title block stays so the page is recognisable.
+- Phone (stacked, `flex-col gap-4`): row 1 title + subtitle (unchanged); row 2 `flex items-center justify-between`: view tabs left (signed in only), Account control right. Signed out, row 2 is the Account control alone, right-aligned. The login truncates at `max-w-[8rem]`.
+- `sm` and up: title block left; right side is `flex items-end gap-3`: view tabs (signed in only), then the Account control. Login truncates at `max-w-[10rem]`.
 
-**Switcher menu**: `min-w-[16rem]`, `max-w-[calc(100vw-2rem)]`, anchored to the button's right edge, below it. Rows: avatar `size-6`, name truncates, count right-aligned and `tabular-nums`. Never taller than 10 rows plus two actions, so no inner scroll is needed at the cap.
+**Account screen and its sub-steps (choice, Log in, Register)**: one centred panel `w-full max-w-sm` in the main area, `rounded-2xl border border-zinc-800 bg-zinc-900 p-6`, fields full-width, primary buttons full-width on phone and auto on `sm`. The two choice buttons stack on phone and sit side by side on `sm`. The attribution footer keeps its place below `main`.
 
-**Create-profile screen**: one centred panel `w-full max-w-sm` in the main area, `rounded-2xl border border-zinc-800 bg-zinc-900 p-6`, fields full-width, button full-width on phone and auto on `sm`.
+**Menu**: `min-w-[12rem]`, anchored to the control's right edge, below it. Two items; never scrolls.
 
-**Dialogs** (welcome, create, manage, import preview): native `<dialog>` opened with `showModal()`. `w-[calc(100%-2rem)] max-w-lg` (`max-w-sm` for welcome and create), `max-h-[85vh]`, body scrolls. Backdrop `bg-zinc-950/70 backdrop-blur-sm`. Manage rows on phone stack name/meta above a right-aligned action row; on `sm` a single row with actions right.
+**Dialog** (Manage account): native `<dialog>` opened with `showModal()`. `w-[calc(100%-2rem)] max-w-lg`, `max-h-[85vh]`, body scrolls. Backdrop `bg-zinc-950/70 backdrop-blur-sm`. Sections are stacked with `border-t border-zinc-800 pt-6 mt-6` between them; each has an `h3`. On phone the login field and `Save` stack; on `sm` they share a row.
 
-**Banners** (storage blocked, save failed): same block as the existing AniList error banner, above the main area, full width.
+**Password fields**: the input gets `pr-16` and the `Show`/`Hide` text toggle is absolutely positioned inside the right edge, vertically centred, so the field width never changes when the label flips.
 
-**Truncation**: names truncate with `truncate` and carry `title={name}` everywhere they are rendered in one line; the welcome, confirm and error panels wrap the name instead.
+**Banners** (unreachable, session ended): same block as the existing AniList error banner, above the main area, full width. Session-ended uses the neutral style (`border-zinc-800 bg-zinc-900 text-zinc-200`), not red: it is information, not a failure.
+
+**Truncation**: logins truncate with `truncate` and carry `title={login}` everywhere they are rendered in one line; headings and confirm panels wrap the login instead.
 
 ## 6. Visual treatment
 
 No new design tokens are needed; everything below is existing utilities. (If the engineer finds the red "danger" utilities repeated more than three times, propose a `--color-danger` token in a follow-up; do not add it in this PR.)
 
-- **Avatar placeholder**: circle (`size-7` in the header, `size-6` in menu rows, `size-10` in dialogs), `bg-gradient-to-br from-fuchsia-600 via-violet-600 to-sky-600` (the pack button's gradient), first character of the trimmed name in `text-xs font-bold text-white uppercase`. One gradient for every profile; the name is the differentiator. Roadmap 4 replaces this with a card-art avatar.
-- **Profile button**: `rounded-xl bg-zinc-900 px-2 py-1.5 text-sm text-zinc-200 hover:bg-zinc-800`, same focus ring as the Inventory select (`focus-visible:ring-2 focus-visible:ring-violet-500`). Chevron is an inline SVG, `aria-hidden`. Count in `text-xs text-zinc-500`.
-- **Menu**: `rounded-xl border border-zinc-800 bg-zinc-900 p-1 shadow-xl shadow-black/40`; items `rounded-lg px-3 py-2 text-sm`; focused/hovered item `bg-zinc-800`; active profile carries a check mark in `text-violet-300`. Divider `border-t border-zinc-800 my-1`.
-- **Dialog panel**: `rounded-2xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-100`; headings `text-lg font-bold`; body `text-sm text-zinc-400`.
-- **Inputs**: `rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600` with the violet focus ring. Invalid: `border-red-800`; error text `text-xs text-red-300` beneath, prefixed by nothing (no icon). Invite code field: `font-mono tracking-wide`.
-- **Buttons**: primary `rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-500` (the loud fuchsia→sky gradient stays reserved for the pack); secondary `rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-200 hover:bg-zinc-800`; danger outline (row `Delete`) is the existing Inventory `Reset` style `border border-red-900/60 text-red-300 hover:bg-red-950/50`; danger solid (final `Delete <name>`) is the existing banner `Retry` style `bg-red-800/60 text-red-200 hover:bg-red-700/60`. Red is already in use as a semantic colour, not a new accent family.
-- **Pills**: `Active` uses the Inventory stat pill (`rounded-md bg-zinc-900 px-2 py-0.5 text-xs`) with `text-violet-300`. Rarity counts in the import preview reuse the same pill with the existing rarity text colours (`text-amber-300`, `text-sky-300`, `text-zinc-200`).
-- **Motion**: menu and dialogs fade/scale in over 150 ms (`opacity 0→1`, `scale .98→1`); none under `prefers-reduced-motion`. No motion on switch; the reveal grid simply disappears.
-- **Nothing money-like**: no coin, wallet, cart or store iconography anywhere in this feature; the economy spec names and draws the currency.
+- **Avatar placeholder**: circle (`size-7` in the header, `size-10` in the Manage dialog header), `bg-gradient-to-br from-fuchsia-600 via-violet-600 to-sky-600` (the pack button's gradient), first character of the login in `text-xs font-bold text-white uppercase`. Roadmap 4 replaces this with a card-art avatar.
+- **Account control**: `rounded-xl bg-zinc-900 px-2 py-1.5 text-sm text-zinc-200 hover:bg-zinc-800`, same focus ring as the Inventory select (`focus-visible:ring-2 focus-visible:ring-violet-500`). Signed out it is the same button with the text `Account` and no avatar. Chevron is an inline SVG, `aria-hidden`.
+- **Menu**: `rounded-xl border border-zinc-800 bg-zinc-900 p-1 shadow-xl shadow-black/40`; items `rounded-lg px-3 py-2 text-sm`; focused/hovered item `bg-zinc-800`; `Log out` is plain `text-zinc-200` (it is not destructive). Divider `border-t border-zinc-800 my-1`.
+- **Panel / dialog**: `rounded-2xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-100`; headings `text-lg font-bold`; section headings `text-sm font-semibold text-zinc-200`; body `text-sm text-zinc-400`; step indicator `text-xs text-zinc-500`.
+- **Inputs**: `rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600` with the violet focus ring. Invalid: `border-red-800`; error text `text-xs text-red-300` beneath (no icon). Hints and the rules line: `text-xs text-zinc-500`. Invite code field: `font-mono tracking-wide`. Password fields never use `font-mono` (it makes shoulder-reading easier and looks like a code).
+- **Show/Hide toggle**: text button `text-xs font-medium text-zinc-400 hover:text-zinc-200`, violet focus ring, no icon (no new iconography in this feature).
+- **Buttons**: primary `rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-500` (the loud fuchsia→sky gradient stays reserved for the pack); secondary `rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-200 hover:bg-zinc-800`; disabled `opacity-50 cursor-not-allowed`; danger outline (`Delete account…`) is the existing Inventory `Reset` style `border border-red-900/60 text-red-300 hover:bg-red-950/50`; danger solid (final `Delete <login>`) is the existing banner `Retry` style `bg-red-800/60 text-red-200 hover:bg-red-700/60`. Red is already in use as a semantic colour, not a new accent family.
+- **Wait countdown**: the disabled primary button with `tabular-nums`; the message beneath in the hint style, not the error style (it is not an error).
+- **Motion**: menu and dialog fade/scale in over 150 ms (`opacity 0→1`, `scale .98→1`); none under `prefers-reduced-motion`. Switching between Account screen sub-steps has no transition. The countdown number changes without animation.
+- **Nothing money-like, nothing lock-like**: no coin, wallet, cart, lock, shield or key iconography anywhere in this feature; the economy spec names and draws the currency, and a lock would be a security claim.
 
 ## 7. Accessibility
 
-- **Profile button**: `<button aria-haspopup="menu" aria-expanded aria-controls="profile-menu">`, accessible name `Switch profile. Current: <name>, <N cards>` via `aria-label` (visible text stays as designed).
-- **Menu**: `role="menu"` `aria-labelledby` the button; profile rows `role="menuitemradio"` with `aria-checked`; actions `role="menuitem"`; roving `tabindex`. Keyboard: `Enter`/`Space`/`ArrowDown` open and focus the active profile; `ArrowUp` opens and focuses the last item; `ArrowUp/Down` move and wrap; `Home`/`End`; typing a letter jumps to the next profile starting with it; `Enter`/`Space` activate; `Escape` closes and returns focus to the button; `Tab` closes. Clicking outside closes.
-- **Dialogs**: native `<dialog>` via `showModal()` gives the focus trap, `Escape` and background inertness. Each has `aria-labelledby` its heading. Initial focus: the `Name` field in welcome, create and import preview; the dialog element itself (`tabindex="-1"`) in Manage; the `Cancel` button in delete-confirm (so `Enter` by reflex does not delete). Closing returns focus to the element that opened the dialog (profile button, or the row's `Delete`/`Rename` button, or the footer button).
-- **Inline rename**: `Escape` stops propagation so it cancels the rename, not the dialog. The field is labelled `New name for <name>` (`sr-only` label).
-- **Forms**: every field has a visible `<label>`; hints and errors are linked with `aria-describedby`; invalid fields get `aria-invalid="true"`; on submit, focus moves to the first invalid field. Errors render in a `role="alert"` region inside the form so screen readers hear them once.
+- **Account control (signed in)**: `<button aria-haspopup="menu" aria-expanded aria-controls="account-menu">`, accessible name `Account menu. Signed in as <login>` via `aria-label` (visible text stays as designed). Signed out: a plain `<button>` whose visible text `Account` is its name.
+- **Menu**: `role="menu"` `aria-labelledby` the button; items `role="menuitem"`; roving `tabindex`. Keyboard: `Enter`/`Space`/`ArrowDown` open and focus the first item; `ArrowUp` opens and focuses the last; `ArrowUp/Down` move and wrap; `Home`/`End`; `Enter`/`Space` activate; `Escape` closes and returns focus to the button; `Tab` closes. Clicking outside closes.
+- **Account screen**: `<main>` contains one `<section aria-labelledby>` its `h2`. The heading has `tabindex="-1"` so the header control, Log out and session-ended can move focus to it. Sub-steps (Log in, Register) replace the section's content; their `h2` receives focus on entry. `Back` returns focus to the choice screen's heading.
+- **Register steps**: step indicator is text (`Step 1 of 2`), part of the heading's `aria-describedby`. Step 2's `Back` keeps the entered code; a server-side code rejection at submit returns to step 1 with focus on the code field.
+- **Dialog**: native `<dialog>` via `showModal()` gives the focus trap, `Escape` and background inertness, `aria-labelledby` its heading. Initial focus: the dialog element itself (`tabindex="-1"`) in Manage account; the `Password` field in delete-confirm (the user has to type anyway, and `Enter` with an empty field does nothing because the delete button is disabled). Closing returns focus to the Account control.
+- **Forms**: every field has a visible `<label>`; hints, rules and errors are linked with `aria-describedby`; invalid fields get `aria-invalid="true"`; on submit, focus moves to the first invalid field in DOM order, whether the error came from the client check or from the server. Errors render in a `role="alert"` region inside the form so screen readers hear them once. Validation on submit, not on keystroke. While a request is in flight the submit button is disabled and keeps focus; it is not removed from the DOM.
+- **Password fields**: `type="password"`; each has its own Show/Hide `<button type="button" aria-pressed>` with accessible name `Show password` / `Hide password` (for confirm fields: `Show password confirmation` / `Hide password confirmation`). Toggling does not move focus and does not clear the value. Toggles are disabled while the form is submitting. `autocomplete`: Register `Login` → `username`, `Password` and `Confirm password` → `new-password`; Log in `Login` → `username`, `Password` → `current-password`; Manage `Login` → `username`; `Current password` → `current-password`; `New password` and `Confirm new password` → `new-password`; delete-confirm `Password` → `current-password`. `autocapitalize="off" spellcheck="false"` on every login and password field. No `maxlength` attribute on passwords (a hard cut-off would silently truncate what the user thinks they typed; validate on submit instead); `maxlength="24"` is fine on login.
 - **Invite code field**: `autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text"`. Not a password field; the value is visible (it is not a secret).
-- **Live region**: one app-level visually hidden `role="status" aria-live="polite"` element for switch/create/rename/delete/export/import announcements (§8). Banners use `role="alert"`.
-- **Manage list**: `<ul>` of `<li>`; each row's action buttons carry the profile name in their accessible name (`Rename Chris`, `Export Chris`, `Delete Chris`) so they are distinguishable out of context.
-- **Delete confirm**: the final button's accessible name is `Delete <name>` and the panel is `role="alertdialog"`-equivalent (it is the same `<dialog>`; set `aria-describedby` to the body paragraph).
-- **Contrast**: `text-zinc-500` on `bg-zinc-900` for the card count is decorative-adjacent; the count is also in the button's `aria-label`. Everything that must be read (names, errors, body copy) is `zinc-200` or lighter / `red-300` on `zinc-900`.
+- **Wait**: the message is a `role="status"` element rendered once when the wait starts; the countdown lives in the button's text, which is _not_ a live region, so screen readers are not read a number every second. When the wait ends, the live region announces `You can try again now.` and focus is unchanged.
+- **Live region**: one app-level visually hidden `role="status" aria-live="polite"` element for register/login/logout/rename/password/delete announcements (§8). Failure banners use `role="alert"`; the session-ended banner uses `role="status"` and moves focus to the Account screen heading, which is why it does not need to be an alert.
+- **Delete confirm**: the final button's accessible name is `Delete <login>`; the panel sets `aria-describedby` to the body paragraph.
+- **Contrast**: hints and rules in `text-zinc-500` on `bg-zinc-900` are at the floor; everything that must be read (logins, errors, body copy) is `zinc-200` or lighter / `red-300` on `zinc-900`.
 - **Reduced motion**: only the 150 ms enter transitions exist; they are disabled under `prefers-reduced-motion: reduce`, in the same media block as `card-reveal`.
-- **Touch targets**: menu rows and row action buttons are at least 40 px tall on phone.
+- **Touch targets**: menu items, toggles and form buttons are at least 40 px tall on phone.
 
 ## 8. Copy
 
-Exact strings. `<name>` is the profile name, `<N>` a number. Card-count phrase everywhere: `No cards yet` / `1 card` / `<N> cards`.
+Exact strings. `<login>` is the account login, `<N>` a number, `<S>` the countdown seconds. Card-count phrase everywhere: `No cards yet` / `1 card` / `<N> cards`. The words "secure", "verified", "protected", "safe", "private", "attempt", "locked" and "blocked" do not appear in any string below and must not be added.
 
 **Header**
 
-| Element                      | Copy                                         |
-| ---------------------------- | -------------------------------------------- |
-| Profile button `aria-label`  | `Switch profile. Current: <name>, <N cards>` |
-| Menu action                  | `New profile…`                               |
-| Menu action                  | `Manage profiles…`                           |
-| Cap tooltip on disabled item | `This device already has 10 profiles.`       |
-| Document title               | `<name> · Anime TCG`                         |
+| Element                         | Copy                                 |
+| ------------------------------- | ------------------------------------ |
+| Control, signed out             | `Account`                            |
+| Control `aria-label`, signed in | `Account menu. Signed in as <login>` |
+| Menu items                      | `Manage account…` · `Log out`        |
+| Document title, signed in       | `<login> · Anime TCG`                |
+| Document title, signed out      | `Anime TCG`                          |
 
-**Create profile (screen and dialog)**
+**Account screen (choice)**
 
-| Element                   | Copy                                                                                         |
-| ------------------------- | -------------------------------------------------------------------------------------------- |
-| Heading                   | `Create your profile` (first launch) / `New profile` (dialog)                                |
-| Intro (first launch)      | `Each profile keeps its own collection on this device.`                                      |
-| Name label                | `Name`                                                                                       |
-| Name placeholder          | `e.g. Chris`                                                                                 |
-| Invite code label         | `Invite code`                                                                                |
-| Invite code hint          | `Ask the owner for a code. Codes are not case-sensitive.`                                    |
-| Submit                    | `Create profile` / while submitting `Creating…`                                              |
-| Secondary (first launch)  | `Import a profile file`                                                                      |
-| Secondary (dialog)        | `Cancel`                                                                                     |
-| Error: empty name         | `Give the profile a name.`                                                                   |
-| Error: name too long      | `Keep the name to 24 characters.`                                                            |
-| Error: duplicate name     | `A profile called "<name>" already exists.`                                                  |
-| Error: empty code         | `Enter an invite code.`                                                                      |
-| Error: invalid code       | `That invite code isn't valid.`                                                              |
-| Error: at cap             | `This device already has 10 profiles. Delete one to make room.`                              |
-| Error: save-failed-create | `Couldn't save the profile. Storage on this device is full or blocked. Nothing was changed.` |
-| Live region on success    | `Created <name>. You're now on <name>.`                                                      |
+| Element   | Copy                                                                    |
+| --------- | ----------------------------------------------------------------------- |
+| Heading   | `Your account`                                                          |
+| Intro     | `Log in to your collection, or register a new one with an invite code.` |
+| Primary   | `Log in`                                                                |
+| Secondary | `Register`                                                              |
 
-**Welcome dialog (after migration)**
+**Register**
 
-| Element    | Copy                                                                                                   |
-| ---------- | ------------------------------------------------------------------------------------------------------ |
-| Heading    | `Your collection has a profile now`                                                                    |
-| Body       | `Your <N cards> moved into a profile called Player 1. Give it a name, or keep it and rename it later.` |
-| Name label | `Name`                                                                                                 |
-| Primary    | `Save`                                                                                                 |
-| Secondary  | `Skip`                                                                                                 |
+| Element                              | Copy                                                                      |
+| ------------------------------------ | ------------------------------------------------------------------------- |
+| Heading                              | `Register`                                                                |
+| Step indicator                       | `Step 1 of 2` / `Step 2 of 2`                                             |
+| Invite code label                    | `Invite code`                                                             |
+| Invite code hint                     | `Ask the owner for a code. Codes are not case-sensitive.`                 |
+| Step 1 buttons                       | `Continue` / while checking `Checking…` · `Back`                          |
+| Error: empty code                    | `Enter an invite code.`                                                   |
+| Error: invalid code                  | `That invite code isn't valid.`                                           |
+| Error: cap reached                   | `All 10 places are taken for now. Ask the owner to make room.`            |
+| Login label                          | `Login`                                                                   |
+| Login hint                           | `3 to 24 characters. This is the name shown on your collection.`          |
+| Login placeholder                    | `e.g. Chris`                                                              |
+| Password label                       | `Password`                                                                |
+| password-rules (shown before typing) | `8 to 128 characters. Letters, numbers, spaces and symbols are all fine.` |
+| Confirm label                        | `Confirm password`                                                        |
+| Show/Hide toggle                     | `Show` / `Hide`                                                           |
+| Step 2 buttons                       | `Register` / while submitting `Registering…` · `Back`                     |
+| Error: empty login                   | `Choose a login.`                                                         |
+| Error: login length                  | `Keep the login between 3 and 24 characters.`                             |
+| Error: duplicate login               | `The login "<login>" is already taken.`                                   |
+| Error: empty password                | `Choose a password.`                                                      |
+| Error: password length               | `Keep the password between 8 and 128 characters.`                         |
+| Error: mismatch                      | `The passwords don't match.`                                              |
+| Live region on success               | `Registered <login>. You're now on <login>.`                              |
 
-**Migration error panel**
+**Log in**
 
-| Element   | Copy                                                                                                                                  |
-| --------- | ------------------------------------------------------------------------------------------------------------------------------------- |
-| Heading   | `Couldn't set up your profile`                                                                                                        |
-| Body      | `Your <N cards> are still saved as before, but this device wouldn't let us move them into a profile. Storage may be full or blocked.` |
-| Primary   | `Try again`                                                                                                                           |
-| Secondary | `Export my collection`                                                                                                                |
+| Element                 | Copy                                                                                                                                                                                                                                                                    |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Heading                 | `Log in`                                                                                                                                                                                                                                                                |
+| Login label             | `Login`                                                                                                                                                                                                                                                                 |
+| Password label          | `Password`                                                                                                                                                                                                                                                              |
+| Buttons                 | `Log in` / while checking `Logging in…` · `Back`                                                                                                                                                                                                                        |
+| Countdown button        | `Try again in <S> s`                                                                                                                                                                                                                                                    |
+| Error: empty login      | `Enter your login.`                                                                                                                                                                                                                                                     |
+| Error: empty password   | `Enter your password.`                                                                                                                                                                                                                                                  |
+| Error: incorrect        | `Login or password is incorrect.`                                                                                                                                                                                                                                       |
+| login-breather (status) | `Five misses in a row. Take ten seconds, check the spelling of your login and whether caps lock is on, then try again.`                                                                                                                                                 |
+| Wait over (live)        | `You can try again now.`                                                                                                                                                                                                                                                |
+| Forgotten password line | `There is no way to recover a forgotten password.` (ADR 0006 §5's first sentence; its second sentence, "You can delete the account from this device.", is dropped because the account is no longer on the device and delete requires the password. See open question 1) |
+| Live region on success  | `Logged in. You're now on <login>.`                                                                                                                                                                                                                                     |
 
-**Switcher**
+**Account menu actions**
 
-| Element                | Copy                                 |
-| ---------------------- | ------------------------------------ |
-| Live region on switch  | `Switched to <name>.`                |
-| Live region, other tab | `Switched to <name> in another tab.` |
+| Element                | Copy          |
+| ---------------------- | ------------- |
+| Live region on log out | `Logged out.` |
 
-**Manage profiles dialog**
+**Manage account dialog**
 
-| Element                   | Copy                                                                                                                                                     |
-| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Heading                   | `Profiles`                                                                                                                                               |
-| Close button `aria-label` | `Close`                                                                                                                                                  |
-| Active pill               | `Active`                                                                                                                                                 |
-| Row meta                  | `<N cards> · Created <D Mon YYYY>` (e.g. `12 cards · Created 28 Oct 2026`, `Intl.DateTimeFormat` with `day: "numeric", month: "short", year: "numeric"`) |
-| Row actions               | `Rename` · `Export` · `Delete`                                                                                                                           |
-| Rename field label (sr)   | `New name for <name>`                                                                                                                                    |
-| Rename actions            | `Save` · `Cancel`                                                                                                                                        |
-| Footer                    | `New profile` · `Import from file`                                                                                                                       |
-| Counter                   | `<N> of 10 profiles`                                                                                                                                     |
-| Cap helper                | `This device already has 10 profiles. Delete one to make room.`                                                                                          |
-| Export failed             | `Couldn't create the file. Try again.`                                                                                                                   |
-| Live region on rename     | `Renamed to <name>.`                                                                                                                                     |
-| Live region on export     | `Exported <name>.`                                                                                                                                       |
+| Element                          | Copy                                                                                                              |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Heading                          | `Manage account`                                                                                                  |
+| Close button `aria-label`        | `Close`                                                                                                           |
+| Meta line                        | `<N cards> · Created <D Mon YYYY>` (`Intl.DateTimeFormat` with `day: "numeric", month: "short", year: "numeric"`) |
+| Section: Login                   | `Login`                                                                                                           |
+| Login field label (sr)           | `New login`                                                                                                       |
+| Login save                       | `Save` / while saving `Saving…`                                                                                   |
+| Live region on login change      | `Login changed to <login>.`                                                                                       |
+| Section: Password                | `Password`                                                                                                        |
+| Current password label           | `Current password`                                                                                                |
+| New password label               | `New password`                                                                                                    |
+| Confirm new label                | `Confirm new password`                                                                                            |
+| Change button                    | `Change password` / while submitting `Changing…`                                                                  |
+| Error: wrong-current             | `That password is incorrect.`                                                                                     |
+| Password changed (inline + live) | `Password changed.`                                                                                               |
+| Section: Delete                  | `Delete account`                                                                                                  |
+| Delete explanation               | `Deleting removes this account and every card in it. There is no undo.`                                           |
+| Delete trigger                   | `Delete account…`                                                                                                 |
 
 **Delete confirmation**
 
-| Element                  | Copy                                                                                                           |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------- |
-| Heading                  | `Delete <name>?`                                                                                               |
-| Body                     | `This permanently deletes <name> and its <N cards>. There is no undo. Export it first if you want to keep it.` |
-| Extra line, last profile | `This is your only profile. You'll be asked to create a new one.`                                              |
-| Buttons                  | `Export first` · `Delete <name>` · `Cancel`                                                                    |
-| Error                    | `Couldn't delete the profile. Nothing was changed.` (save-failed-generic)                                      |
-| Live region on delete    | `Deleted <name>.`                                                                                              |
+| Element               | Copy                                                                    |
+| --------------------- | ----------------------------------------------------------------------- |
+| Heading               | `Delete <login>?`                                                       |
+| Body                  | `This permanently deletes <login> and its <N cards>. There is no undo.` |
+| Password label        | `Password`                                                              |
+| Buttons               | `Delete <login>` / while deleting `Deleting…` · `Cancel`                |
+| Error: wrong password | `That password is incorrect.`                                           |
+| Live region on delete | `Deleted <login>.`                                                      |
 
-**Import**
+**Banners and in-form failures**
 
-| Element                   | Copy                                                                                                                               |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Preview heading           | `Import profile`                                                                                                                   |
-| Preview summary           | `<N cards>` then pills `Legendary <L>` `Rare <R>` `Common <C>`, then `Exported <D Mon YYYY>`                                       |
-| import-partial note       | `This file also contains data from a newer version that this version of Anime TCG can't use yet. Only the cards will be imported.` |
-| Buttons                   | `Import` / `Importing…` · `Cancel`                                                                                                 |
-| Error heading             | `Couldn't import that file`                                                                                                        |
-| Error: not a profile file | `That file isn't an Anime TCG profile export. Choose a .json file exported from Profiles.`                                         |
-| Error: newer version      | `This file was exported by a newer version of Anime TCG. Update the app and try again.`                                            |
-| Error: damaged cards      | `This file is damaged: <N> cards couldn't be read. Nothing was imported.`                                                          |
-| Error buttons             | `Choose another file` · `Back`                                                                                                     |
-| Live region on import     | `Imported <name> with <N cards>. You're now on <name>.`                                                                            |
-
-**Banners**
-
-| Element            | Copy                                                                                                                                                       |
-| ------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| storage-blocked    | `This browser is blocking storage, so nothing will be saved after you close this tab.`                                                                     |
-| save-failed-banner | `Couldn't save to this device. Storage is full or blocked. Your cards are safe in this tab until you close it.` with buttons `Export <name>` · `Try again` |
+| Element          | Copy                                                                                           |
+| ---------------- | ---------------------------------------------------------------------------------------------- |
+| unreachable      | `Couldn't reach the game server. Check your connection and try again.` with button `Try again` |
+| unreachable-form | `Couldn't reach the game server. Nothing was changed. Try again.`                              |
+| session-ended    | `You were logged out. Log in again to continue.`                                               |
 
 **Existing copy that changes**
 
-| Element                   | Old                                                     | New                                                   |
-| ------------------------- | ------------------------------------------------------- | ----------------------------------------------------- |
-| Inventory `Reset` confirm | `Delete your entire collection? This cannot be undone.` | `Delete every card in <name>? This cannot be undone.` |
+| Element                   | Old                                                     | New                                                    |
+| ------------------------- | ------------------------------------------------------- | ------------------------------------------------------ |
+| Inventory `Reset` confirm | `Delete your entire collection? This cannot be undone.` | `Delete every card in <login>? This cannot be undone.` |
 
 Everything else in the current UI (tabs, pack button, odds line, empty collection, footer) is unchanged.
 
 ## 9. Open questions
 
-1. **Invite code values.** What are the Phase 1 invite code(s)? They ship in `src/lib/invites.ts`. If unanswered, the engineer ships the single placeholder `ANIME-TCG-2026` and the e2e tests import whatever the list contains.
-2. **Name of the migrated profile.** The spec uses `Player 1`. Fine, or would you rather it took your name (`Chris`)? Either is a one-word change.
-3. **Profile cap of 10 per device.** Chosen to keep the switcher readable and stay inside the `localStorage` quota. Raise, lower, or leave?
+1. **Forgotten password: can you, as the owner, reset one?** With the server in your hands this is now possible (a command on the NAS that sets a new password for a login). If yes, the forgotten-password line becomes `There is no way to recover a forgotten password yourself. Ask the owner to set a new one.` and the API needs an owner-only reset path (specced with the backend, not here). If no, the line stays `There is no way to recover a forgotten password.` and a forgotten password means a dead account until you delete it in the database. The spec ships the shorter line until you choose.
+2. **Collection download.** Export and import of collection files are dropped (import can't be trusted; export went with it). Do you want a read-only `Download my collection` back as a server endpoint in a later item (a one-line menu entry and a copy row here), or is the NAS backup (ADR 0007 §6) enough?
