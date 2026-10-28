@@ -5,7 +5,7 @@ Standing rules from the owner (2026-10-28), binding on every agent and every PR.
 ## 1. Modern code, no exceptions
 
 - TypeScript strict everywhere, including `api/` and `shared/`; `noUncheckedIndexedAccess` on; no `any`, no `@ts-ignore`, no non-null assertions outside tests.
-- Current major versions of the stack (React 19, Vite 8, Node 22 LTS, Fastify 5, Postgres 16). Dependabot keeps them current; a pinned-back version needs a reason in the lockfile PR.
+- Current major versions of the stack (React 19, Vite 8, Node 26 LTS, Fastify 5, Postgres 16). Dependabot keeps them current; a pinned-back version needs a reason in the lockfile PR.
 - ES modules only; `async`/`await` over promise chains; `fetch` over axios; native `crypto`, `URL`, `structuredClone`, `Intl` over polyfills and utility packages.
 - React: function components and hooks only; server-derived state via a query layer (TanStack Query when the API lands), not hand-rolled effect fetching; forms with native validation attributes plus one validation schema shared with the API; no class components, no HOCs, no prop drilling past two levels (use context or composition).
 - API: one schema per route is the contract; handlers are thin and call a domain function that is unit-testable without HTTP; migrations are SQL files; no business logic in the database.
