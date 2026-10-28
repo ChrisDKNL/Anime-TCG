@@ -11,5 +11,5 @@ docs
 .claude
 scripts
 **/*.md
-.env*
-*.local
+**/.env*
+**/*.local

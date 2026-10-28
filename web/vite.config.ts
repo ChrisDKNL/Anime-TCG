@@ -6,4 +6,6 @@ import { sharedSourceAlias } from "./shared-alias.ts";
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: { alias: [sharedSourceAlias] },
+  // One origin in development too: the browser talks to Vite, Vite forwards /api to `npm run dev -w api`.
+  server: { proxy: { "/api": "http://localhost:3000" } },
 });

@@ -31,6 +31,34 @@ export default tseslint.config(
     languageOptions: { globals: { ...globals.browser, ...globals.node } },
   },
   {
+    // The api is server-side only: structured logs, server RNG, env read in one place (ADR 0008 §5).
+    files: ["api/**/*.ts"],
+    rules: {
+      // Fastify plugins and hooks are promise-returning by contract; an `async` body with no `await` is their idiomatic form.
+      "@typescript-eslint/require-await": "off",
+      "no-console": "error",
+      "no-restricted-properties": [
+        "error",
+        {
+          object: "Math",
+          property: "random",
+          message: "Use node:crypto (randomInt, randomBytes) in the api.",
+        },
+      ],
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "MemberExpression[object.name='process'][property.name='env']",
+          message: "Only api/src/server.ts and api/test/support.ts read process.env; take a Config instead.",
+        },
+      ],
+    },
+  },
+  {
+    files: ["api/src/server.ts", "api/test/support.ts"],
+    rules: { "no-restricted-syntax": "off" },
+  },
+  {
     // Test files: allow non-null assertions and unbound methods common in test code.
     files: ["**/*.test.{ts,tsx}", "web/e2e/**/*.ts", "web/src/test/**/*.{ts,tsx}"],
     rules: {
