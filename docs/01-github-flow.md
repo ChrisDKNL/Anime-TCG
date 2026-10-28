@@ -54,6 +54,8 @@ The git hooks are a convenience for fast feedback; the ruleset is the real gate.
 
 ## One-time setup (needs repo admin: you)
 
+> **Status: done on 2026-10-28** via the GitHub API with a fine-grained token scoped to this repo (Administration, Contents, Pull requests, Workflows). `main` is the default branch, the ruleset is active (id 26049188), Dependabot alerts + security updates and CodeQL default setup are on, and head branches auto-delete after merge. The steps below are kept for reference and for re-creating the setup.
+
 The feature branch was the first push, so GitHub made it the default branch. These steps create `main` and protect it. They are not automated because they require admin rights and because the manager never pushes to `main`.
 
 ### 1. Create `main` from the current branch and make it default

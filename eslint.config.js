@@ -7,20 +7,13 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist", "coverage", "playwright-report", "test-results", "node_modules"] },
+  { ignores: ["**/dist", "**/coverage", "**/playwright-report", "**/test-results", "**/node_modules"] },
   {
+    // Every workspace: type-aware rules against the nearest tsconfig.json.
     files: ["**/*.{ts,tsx}"],
-    extends: [
-      js.configs.recommended,
-      ...tseslint.configs.recommendedTypeChecked,
-      reactHooks.configs.flat.recommended,
-      reactRefresh.configs.vite,
-      jsxA11y.flatConfigs.recommended,
-      prettier,
-    ],
+    extends: [js.configs.recommended, ...tseslint.configs.recommendedTypeChecked],
     languageOptions: {
       ecmaVersion: 2022,
-      globals: { ...globals.browser, ...globals.node },
       parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
     },
     rules: {
@@ -29,11 +22,49 @@ export default tseslint.config(
     },
   },
   {
+    files: ["web/**/*.{ts,tsx}"],
+    extends: [
+      reactHooks.configs.flat.recommended,
+      reactRefresh.configs.vite,
+      jsxA11y.flatConfigs.recommended,
+    ],
+    languageOptions: { globals: { ...globals.browser, ...globals.node } },
+  },
+  {
+    // The api is server-side only: structured logs, server RNG, env read in one place (ADR 0008 §5).
+    files: ["api/**/*.ts"],
+    rules: {
+      // Fastify plugins and hooks are promise-returning by contract; an `async` body with no `await` is their idiomatic form.
+      "@typescript-eslint/require-await": "off",
+      "no-console": "error",
+      "no-restricted-properties": [
+        "error",
+        {
+          object: "Math",
+          property: "random",
+          message: "Use node:crypto (randomInt, randomBytes) in the api.",
+        },
+      ],
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "MemberExpression[object.name='process'][property.name='env']",
+          message: "Only api/src/server.ts and api/test/support.ts read process.env; take a Config instead.",
+        },
+      ],
+    },
+  },
+  {
+    files: ["api/src/server.ts", "api/test/support.ts"],
+    rules: { "no-restricted-syntax": "off" },
+  },
+  {
     // Test files: allow non-null assertions and unbound methods common in test code.
-    files: ["**/*.test.{ts,tsx}", "e2e/**/*.ts", "src/test/**/*.{ts,tsx}"],
+    files: ["**/*.test.{ts,tsx}", "web/e2e/**/*.ts", "web/src/test/**/*.{ts,tsx}"],
     rules: {
       "@typescript-eslint/no-non-null-assertion": "off",
       "@typescript-eslint/unbound-method": "off",
     },
   },
+  prettier,
 );
