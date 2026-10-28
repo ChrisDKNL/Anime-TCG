@@ -4,6 +4,23 @@
 {
 	admin off
 	auto_https off
+	servers {
+		# Only the owner's host proxy or tunnel can connect (the publish is
+		# loopback-only), and both live in private ranges, so their
+		# X-Forwarded-For is believed and the real client address reaches the
+		# api; without this Caddy would replace the header with the Docker
+		# gateway address and the api's rate limiter would see one client.
+		# Behind Cloudflare Tunnel use `client_ip_headers CF-Connecting-IP`
+		# here instead of trusting X-Forwarded-For (docs/04-deployment.md).
+		trusted_proxies static private_ranges
+		# A client that opens a connection and stalls is cut off here, before
+		# it can hold a socket to the api.
+		timeouts {
+			read_header 10s
+			read_body 30s
+			idle 2m
+		}
+	}
 }
 
 :8080 {

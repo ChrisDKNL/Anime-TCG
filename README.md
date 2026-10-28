@@ -46,7 +46,7 @@ shared/                        @anime-tcg/shared: TypeScript only
   src/api.ts                   SessionResponse, HealthResponse (TypeBox schema + Static type)
   src/errors.ts                ERROR_CODES, ErrorEnvelope
   src/rarity.ts                RARITIES, RARITY_LABEL, BASE_WEIGHTS, POPULARITY_INFLUENCE
-api/                           @anime-tcg/api: Fastify 5 on Node 22
+api/                           @anime-tcg/api: Fastify 5 on Node 26
   src/server.ts                The only file that reads process.env and listens
   src/start.ts                 migrate, build, listen, drain on shutdown
   src/app.ts                   buildApp(): plugins and routes, no listen (tests inject())
@@ -56,7 +56,7 @@ api/                           @anime-tcg/api: Fastify 5 on Node 22
   src/db/                      Drizzle schema, pg client, migrator, committed SQL migrations
   src/routes/                  health (/healthz), session (/api/session)
   test/                        Route and security tests against a real Postgres
-  Dockerfile                   node:22-alpine multi-stage, non-root, read-only friendly
+  Dockerfile                   node:26-alpine multi-stage, non-root, read-only friendly
 web/                           @anime-tcg/web: the Vite app (unchanged proof of concept)
   index.html                   Vite entry, <html class="dark">
   vite.config.ts               React + Tailwind v4 plugins, /api dev proxy, shared source alias

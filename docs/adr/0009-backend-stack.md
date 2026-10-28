@@ -27,4 +27,5 @@ Rejected: SQLite (simpler, but no concurrent writers and no first-class dump/res
 - `package.json` becomes a workspace root; CI runs lint/typecheck/test per workspace; the Husky pre-push gate runs all of them.
 - The Dockerfiles live in the repo: multi-stage builds for `api` and `web`; `compose.yml` with `caddy`, `api`, `db`, and profiles for acceptance and production.
 - New agent knowledge is needed: `senior-engineer` and `tester` instructions gain an API section; `security-officer` gains the ADR 0008 §5 checklist. A `fastify-api-conventions` skill is written before the first API PR.
+- Node version: the current LTS line, 26 as of 2026-10-28, the same for the api image, the web build image and CI (`node-version`); Dependabot's docker and actions updates keep the three together.
 - First measurable cost: Sprint 1 grows from "a few days" to "one to two weeks" before the game is playable again end to end. The owner accepted this trade in exchange for state that cannot be manipulated from the browser.

@@ -4,21 +4,16 @@ import type { LogLevel } from "../config.js";
 /**
  * Keys whose values never belong in a log line, wherever pino finds them in
  * the first three levels of a logged object. Cookies and Authorization carry
- * credentials; the named keys are what a future account payload would use.
+ * credentials; `password`/`secret`/`token` are what a future account payload
+ * would use; the two config names cover a logged config or env object.
  */
+const SENSITIVE_KEYS = ["password", "secret", "token", "SESSION_SECRET", "DATABASE_URL"];
+
 export const REDACT_PATHS = [
   "req.headers.cookie",
   "req.headers.authorization",
   "res.headers.set-cookie",
-  "password",
-  "secret",
-  "token",
-  "*.password",
-  "*.secret",
-  "*.token",
-  "*.*.password",
-  "*.*.secret",
-  "*.*.token",
+  ...SENSITIVE_KEYS.flatMap((key) => [key, `*.${key}`, `*.*.${key}`]),
 ];
 
 /** JSON lines with the pid but not the hostname: a container id tells an attacker more than it tells us. */

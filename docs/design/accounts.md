@@ -387,3 +387,10 @@ None. Resolved 2026-10-28 by the owner:
 
 1. Forgotten password: the owner can reset one with an owner-only server command. Copy updated in §8; the API path is specced with the backend foundation.
 2. Collection download: a read-only `Download my collection` server endpoint is a later roadmap item, not part of this feature.
+
+## 10. Server-side requirements carried from the 1a security review
+
+Recorded 2026-10-28 from the `security-officer` review of the backend foundation (PR #13); both are conditions for 1b, not options.
+
+- Before 1b: least-privilege DB role for the api (migrations as owner, requests as `anime_app` with DML only).
+- Before 1b: sign-in must destroy any pre-auth session before creating the authenticated one; add an absolute session lifetime (90 d) alongside the sliding 30 d.
