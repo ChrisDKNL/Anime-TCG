@@ -1,0 +1,53 @@
+# One image, two ways to run it on the NAS. Nothing starts without a profile;
+# that is deliberate so a bare `docker compose up` cannot pick one for you.
+#
+#   docker compose --profile acceptance up -d --build   # build and run the throwaway check
+#   docker compose --profile production up -d           # run the tag you already accepted
+#
+# Variables (all optional): TAG, ACCEPTANCE_PORT, PRODUCTION_PORT. Set them in
+# the shell or in `.env.local` (gitignored via `*.local`) passed with
+# `--env-file .env.local`. The env file is read by compose only, to substitute
+# these variables; it never enters the image (.dockerignore excludes `.env*`
+# and `*.local` from the build context). There is no `.env` in the repo on
+# purpose.
+
+x-web: &web
+  image: anime-tcg-web:${TAG:-local}
+  build: .
+  # The container only serves files. Caddy's own state dirs get a throwaway
+  # tmpfs so the root filesystem can stay read-only. The mounts rely on
+  # Docker's default 1777 mode so the non-root `web` user can write to them.
+  read_only: true
+  tmpfs:
+    - /data:noexec,nosuid,size=16m
+    - /config:noexec,nosuid,size=16m
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  mem_limit: 128m
+  pids_limit: 64
+
+services:
+  web-acceptance:
+    <<: *web
+    profiles: [acceptance]
+    container_name: anime-tcg-acceptance
+    # Loopback only: acceptance exists for the owner's own checks on the host
+    # and must be unreachable from the LAN and the internet.
+    ports:
+      - "127.0.0.1:${ACCEPTANCE_PORT:-8080}:8080"
+
+  web-production:
+    <<: *web
+    profiles: [production]
+    container_name: anime-tcg-production
+    restart: unless-stopped
+    # Loopback only, with no variable to widen it: production is reached
+    # through a reverse proxy or Cloudflare Tunnel on the same host. Docker's
+    # published ports bypass ufw/firewalld unless the DOCKER-USER chain is
+    # configured, so "the host firewall will cover it" is not a safe default.
+    # A containerised proxy should join this project's network and address
+    # the service by name instead (docs/04-deployment.md).
+    ports:
+      - "127.0.0.1:${PRODUCTION_PORT:-8081}:8080"

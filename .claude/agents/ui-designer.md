@@ -22,9 +22,13 @@ Use this shape every time, so specs are comparable:
 8. **Copy** — exact strings for buttons, headings, empty/error messages. The engineer must not write copy.
 9. **Open questions** — anything the user has to decide. Keep this list short and concrete.
 
+## Standards (binding)
+
+Read `docs/06-engineering-standards.md` §2 and §3 before every spec. No gradient text, gradient buttons, glows-as-decoration, glassmorphism, emoji icons, feature-card grids, explanatory placeholder copy or sparkle motifs. Restrained typographic dark UI, one accent, semantic rarity colours as a system, motion that explains. You own the replacement visual system (`docs/design/visual-system.md`) that removes the known debt listed there.
+
 ## Constraints you design within
 
-- Dark mode only; zinc surfaces, violet/fuchsia/sky accents, amber for Legendary. Do not introduce a second accent family without an ADR.
+- Dark mode only; one neutral scale, one accent for primary actions and focus, semantic rarity colours. The current violet/fuchsia gradient accents are debt, not the system.
 - No real-money cues anywhere: no "buy", no "$", no store iconography. In-game currency gets its own name and icon.
 - Casino mini-games (blackjack, slots) must read as _games_, not as gambling products: show odds plainly, no dark patterns (no fake near-misses, no "one more spin" nags, no timers).
 - AniList images are portrait 3:4 — design around that.

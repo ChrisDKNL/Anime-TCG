@@ -1,0 +1,49 @@
+# Serves the Vite build from /srv on an unprivileged port. TLS terminates at
+# the owner's reverse proxy or Cloudflare Tunnel, so this server speaks plain
+# HTTP, sets no HSTS (the proxy owns that header) and never binds 80/443.
+{
+	admin off
+	auto_https off
+}
+
+:8080 {
+	root * /srv
+	encode zstd gzip
+
+	header {
+		# style-src is strict on purpose. React applies the `style` prop through
+		# the CSSOM (element.style.setProperty), which CSP does not govern, and
+		# the production build links its CSS via <link> with no inline <style>.
+		# The dev server, which does inject <style>, never runs behind this
+		# Caddyfile. Revisit this if SSR or a `?inline` CSS import is ever
+		# introduced: both would need inline style allowances (a nonce or hash).
+		# img-src and connect-src list the only remote hosts the app talks to
+		# (src/lib/anilist.ts).
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https://s4.anilist.co; connect-src 'self' https://graphql.anilist.co; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=()"
+		# A version banner only helps someone probing the server.
+		-Server
+	}
+
+	# Liveness probe for the image HEALTHCHECK and the CI smoke test.
+	handle /healthz {
+		respond "ok" 200
+	}
+
+	# Vite content-hashes everything under /assets, so a file at a given name
+	# never changes and can be cached forever; a new build gets new names.
+	handle /assets/* {
+		header Cache-Control "public, max-age=31536000, immutable"
+		file_server
+	}
+
+	# Everything else is the SPA: unknown paths fall back to index.html, which
+	# must be revalidated on every load so a new deploy is seen immediately.
+	handle {
+		header Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server
+	}
+}
