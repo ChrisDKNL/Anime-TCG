@@ -12,7 +12,7 @@ import type { Db } from "../../db/client.js";
 import { accounts } from "../../db/schema.js";
 import { ApiError } from "../errors.js";
 import { hashInviteCode, type InviteList, isCapReached } from "./invites.js";
-import { normalizeLogin, validatedLogin } from "./logins.js";
+import { normalizeLogin, storableLogin, validatedLogin } from "./logins.js";
 import { DUMMY_HASH, hashPassword, needsRehash, verifyPassword } from "./password.js";
 import type { ThrottleStore } from "./throttle-store.js";
 
@@ -99,7 +99,7 @@ export class AccountService {
   }
 
   async login(log: AuditLog, body: LoginBody, now: Date): Promise<Account> {
-    const key = normalizeLogin(body.login);
+    const key = normalizeLogin(storableLogin(body.login));
     await this.assertNotBlocked(log, key, now, "login");
     const [row] = await this.db
       .select(credentialColumns)
