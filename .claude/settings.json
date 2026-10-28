@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(git rebase *)",
+      "Bash(git rebase --continue)",
+      "Bash(git rebase --abort)",
+      "Bash(git commit --amend *)",
+      "Bash(git commit --amend)",
+      "Bash(git push --force-with-lease origin feat/*)",
+      "Bash(git push --force-with-lease origin fix/*)",
+      "Bash(git push --force-with-lease origin docs/*)",
+      "Bash(git push --force-with-lease origin chore/*)",
+      "Bash(git push --force-with-lease origin claude/*)"
+    ],
+    "deny": [
+      "Bash(git push --force *)",
+      "Bash(git push -f *)",
+      "Bash(git push --force-with-lease origin main)",
+      "Bash(git push --force-with-lease origin main *)",
+      "Bash(git push * main)"
+    ]
+  }
+}
