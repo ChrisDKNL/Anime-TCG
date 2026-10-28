@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { App } from "../src/app.js";
+import { createDb } from "../src/db/client.js";
 import { accounts, authThrottle, sessions } from "../src/db/schema.js";
 import { hashInviteCode } from "../src/domain/accounts/invites.js";
 import { THROTTLE_MAX_FAILURES } from "../src/domain/accounts/throttle.js";
@@ -732,6 +733,35 @@ describe("account routes", () => {
       } finally {
         setIntervalSpy.mockRestore();
         await timed.close();
+      }
+    });
+
+    it("survives a failed sweep: logs the error and keeps serving", async () => {
+      const setIntervalSpy = vi.spyOn(globalThis, "setInterval");
+      const chunks: string[] = [];
+      const sink = new Writable({
+        write(chunk: Buffer, _encoding, done) {
+          chunks.push(chunk.toString());
+          done();
+        },
+      });
+      const dead = await createTestApp({
+        db: createDb("postgres://anime:anime@127.0.0.1:1/anime"),
+        logger: createLogger("info", sink),
+      });
+      try {
+        await dead.ready();
+        const hourly = setIntervalSpy.mock.calls.filter(([, ms]) => ms === PURGE_INTERVAL_MS);
+        const [tick] = hourly[1] as [() => void, number];
+        tick();
+        await vi.waitFor(() => {
+          const lines = chunks.map((line) => JSON.parse(line) as Record<string, unknown>);
+          expect(lines).toContainEqual(expect.objectContaining({ level: 50, msg: "throttle purge failed" }));
+        });
+        expect((await dead.inject({ method: "GET", url: "/api/session" })).statusCode).toBe(200);
+      } finally {
+        setIntervalSpy.mockRestore();
+        await dead.close();
       }
     });
   });
