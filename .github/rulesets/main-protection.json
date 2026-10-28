@@ -32,7 +32,8 @@
           { "context": "quality" },
           { "context": "e2e" },
           { "context": "security" },
-          { "context": "docker" }
+          { "context": "docker" },
+          { "context": "api-tests" }
         ]
       }
     }
