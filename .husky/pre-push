@@ -1,0 +1,4 @@
+# Nothing leaves this machine unless the full local gate passes.
+# Same checks CI runs (minus e2e, which needs a browser). Bypassing with
+# --no-verify only moves the failure to CI, where branch protection blocks it.
+npm run check

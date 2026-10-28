@@ -105,11 +105,7 @@ export default function App() {
 
         {tab === "pack" ? (
           <main className="flex flex-col items-center gap-8">
-            <BoosterPack
-              disabled={pool.status !== "ready"}
-              opening={opening}
-              onOpen={handleOpen}
-            />
+            <BoosterPack disabled={pool.status !== "ready"} opening={opening} onOpen={handleOpen} />
 
             {pool.status === "loading" && (
               <p className="text-sm text-zinc-500" aria-live="polite">
@@ -129,7 +125,9 @@ export default function App() {
                     <span className="font-bold text-sky-300">{packSummary.rare} Rare</span>
                   )}
                   {(packSummary.legendary > 0 || packSummary.rare > 0) && packSummary.common > 0 && " and "}
-                  {packSummary.common > 0 && <span className="font-bold text-zinc-200">{packSummary.common} Common</span>}
+                  {packSummary.common > 0 && (
+                    <span className="font-bold text-zinc-200">{packSummary.common} Common</span>
+                  )}
                 </h2>
                 <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
                   {lastPack.map((card, i) => (

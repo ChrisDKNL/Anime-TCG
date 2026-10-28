@@ -51,14 +51,26 @@ One query, paginated:
 ```graphql
 query CharacterPool($page: Int!, $perPage: Int!) {
   Page(page: $page, perPage: $perPage) {
-    pageInfo { hasNextPage }
+    pageInfo {
+      hasNextPage
+    }
     characters(sort: FAVOURITES_DESC) {
       id
       favourites
-      name { full }
-      image { large }
+      name {
+        full
+      }
+      image {
+        large
+      }
       media(perPage: 1, sort: POPULARITY_DESC, type: ANIME) {
-        nodes { title { english native romaji } }
+        nodes {
+          title {
+            english
+            native
+            romaji
+          }
+        }
       }
     }
   }
@@ -71,7 +83,7 @@ query CharacterPool($page: Int!, $perPage: Int!) {
 
 ### 2. Pack opening (`src/lib/pack.ts`, `src/App.tsx`)
 
-`openPack(pool)` does a partial Fisher–Yates shuffle to pick 5 *distinct* characters, then calls `assignRarity` on each and stamps a `uid` and `pulledAt`. The button handler in `App.tsx`:
+`openPack(pool)` does a partial Fisher–Yates shuffle to pick 5 _distinct_ characters, then calls `assignRarity` on each and stamps a `uid` and `pulledAt`. The button handler in `App.tsx`:
 
 1. snapshots which character ids were already owned (for "NEW" badges),
 2. clears `lastPack` so the reveal animation re-triggers,
@@ -105,10 +117,10 @@ trivially unit-testable with a seeded value.
 The inventory is a **flat, append-only `Card[]`**:
 
 ```ts
-const [cards, setCards] = useState<Card[]>(loadInventory);   // hydrated from localStorage
+const [cards, setCards] = useState<Card[]>(loadInventory); // hydrated from localStorage
 
 const addCards = useCallback((newCards: Card[]) => {
-  setCards((prev) => [...prev, ...newCards]);               // functional update
+  setCards((prev) => [...prev, ...newCards]); // functional update
 }, []);
 ```
 

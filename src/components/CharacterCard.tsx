@@ -42,23 +42,26 @@ export function CharacterCard({ card, index = 0, isNew = false, copies }: Props)
           className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-105"
         />
         <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/3 bg-gradient-to-t from-zinc-900 to-transparent" />
-        <div className="absolute left-2 top-2 flex gap-1">
+        <div className="absolute top-2 left-2 flex gap-1">
           <RarityBadge rarity={card.rarity} />
           {isNew && (
-            <span className="rounded-full bg-zinc-950/85 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-300 shadow-md shadow-black/40 ring-1 ring-emerald-400/70 backdrop-blur-sm">
+            <span className="rounded-full bg-zinc-950/85 px-2 py-0.5 text-[10px] font-bold tracking-wider text-emerald-300 uppercase shadow-md ring-1 shadow-black/40 ring-emerald-400/70 backdrop-blur-sm">
               New
             </span>
           )}
         </div>
         {copies !== undefined && copies > 1 && (
-          <span className="absolute right-2 top-2 rounded-md bg-zinc-950/85 px-1.5 py-0.5 text-[11px] font-semibold text-zinc-300 shadow-md shadow-black/40 backdrop-blur-sm">
+          <span className="absolute top-2 right-2 rounded-md bg-zinc-950/85 px-1.5 py-0.5 text-[11px] font-semibold text-zinc-300 shadow-md shadow-black/40 backdrop-blur-sm">
             ×{copies}
           </span>
         )}
       </div>
 
       <div className="flex flex-1 flex-col gap-0.5 p-3">
-        <h3 className={`truncate text-sm font-bold leading-tight ${NAME_CLASS[card.rarity]}`} title={card.name}>
+        <h3
+          className={`truncate text-sm leading-tight font-bold ${NAME_CLASS[card.rarity]}`}
+          title={card.name}
+        >
           {card.name}
         </h3>
         <p className="truncate text-xs text-zinc-400" title={card.animeTitle}>

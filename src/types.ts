@@ -2,6 +2,13 @@
 export const RARITIES = ["common", "rare", "legendary"] as const;
 export type Rarity = (typeof RARITIES)[number];
 
+/** Display labels, kept here so components export only components (React Refresh). */
+export const RARITY_LABEL: Record<Rarity, string> = {
+  common: "Common",
+  rare: "Rare",
+  legendary: "Legendary",
+};
+
 /** A character as returned (and lightly normalised) from AniList. */
 export interface Character {
   id: number;

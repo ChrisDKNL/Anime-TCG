@@ -1,8 +1,7 @@
 import { useMemo, useState } from "react";
 import type { Card, Rarity } from "../types";
-import { RARITIES } from "../types";
+import { RARITIES, RARITY_LABEL } from "../types";
 import { CharacterCard } from "./CharacterCard";
-import { RARITY_LABEL } from "./RarityBadge";
 
 interface Props {
   cards: Card[];
