@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { Type } from "@sinclair/typebox";
 import type { App } from "../../src/app.js";
 import { createTestApp, testConfig } from "../support.js";
 
@@ -90,5 +91,74 @@ describe("rate limit keying, adversarial", () => {
       403,
     );
     expect((await get(unknown)).statusCode).toBe(429);
+  });
+});
+
+/**
+ * A route's own `config.rateLimit` replaces the global bucket for that route;
+ * it does not stack on it (upstream semantics: one limiter counts per
+ * request). The override still runs first, before CSRF and the session
+ * lookup. Regression: before this fix the instance-wide hook always used the
+ * global bucket and the plugin's route-level hook returned early, so an
+ * override was silently ignored.
+ */
+describe("per-route rate limit overrides", () => {
+  const GLOBAL_MAX = 3;
+  const Ok = Type.Object({ ok: Type.Boolean() }, { additionalProperties: false });
+  let app: App;
+  beforeAll(async () => {
+    app = await createTestApp({ config: testConfig({ RATE_LIMIT_MAX: String(GLOBAL_MAX) }) });
+    app.get(
+      "/test/limited",
+      { schema: { response: { 200: Ok } }, config: { rateLimit: { max: 1, timeWindow: 60_000 } } },
+      () => ({ ok: true }),
+    );
+  });
+  afterAll(() => app.close());
+
+  const get = (url: string, remoteAddress: string) => app.inject({ method: "GET", url, remoteAddress });
+
+  it("limits a route carrying config.rateLimit by that override, with the shared envelope", async () => {
+    const client = "203.0.113.110";
+    const first = await get("/test/limited", client);
+    expect(first.statusCode).toBe(200);
+    expect(first.headers["x-ratelimit-limit"]).toBe("1");
+    const second = await get("/test/limited", client);
+    expect(second.statusCode).toBe(429);
+    expect(second.headers["x-ratelimit-limit"]).toBe("1");
+    expect(second.json()).toEqual({
+      error: { code: "rate_limited", message: "Too many requests; slow down" },
+    });
+  });
+
+  it("keeps the override bucket and the global bucket independent (replace, not stack)", async () => {
+    // Hits on the override route do not spend the global quota...
+    const client = "203.0.113.111";
+    expect((await get("/test/limited", client)).statusCode).toBe(200);
+    expect((await get("/test/limited", client)).statusCode).toBe(429);
+    const sibling = await get("/api/session", client);
+    expect(sibling.statusCode).toBe(200);
+    expect(sibling.headers["x-ratelimit-remaining"]).toBe(String(GLOBAL_MAX - 1));
+
+    // ...and an exhausted global quota does not close the override route.
+    const other = "203.0.113.112";
+    for (let i = 0; i < GLOBAL_MAX; i += 1) expect((await get("/api/session", other)).statusCode).toBe(200);
+    expect((await get("/api/session", other)).statusCode).toBe(429);
+    expect((await get("/test/limited", other)).statusCode).toBe(200);
+  });
+
+  it("leaves a sibling route without an override on the global limit", async () => {
+    const res = await get("/api/session", "203.0.113.113");
+    expect(res.statusCode).toBe(200);
+    expect(res.headers["x-ratelimit-limit"]).toBe(String(GLOBAL_MAX));
+  });
+
+  it("still exempts a route with config.rateLimit: false", async () => {
+    const client = "203.0.113.114";
+    for (let i = 0; i < GLOBAL_MAX + 1; i += 1) {
+      const res = await get("/healthz", client);
+      expect(res.statusCode).toBe(200);
+      expect(res.headers["x-ratelimit-limit"]).toBeUndefined();
+    }
   });
 });
