@@ -56,4 +56,4 @@ Recorded in ADR 0003 (accounts) and ADR 0004 (economy). In one line each:
 - Packs are free, one every 10 minutes (base), never bought with currency; winnable as game prizes.
 - Cards can be sold (to the system), recycled (crafting sink) and traded (local profiles only for now).
 
-Proposed build order, pending the owner's answer to the open questions in the ADRs: 1 → 2 → 3 + 4 → 5 → 6 → 7, with 8 when a second real player exists.
+Owner's answers (same day): starting parameters accepted provisionally (sell 10/50/300, 3 stored packs, 5-to-1 recycle, 3–5 % house edge), to be rebalanced once all mechanics exist; trade deferred until real accounts (item 8); build order **approved**: 1 → 2 → 3 + 4 → 5 → 6, then 7 after 8.

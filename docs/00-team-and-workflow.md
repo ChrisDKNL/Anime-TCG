@@ -53,6 +53,15 @@ Docs-only or config-only changes still go through a branch, CI, and your merge. 
 
 ## Working agreements
 
+### Two Claude sessions, one repo
+
+The owner runs a local Claude Code session on their dev machine and a cloud session (the manager). Both push. To avoid two agents editing the same branch:
+
+- Each session works on its own branch and opens its own PRs. The cloud manager uses `claude/anime-card-game-dapaop`; the local session uses `feat/`, `fix/`, `docs/` branches.
+- A PR is owned by the session that opened it: rebases, branch updates and review replies on it come from that session only.
+- Dependabot PRs are handled by whichever session the owner asks; by default the local one.
+- Decisions still land in `docs/` and ADRs, not in either session's chat.
+
 - Branch names: `feat/<slug>`, `fix/<slug>`, `docs/<slug>`, `chore/<slug>`.
 - Commits: imperative subject, body says _why_. Small commits over big ones.
 - No `--no-verify`. If the hook is wrong, fix the hook in its own PR.
