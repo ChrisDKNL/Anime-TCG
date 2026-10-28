@@ -41,7 +41,7 @@ describe("log redaction", () => {
     expect((lines()[0]?.res as { headers: Record<string, string> }).headers["set-cookie"]).toBe("[redacted]");
   });
 
-  it.each(["password", "secret", "token"])(
+  it.each(["password", "currentPassword", "newPassword", "inviteCode", "passwordHash", "secret", "token"])(
     "masks a field named %s at the top level and two levels down",
     (key) => {
       const { logger, lines } = capture();

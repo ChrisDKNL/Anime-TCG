@@ -4,11 +4,17 @@ import type { LogLevel } from "../config.js";
 /**
  * Keys whose values never belong in a log line, wherever pino finds them in
  * the first three levels of a logged object. Cookies and Authorization carry
- * credentials; `password`/`secret`/`token` are what a future account payload
- * would use; the config names cover a logged config or env object.
+ * credentials; the next five are the fields of the account request bodies
+ * (shared/src/api.ts) and the column a logged account row would carry;
+ * `secret`/`token` and the config names cover a logged config or env object.
+ * Redaction is by exact key, so every new credential field is added here.
  */
 const SENSITIVE_KEYS = [
   "password",
+  "currentPassword",
+  "newPassword",
+  "inviteCode",
+  "passwordHash",
   "secret",
   "token",
   "SESSION_SECRET",
