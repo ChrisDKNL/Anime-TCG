@@ -30,19 +30,21 @@ Every container runs with a read-only root filesystem, all capabilities dropped,
 
 Compose reads them from the shell or from a file passed with `--env-file`. Use a gitignored name such as `.env.acceptance.local` or `.env.production.local` (`.env`, `.env.*` and `*.local` are ignored; `.env.example` is the only exception and lists every variable with a placeholder). The file is read by compose only; `.dockerignore` excludes `**/.env*` and `**/*.local` from every build context, so it never enters an image.
 
-| Variable            | Required     | Meaning                                                                                                                                                                                                                                                     |
-| ------------------- | ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POSTGRES_PASSWORD` | yes          | Password of the `anime` database role (the owner; runs the migrations), used only inside the compose network. `openssl rand -hex 24`: hex, because the value is embedded in the connection URL and base64 characters would break it.                        |
-| `APP_DB_PASSWORD`   | yes          | Password of the `anime_app` role the api serves requests as: `SELECT`/`INSERT`/`UPDATE`/`DELETE` on the tables and nothing else. Created by `db/init/01-app-role.sh` on the first start of an empty volume (see _Existing volumes_). `openssl rand -hex 24` |
-| `SESSION_SECRET`    | yes          | Key for the HMAC that protects session ids at rest. At least 32 bytes; the api refuses to start with fewer, or with the placeholder. `openssl rand -base64 48`                                                                                              |
-| `WEB_ORIGIN`        | yes          | The origin browsers use for the site, exactly as they send it in the `Origin` header (`http://127.0.0.1:8080` for acceptance, the proxy's or tunnel's `https://...` for production). State-changing requests from any other origin get 403.                 |
-| `TAG`               | no (`local`) | Image tag for `anime-tcg-web` and `anime-tcg-api`; bake a date into production builds so you can roll back to it.                                                                                                                                           |
-| `ACCEPTANCE_PORT`   | no (`8080`)  | Loopback port of the acceptance stack.                                                                                                                                                                                                                      |
-| `PRODUCTION_PORT`   | no (`8081`)  | Loopback port of the production stack.                                                                                                                                                                                                                      |
-| `LOG_LEVEL`         | no (`info`)  | Api log level (`fatal` … `trace`, `silent`).                                                                                                                                                                                                                |
-| `DEV_DB_PORT`       | no (`5432`)  | Loopback port of the `dev`/`test` database.                                                                                                                                                                                                                 |
+| Variable            | Required     | Meaning                                                                                                                                                                                                                                                                                                                                 |
+| ------------------- | ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POSTGRES_PASSWORD` | yes          | Password of the `anime` database role (the owner; runs the migrations), used only inside the compose network. `openssl rand -hex 24`: hex, because the value is embedded in the connection URL and base64 characters would break it.                                                                                                    |
+| `APP_DB_PASSWORD`   | yes          | Password of the `anime_app` role the api serves requests as: `SELECT`/`INSERT`/`UPDATE`/`DELETE` on the tables and nothing else. Created by `db/init/01-app-role.sh` on the first start of an empty volume (see _Existing volumes_). `openssl rand -hex 24`                                                                             |
+| `SESSION_SECRET`    | yes          | Key for the HMAC that protects session ids at rest. At least 32 bytes; the api refuses to start with fewer, or with the placeholder. `openssl rand -base64 48`                                                                                                                                                                          |
+| `WEB_ORIGIN`        | yes          | The origin browsers use for the site, exactly as they send it in the `Origin` header (`http://127.0.0.1:8080` for acceptance, the proxy's or tunnel's `https://...` for production). State-changing requests from any other origin get 403.                                                                                             |
+| `TAG`               | no (`local`) | Image tag for `anime-tcg-web` and `anime-tcg-api`; bake a date into production builds so you can roll back to it.                                                                                                                                                                                                                       |
+| `ACCEPTANCE_PORT`   | no (`8080`)  | Loopback port of the acceptance stack.                                                                                                                                                                                                                                                                                                  |
+| `PRODUCTION_PORT`   | no (`8081`)  | Loopback port of the production stack.                                                                                                                                                                                                                                                                                                  |
+| `LOG_LEVEL`         | no (`info`)  | Api log level (`fatal` … `trace`, `silent`).                                                                                                                                                                                                                                                                                            |
+| `INVITE_CODES`      | no (empty)   | Comma-separated invite codes players need to register, each 8 to 64 characters, compared trimmed and case-insensitively. Empty or absent closes registration (every code is refused and the api logs one warning at start-up). The code printed in `docs/design/accounts.md` is in a public repository: never use it as the real value. |
+| `ACCOUNT_CAP`       | no (`10`)    | How many accounts may exist. Checked when a code is verified and again, authoritatively, inside the registration transaction.                                                                                                                                                                                                           |
+| `DEV_DB_PORT`       | no (`5432`)  | Loopback port of the `dev`/`test` database.                                                                                                                                                                                                                                                                                             |
 
-Compose derives the api's own environment from these: `NODE_ENV=production`, `HOST=0.0.0.0`, `PORT=3000`, `DATABASE_URL` (as `anime_app`, the pool every request runs on), `MIGRATIONS_DATABASE_URL` (as `anime`, one connection used by the migrations at start-up and closed afterwards), `API_ORIGIN` (same as `WEB_ORIGIN`, since the api is served under it) and the rate-limit defaults (100 requests per minute per client address). The api refuses to start when the two URLs name the same role.
+Compose derives the api's own environment from these: `NODE_ENV=production`, `HOST=0.0.0.0`, `PORT=3000`, `DATABASE_URL` (as `anime_app`, the pool every request runs on), `MIGRATIONS_DATABASE_URL` (as `anime`, one connection used by the migrations at start-up and closed afterwards), `API_ORIGIN` (same as `WEB_ORIGIN`, since the api is served under it) and the rate-limit defaults (100 requests per minute per client address), and passes `INVITE_CODES` and `ACCOUNT_CAP` through. The api refuses to start when the two URLs name the same role, or when an `INVITE_CODES` entry is outside 8 to 64 characters (it names the entry's position, never its text).
 
 ### Database roles
 
@@ -123,6 +125,21 @@ The database volume (`<project>_db-production`) is the only state in the stack. 
 docker compose --env-file .env.production.local --profile production exec db-production pg_dump -U anime anime > anime-$(date +%F).sql
 ```
 
+## Operations
+
+### Reset a player's password
+
+There is no self-service reset (ADR 0008 §3). The owner runs the command inside the api container; it reads the new password from stdin so the password never lands in shell history or `ps`:
+
+```bash
+docker compose --env-file .env.production.local --profile production exec -T api-production \
+  node api/dist/cli/reset-password.js <login> <<'PASSWORD'
+the new password
+PASSWORD
+```
+
+It prints `Password reset for <login>; N sessions ended.`: the Argon2id hash is rewritten and every session of the account is ended, so the player signs in again with the new password on every device. The login is matched case-insensitively (the stored spelling is printed back); the password must be 8 to 128 characters and is taken exactly as given except for the here-document's own trailing newline. An unknown login or a bad password is one line on stderr and exit code 1. The command needs `DATABASE_URL` only (the app role has every statement it uses), which compose already sets on the container. `api-acceptance` and `.env.acceptance.local` for the acceptance stack; outside compose, `node api/dist/cli/reset-password.js <login>` with `DATABASE_URL` exported.
+
 ## Rollback
 
 Re-run production with the previous tag and without a build:
@@ -131,7 +148,7 @@ Re-run production with the previous tag and without a build:
 TAG=2026-10-21 docker compose --env-file .env.production.local --profile production up -d --no-build
 ```
 
-Compose recreates the containers from the older images. The database keeps its data; migrations are forward-only, so rolling back past a migration is safe only when that migration was additive (true of everything so far: `0000` creates the `sessions` table, `0001` grants the app role row access; an older api image that still connects as `anime` is unaffected by the grants). Session rows survive a rollback; the browser-side collection is unaffected because it is not on the server yet.
+Compose recreates the containers from the older images. The database keeps its data; migrations are forward-only, so rolling back past a migration is safe only when that migration was additive (true of everything so far: `0000` creates the `sessions` table, `0001` grants the app role row access, `0002` creates `accounts` and `auth_throttle` and adds the foreign key from `sessions.account_id`; an older api image that still connects as `anime` is unaffected by the grants, and one that never sets `account_id` is unaffected by the constraint). Session rows survive a rollback, account rows stay in their table for the next deploy, and the browser-side collection is unaffected because it is not on the server yet.
 
 ## Headers
 
@@ -154,7 +171,7 @@ Left to the proxy: TLS, `Strict-Transport-Security`, and anything that needs to 
 ```bash
 POSTGRES_PASSWORD=x APP_DB_PASSWORD=x SESSION_SECRET=x WEB_ORIGIN=x \
   docker compose --profile dev up -d      # Postgres on 127.0.0.1:5432, database anime; roles anime / anime (owner) and anime_app / anime_app
-cp api/.env.example api/.env.local        # set SESSION_SECRET; the rest matches the dev database
+cp api/.env.example api/.env.local        # set SESSION_SECRET; the rest matches the dev database (INVITE_CODES=local-dev-invite opens registration locally)
 npm run dev                               # api on :3000 (node --watch, reloads on change) + Vite on :5173
 ```
 
