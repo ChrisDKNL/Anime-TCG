@@ -4,20 +4,20 @@ Status of every feature. The manager updates this; it is the single source of tr
 
 Statuses: `idea` → `specced` → `building` → `testing` → `qc` → `security` → `pr` → `shipped`.
 
-| #   | Feature                                            | Status  | Branch / PR                     | Spec                                 | Notes                                                               |
-| --- | -------------------------------------------------- | ------- | ------------------------------- | ------------------------------------ | ------------------------------------------------------------------- |
-| 0   | Booster packs + local collection                   | shipped | `claude/anime-card-game-dapaop` | —                                    | Pre-dates the workflow; no spec                                     |
-| 0.1 | Team, gates, CI, ruleset                           | pr      | `claude/anime-card-game-dapaop` | `docs/00`, `docs/01`                 | Needs the one-time admin setup in `docs/01`                         |
-| 1   | Local profiles (invite code)                       | idea    |                                 | ADR 0003 → `docs/design/accounts.md` | StorageAdapter boundary is the real deliverable                     |
-| 2   | Economy: currency, pack timer, sell/recycle        | idea    |                                 | ADR 0004 → `docs/design/economy.md`  | Prerequisite for 5 and 6; numbers must be shown not to inflate      |
-| 3   | Collection overview                                | idea    |                                 |                                      | Grid, filters, sort, search, completion stats; sell/recycle actions |
-| 4   | Profile                                            | idea    |                                 |                                      | Avatar from a card, stats, showcase, balance, next-pack timer       |
-| 5   | Blackjack                                          | idea    |                                 |                                      | Wager currency; packs as prize tier; pure engine in `src/lib/`      |
-| 6   | Slots                                              | idea    |                                 |                                      | Reel symbols = card art; published paytable                         |
-| 7   | Trade between local profiles                       | idea    |                                 |                                      | Flow placeholder only; real trading needs ADR 0003 Phase 2          |
-| 0.2 | Deployment files (Dockerfile, compose, deploy doc) | idea    |                                 | ADR 0005                             | Owner's Docker setup must be committed so it is reproducible        |
-| 9   | Collection download (read-only server endpoint)    | idea    |                                 |                                      | Owner's answer 2026-10-28: later; replaces the dropped file export  |
-| 8   | Third-party sign-in (Google/Discord)               | idea    |                                 | ADR 0003 Phase 2                     | Needs a BaaS decision (new ADR); import of local profiles           |
+| #   | Feature                                            | Status  | Branch / PR                     | Spec                                         | Notes                                                                                        |
+| --- | -------------------------------------------------- | ------- | ------------------------------- | -------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| 0   | Booster packs + local collection                   | shipped | `claude/anime-card-game-dapaop` | —                                            | Pre-dates the workflow; no spec                                                              |
+| 0.1 | Team, gates, CI, ruleset                           | pr      | `claude/anime-card-game-dapaop` | `docs/00`, `docs/01`                         | Needs the one-time admin setup in `docs/01`                                                  |
+| 1   | Local profiles (invite code)                       | idea    |                                 | ADR 0003 → `docs/design/accounts.md`         | StorageAdapter boundary is the real deliverable                                              |
+| 2   | Economy: currency, pack timer, sell/recycle        | idea    |                                 | ADR 0004 → `docs/design/economy.md`          | Prerequisite for 5 and 6; numbers must be shown not to inflate                               |
+| 3   | Collection overview                                | idea    |                                 |                                              | Grid, filters, sort, search, completion stats; sell/recycle actions                          |
+| 4   | Profile                                            | idea    |                                 |                                              | Avatar from a card, stats, showcase, balance, next-pack timer                                |
+| 5   | Blackjack                                          | idea    |                                 |                                              | Wager currency; packs as prize tier; pure engine in `src/lib/`                               |
+| 6   | Slots                                              | idea    |                                 |                                              | Reel symbols = card art; published paytable                                                  |
+| 7   | Trade between local profiles                       | idea    |                                 |                                              | Flow placeholder only; real trading needs ADR 0003 Phase 2                                   |
+| 0.2 | Deployment files (Dockerfile, compose, deploy doc) | pr      | `feat/deployment-files` → PR #9 | ADR 0010 (on PR #9), `docs/04-deployment.md` | T3 reviewed, QC PASS, CI `docker` job green; acceptance and production bind to loopback only |
+| 9   | Collection download (read-only server endpoint)    | idea    |                                 |                                              | Owner's answer 2026-10-28: later; replaces the dropped file export                           |
+| 8   | Third-party sign-in (Google/Discord)               | idea    |                                 | ADR 0003 Phase 2                             | Needs a BaaS decision (new ADR); import of local profiles                                    |
 
 ## Brainstorm seed (2026-10-28)
 
