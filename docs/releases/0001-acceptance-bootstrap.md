@@ -1,6 +1,6 @@
 # Acceptance bootstrap handoff — Anime TCG
 
-Candidate: branch `feat/deployment-files` at `4fd9a1e` (content commit; the branch head may be one docs commit later, which is fine) (this is `main` at `ad2eb7f` plus the deployment files; it is a pull request, not a release tag, because this is the first boot of the acceptance environment, not a production release).
+Candidate: commit `f13baf220326306a7a016f804ae1dd4ed4d1c38e` on branch `feat/deployment-files` (PR #9). This is `main` at `ad2eb7f` plus the reviewed deployment files. It is a pull request, not a release tag, because this is the first boot of the acceptance environment, not a production release. The one commit after it on the branch only edits this handoff file.
 
 ---
 
@@ -16,9 +16,11 @@ You are the local Claude Code session on the dev station. This is a **bootstrap 
 
 ```bash
 git fetch origin
-git checkout feat/deployment-files
-git log --oneline -1 4fd9a1e   # must resolve: the candidate content commit is in this checkout
+git checkout --detach f13baf220326306a7a016f804ae1dd4ed4d1c38e
+test "$(git rev-parse HEAD)" = "f13baf220326306a7a016f804ae1dd4ed4d1c38e" || { echo "wrong commit, stop"; exit 1; }
 ```
+
+The checkout is the exact reviewed commit, detached. Do not check out the branch name: anything pushed later would be unreviewed.
 
 ## 2. Build and start acceptance
 
@@ -32,19 +34,19 @@ If the build fails, paste the full error and stop. Do not patch the Dockerfile l
 ## 3. Smoke checks (paste output)
 
 ```bash
-curl -fsS http://localhost:8080/healthz
-curl -fsS http://localhost:8080/ | grep -o '<title>[^<]*</title>'
-curl -sI http://localhost:8080/ | grep -iE 'content-security-policy|x-content-type-options|referrer-policy|server'
+curl -fsS http://127.0.0.1:8080/healthz
+curl -fsS http://127.0.0.1:8080/ | grep -o '<title>[^<]*</title>'
+curl -sI http://127.0.0.1:8080/ | grep -iE 'content-security-policy|x-content-type-options|referrer-policy|server'
 docker inspect --format '{{.State.Health.Status}}' anime-tcg-acceptance
 ```
 
 Expected: `ok`; `<title>Anime TCG — Booster Packs</title>`; a CSP header present and no `Server` header; `healthy`.
 
-Then open http://localhost:8080 in a headless browser (Playwright is fine) and confirm: the page loads with zero console errors, the "Open Booster Pack" button becomes enabled (this calls the real AniList API, once, then caches for 24 h), and clicking it shows five cards. Paste the console output.
+Then open http://127.0.0.1:8080 in a headless browser (Playwright is fine) and confirm: the page loads with zero console errors, the "Open Booster Pack" button becomes enabled (this calls the real AniList API, once, then caches for 24 h), and clicking it shows five cards. Paste the console output.
 
 ## 4. WAIT: owner verification
 
-Ask the owner to open http://localhost:8080 and check:
+Ask the owner to open http://127.0.0.1:8080 and check:
 
 - [ ] I can open a booster pack and see five cards with name, anime, and a rarity badge
 - [ ] A second pack adds to the collection count in the header
@@ -52,7 +54,7 @@ Ask the owner to open http://localhost:8080 and check:
 - [ ] A browser reload keeps the collection
 - [ ] Nothing in the UI mentions money, buying, or security
 
-Reply **"acceptance ok 4fd9a1e"** or **"acceptance rejected 4fd9a1e: <reason>"**.
+Reply **"acceptance ok f13baf2"** or **"acceptance rejected f13baf2: <reason>"**.
 
 ## 5. After the verdict
 
@@ -67,7 +69,7 @@ Reply **"acceptance ok 4fd9a1e"** or **"acceptance rejected 4fd9a1e: <reason>"**
 ## What is NOT in it
 
 - No backend, no accounts, no currency. The collection lives in the browser's localStorage and is not protected from manipulation; that is known and is the reason for Sprint 1.
-- No production deploy. The `production` profile exists but is not to be started until a tagged release goes through `docs/03-release-process.md`.
+- No production deploy. The `production` profile exists but is not to be started until a tagged release goes through `docs/03-release-process.md` (on PR #8 until it merges).
 - No TLS inside the container. TLS is the proxy's or the tunnel's job.
 
 ## Known limitations
