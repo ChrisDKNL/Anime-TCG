@@ -76,3 +76,9 @@ Reply **"acceptance ok f13baf2"** or **"acceptance rejected f13baf2: <reason>"**
 
 - First page load after a cold cache calls AniList once; if AniList rate-limits (HTTP 429) the UI shows a retry banner. Wait a minute and retry.
 - The container trusts nothing from the client because there is no server state to trust; that cuts both ways.
+
+---
+
+## Verdict
+
+**Acceptance OK, 2026-10-28.** The owner's local Claude Code session followed the handoff from the repository's own deployment files, the acceptance container came up on loopback, and the owner verified the checklist in the browser. The deployment files merged to `main` in PR #9 (squash `b584b9c`). This bootstrap did not deploy production; the first production release follows `docs/03-release-process.md` once Sprint 1 is complete.
