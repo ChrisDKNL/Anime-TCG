@@ -71,7 +71,7 @@ Acceptance is bound to loopback and cannot be changed through a variable. It is 
 TAG=2026-10-28 docker compose --env-file .env.production.local --profile production up -d --build --wait
 ```
 
-This builds `anime-tcg-web:2026-10-28` and `anime-tcg-api:2026-10-28` and starts the three production containers; Caddy listens on `127.0.0.1:8081`. Later runs with the same `TAG` and no `--build` reuse those images. `docker image ls 'anime-tcg-*'` lists what you have. Set `WEB_ORIGIN` to the public `https://` origin the proxy or tunnel serves; a wrong value makes every POST a 403.
+Build only from a commit on `main` whose CI run is green (branches no longer have to be up to date with `main` before merging, so the `main` run is the proof the merged tree works; `docs/01-github-flow.md`). This builds `anime-tcg-web:2026-10-28` and `anime-tcg-api:2026-10-28` and starts the three production containers; Caddy listens on `127.0.0.1:8081`. Later runs with the same `TAG` and no `--build` reuse those images. `docker image ls 'anime-tcg-*'` lists what you have. Set `WEB_ORIGIN` to the public `https://` origin the proxy or tunnel serves; a wrong value makes every POST a 403.
 
 The api applies pending SQL migrations (`api/src/db/migrations/`) before it starts listening and exits if one fails, so a bad migration never results in a half-running service.
 

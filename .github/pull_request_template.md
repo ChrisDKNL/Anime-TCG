@@ -25,6 +25,7 @@
 
 ## Checklist
 
-- [ ] Branch is up to date with `main`
+- [ ] Branch merges cleanly into `main` (no conflicts)
 - [ ] No secrets, tokens or personal data in the diff
 - [ ] Docs / ADR updated if a decision was made
+- [ ] Security tier stated: T0 / T1 / T2 / T3 (`docs/05-security.md`)
