@@ -75,7 +75,7 @@ jobs:
         run: npm run test:coverage --workspace api
         env:
           DATABASE_URL: postgres://anime:anime@127.0.0.1:5432/anime
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: coverage-api
