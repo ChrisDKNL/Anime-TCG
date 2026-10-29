@@ -181,7 +181,7 @@ The demo is a read of the server's pool and a roll by the server's RNG with noth
 
 1. A link click pushes; a redirect, a sign-in, a log-out, a deletion and a session end replace (§3.3, §3.5). The browser's Back and Forward move through pushed pages only.
 2. **New navigation** (a link): the page starts at the top, instantly (no smooth scroll).
-3. **Back and Forward**: the scroll position of that history entry is restored once the page's content has rendered from data the layout holds. If the data is not held (the first visit after a reload), the page starts at the top.
+3. **Back and Forward**: the scroll position of that history entry is restored once the page's content has rendered from data the layout holds. If the data is not held (since 1c the layout fetches the collection at sign-in, so this is only while that first answer is still on its way, or after it failed), the page starts at the top.
 4. A signed-in player pressing Back onto an entry of `/` or `/login` is replaced forward to `/packs` (§3.3 step 7); one more Back leaves the site, or reaches whatever came before. This is accepted: the alternative, a landing page signed-in players can see, is rejected for the reasons in §9.
 
 ### 3.12 Hosting: what Caddy must do
