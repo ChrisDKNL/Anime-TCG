@@ -112,7 +112,7 @@ const SPACE_CONTROL_OR_BACKSLASH = /[\s\p{Cc}\\]/u;
  */
 const INVISIBLE = /[\s\p{Cc}\p{Cf}]/gu;
 
-/** At least one character is left once every whitespace and format character is removed (round 4, decision 7). */
+/** At least one character is left once every whitespace, control and format character is removed (round 4, decision 7). */
 function hasVisibleCharacter(text: string): boolean {
   return text.replace(INVISIBLE, "") !== "";
 }

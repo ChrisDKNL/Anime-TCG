@@ -52,7 +52,7 @@ export async function currentSnapshotId(db: Db): Promise<number | null> {
  * Removes the snapshots a test file made, and the character and series rows
  * no remaining snapshot or card names. The accounts holding cards from them
  * must be gone first (their cards go with them). Runs as the owner: the app
- * role may not delete a snapshot or its reference data (0003's revokes).
+ * role may not delete a snapshot or its reference data (0004's revokes).
  */
 export async function deleteSnapshots(ids: readonly number[]): Promise<void> {
   if (ids.length === 0) return;
