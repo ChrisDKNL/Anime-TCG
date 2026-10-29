@@ -256,6 +256,13 @@ describe("snapshot-pool against a local AniList stand-in (collection-packs.md §
       /^Dry run, nothing activated\. The snapshot would hold 100 entries in 99 franchises/,
     );
     expect(lines).toContain('  1. "Series 1" (900001): 2 entries, 12 characters');
+
+    const [first] = outcome.summary.franchises;
+    if (first === undefined) throw new Error("the dry run listed no franchise");
+    const hostile = { ...first, title: "Series\u009b2J\u202e 1" };
+    expect(describeOutcome({ ...outcome, summary: { ...outcome.summary, franchises: [hostile] } })).toContain(
+      '  1. "Series\\u009b2J\\u202e 1" (900001): 2 entries, 12 characters',
+    );
   });
 
   it("leaves the current snapshot exactly as it was when the build is refused", async () => {
@@ -432,6 +439,10 @@ describe("snapshot-pool as a command", () => {
       stdout: "",
       stderr: "The file is not a snapshot: it is not valid JSON.\n",
     });
+    const file = JSON.parse(snapshotText(standardPool())) as Record<string, unknown>;
+    const strayKey = await run(["--stdin"], JSON.stringify({ ...file, "x\u009b2J": 1 }));
+    expect(strayKey.code).toBe(1);
+    expect(strayKey.stderr).toMatch(/^The file is not a snapshot: \/x\\u009b2J .+\.\n$/);
   });
 
   it("exits 2 with how to resume when a fetch pauses", async () => {

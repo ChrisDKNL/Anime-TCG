@@ -6,6 +6,7 @@ import {
   resetCollection,
 } from "../domain/collection/reset.js";
 import { createLogger } from "../plugins/logging.js";
+import { escapeUnprintable, quote } from "./quote.js";
 
 /**
  * Owner-side collection reset (docs/design/collection-packs.md §7.2), run
@@ -22,9 +23,9 @@ import { createLogger } from "../plugins/logging.js";
 
 const USAGE = "Usage: node api/dist/cli/reset-collection.js <login> [--confirm]";
 
-/** The login is printed JSON-quoted, as the snapshot command prints titles: a control sequence in one cannot reach the terminal. */
+/** The login is printed through `quote`, as the snapshot command prints titles, so nothing in it reaches the terminal unescaped. */
 export function describeReset(result: CollectionResetResult): string {
-  const login = JSON.stringify(result.login);
+  const login = quote(result.login);
   return result.applied
     ? `Collection reset for ${login}: ${result.cards} cards and ${result.openings} openings removed; packs full; counters reset.`
     : `Would reset ${login}: ${result.cards} cards, ${result.openings} openings; pity and Enchanted counters to zero.`;
@@ -67,7 +68,7 @@ export async function main(
     return 0;
   } catch (err) {
     if (!(err instanceof ResetCollectionError)) throw err;
-    io.stderr.write(`${err.message}\n`);
+    io.stderr.write(`${escapeUnprintable(err.message)}\n`);
     return 1;
   } finally {
     await db.$client.end();

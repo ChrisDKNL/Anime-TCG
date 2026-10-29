@@ -7,6 +7,7 @@ import { exportSnapshot } from "../domain/pool/export.js";
 import { FetchPaused, type FetchLog, FetchStaging, fetchSnapshotPages } from "../domain/pool/fetch.js";
 import { readCapped, readSnapshotFile } from "../domain/pool/file.js";
 import { createLogger } from "../plugins/logging.js";
+import { escapeUnprintable, quote } from "./quote.js";
 
 /**
  * The owner's snapshot command (docs/design/collection-packs.md §7.1), run
@@ -115,7 +116,7 @@ export async function snapshotFromFile(
 
 /**
  * What the command prints. Titles are AniList's strings, so they are
- * printed JSON-quoted: a control sequence in one cannot reach the terminal.
+ * printed through `quote` and nothing in one reaches the terminal unescaped.
  */
 export function describeOutcome({ summary, requests }: SnapshotOutcome): string[] {
   const t = summary.tierCounts;
@@ -131,7 +132,7 @@ export function describeOutcome({ summary, requests }: SnapshotOutcome): string[
     `Franchises (${summary.franchisesMerged} merged and ${summary.franchisesSplit} split since the current snapshot):`,
     ...summary.franchises.map(
       (f) =>
-        `  ${f.popularityRank}. ${JSON.stringify(f.title)} (${f.id}): ${f.entries} ${f.entries === 1 ? "entry" : "entries"}, ${f.characters} characters` +
+        `  ${f.popularityRank}. ${quote(f.title)} (${f.id}): ${f.entries} ${f.entries === 1 ? "entry" : "entries"}, ${f.characters} characters` +
         (f.capped === 0 ? "" : ` (${f.capped} capped)`),
     ),
   ];
@@ -195,7 +196,8 @@ export async function main(
     return 0;
   } catch (err) {
     if (err instanceof SnapshotRefused) {
-      io.stderr.write(`${err.message}\n`);
+      // A refusal of a file can name the path it failed at, and the file chose that path's keys.
+      io.stderr.write(`${escapeUnprintable(err.message)}\n`);
       return 1;
     }
     if (err instanceof FetchPaused) {

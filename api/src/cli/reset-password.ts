@@ -5,6 +5,7 @@ import { accounts } from "../db/schema.js";
 import { normalizeLogin } from "../domain/accounts/logins.js";
 import { hashPassword } from "../domain/accounts/password.js";
 import { destroySessionsOf } from "../domain/session/service.js";
+import { quote } from "./quote.js";
 
 /**
  * Owner-side password reset (docs/design/accounts-api.md §8), run inside the
@@ -43,8 +44,7 @@ export async function resetPassword(db: Db, login: string, newPassword: string):
     .from(accounts)
     .where(eq(accounts.loginNormalized, normalizeLogin(login)))
     .limit(1);
-  if (account === undefined)
-    throw new ResetPasswordError(`No account has the login ${JSON.stringify(login)}`);
+  if (account === undefined) throw new ResetPasswordError(`No account has the login ${quote(login)}`);
   const passwordHash = await hashPassword(newPassword);
   const sessionsEnded = await db.transaction(async (tx) => {
     await tx.update(accounts).set({ passwordHash, updatedAt: new Date() }).where(eq(accounts.id, account.id));
@@ -53,9 +53,9 @@ export async function resetPassword(db: Db, login: string, newPassword: string):
   return { login: account.login, sessionsEnded };
 }
 
-/** The login is printed JSON-quoted: a control sequence in one cannot reach the terminal. */
+/** The login is printed through `quote`, so nothing in it reaches the terminal unescaped. */
 export function describePasswordReset(result: ResetResult): string {
-  return `Password reset for ${JSON.stringify(result.login)}; ${result.sessionsEnded} sessions ended.`;
+  return `Password reset for ${quote(result.login)}; ${result.sessionsEnded} sessions ended.`;
 }
 
 async function readStdin(): Promise<string> {

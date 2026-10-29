@@ -167,10 +167,10 @@ describe("reset-collection", () => {
       expect(await holdings(account.id)).toEqual({ cards: 0, openings: 0 });
     });
 
-    it("prints the login JSON-quoted, so a control sequence in it never reaches the terminal", () => {
-      const counts = { accountId: "id", login: "a\u001b[2Jb\n", cards: 1, openings: 1 };
+    it("prints the login quoted, with C0, C1 and format characters escaped", () => {
+      const counts = { accountId: "id", login: "a\u001b[2Jb\n\u009b2J\u202e", cards: 1, openings: 1 };
       expect(describeReset({ ...counts, applied: false })).toBe(
-        'Would reset "a\\u001b[2Jb\\n": 1 cards, 1 openings; pity and Enchanted counters to zero.',
+        'Would reset "a\\u001b[2Jb\\n\\u009b2J\\u202e": 1 cards, 1 openings; pity and Enchanted counters to zero.',
       );
       expect(describeReset({ ...counts, applied: true })).toMatch(/^Collection reset for "a\\u001b\[2Jb/);
     });

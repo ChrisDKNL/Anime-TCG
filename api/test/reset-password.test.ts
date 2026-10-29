@@ -155,10 +155,10 @@ describe("reset-password as a command", () => {
     });
   }
 
-  it("prints the stored login JSON-quoted, so a control sequence in it never reaches the terminal", () => {
-    expect(describePasswordReset({ login: "a\u001b]0;owned\u0007b", sessionsEnded: 1 })).toBe(
-      'Password reset for "a\\u001b]0;owned\\u0007b"; 1 sessions ended.',
-    );
+  it("prints the stored login quoted, with C0, C1 and format characters escaped", () => {
+    expect(
+      describePasswordReset({ login: "a\u001b]0;owned\u0007b\u009d0;x\u009c\u2028", sessionsEnded: 1 }),
+    ).toBe('Password reset for "a\\u001b]0;owned\\u0007b\\u009d0;x\\u009c\\u2028"; 1 sessions ended.');
   });
 
   it("prints exactly one line and exits 0, with the shell's trailing newline stripped from the password", async () => {
