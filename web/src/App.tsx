@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import { Game } from "./components/Game";
+import { LiveRegion } from "./components/LiveRegion";
 import type { Frame } from "./components/PageFrame";
 import { SignedOut } from "./components/SignedOut";
 import { useAccountSession } from "./hooks/useAccountSession";
@@ -26,7 +27,6 @@ export default function App() {
   // The boot check failing and a later call failing show the same banner; `Try again` repeats the session check.
   const notice: Notice = session.status === "unreachable" ? "unreachable" : shell.state.notice;
   const frame: Frame = {
-    announcement: shell.state.announcement,
     notice,
     retrying: session.status === "unreachable" && session.retrying,
     onRetry: () => {
@@ -42,6 +42,8 @@ export default function App() {
       ) : (
         <SignedOut frame={frame} loading={session.status === "loading"} showLoading={showLoading} />
       )}
+      {/* Outside the signed-in/signed-out switch, so signing in or out writes into the same node (§7). */}
+      <LiveRegion announcement={shell.state.announcement} />
     </ShellContext>
   );
 }

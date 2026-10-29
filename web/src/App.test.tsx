@@ -124,6 +124,47 @@ describe("App account flows", () => {
     TEST_TIMEOUT,
   );
 
+  it(
+    "the live region is one node for the app's lifetime; log in and log out write into it",
+    async () => {
+      renderApp({
+        "GET /api/session": signedOutSession,
+        "POST /api/session/login": { status: 200, body: { signedIn: true, account } },
+        "POST /api/session/logout": noContent,
+      });
+      const user = userEvent.setup();
+      await user.click(await screen.findByRole("button", { name: "Log in" }));
+      const region = liveRegion();
+      expect(region).toBeEmptyDOMElement();
+      const written: Node[] = [];
+      const observer = new MutationObserver((records) => {
+        for (const record of records) if (record.target === region) written.push(...record.addedNodes);
+      });
+      observer.observe(region, { childList: true });
+
+      await user.type(screen.getByLabelText("Login"), "chris");
+      await user.type(screen.getByLabelText("Password"), "a password");
+      await user.click(screen.getByRole("button", { name: "Log in" }));
+      await screen.findByRole(
+        "button",
+        { name: "Account menu. Signed in as Chris" },
+        { timeout: ASYNC_TIMEOUT },
+      );
+      expect(liveRegion()).toBe(region);
+      expect(region).toHaveTextContent("Logged in. You're now on Chris.");
+      expect(written.length).toBeGreaterThan(0);
+
+      await user.click(screen.getByRole("button", { name: "Account menu. Signed in as Chris" }));
+      await user.click(screen.getByRole("menuitem", { name: "Log out" }));
+      await screen.findByRole("heading", { name: "Your account" });
+      expect(liveRegion()).toBe(region);
+      expect(region).toHaveTextContent("Logged out.");
+      expect(region.isConnected).toBe(true);
+      observer.disconnect();
+    },
+    TEST_TIMEOUT,
+  );
+
   it("the Account button brings the choice back and focuses its heading", async () => {
     renderApp({ "GET /api/session": signedOutSession });
     const user = userEvent.setup();
