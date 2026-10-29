@@ -6,8 +6,11 @@ import { BUTTON, FOCUS_RING } from "../account/styles";
  * tokens.
  */
 
-/** §6.1: a plain wordmark, no gradient (the gradient title was §2 debt). */
-export const WORDMARK = `rounded text-xl font-black tracking-tight text-zinc-100 ${FOCUS_RING}`;
+/**
+ * §6.1: a plain wordmark, no gradient (the gradient title was §2 debt). It is
+ * a header link, so it is a 40 px target on phone like the others (§7).
+ */
+export const WORDMARK = `inline-flex min-h-10 items-center rounded text-xl font-black tracking-tight text-zinc-100 sm:min-h-0 ${FOCUS_RING}`;
 
 /** Today's tab group, unchanged in look; on phone the links share the row (`flex-auto`). */
 export const NAV_GROUP = "flex w-full gap-1 rounded-xl bg-zinc-900 p-1 sm:w-auto";

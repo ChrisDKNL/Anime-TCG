@@ -18,6 +18,7 @@ describe("touch targets", () => {
     ["primary link-button", LINK_BUTTON.primary],
     ["secondary link-button (Register, not-found, profile)", LINK_BUTTON.secondary],
     ["skip link", SKIP_LINK],
+    ["wordmark link", WORDMARK],
   ];
 
   it.each(minHeightTargets)("%s is at least 40 px tall below sm", (_, classes) => {
