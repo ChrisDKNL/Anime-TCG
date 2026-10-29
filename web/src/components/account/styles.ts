@@ -49,6 +49,10 @@ export const ALERT_BANNER =
   "flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-900/60 bg-red-950/40 p-4 text-sm text-red-200";
 export const STATUS_BANNER = "rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-sm text-zinc-200";
 
-/** The pack button's gradient on the avatar placeholder; roadmap 4 replaces it with card art. */
+/**
+ * The avatar placeholder: a solid neutral circle, because engineering standards
+ * §2 bans purple-to-pink gradients (this overrides accounts.md §6's gradient).
+ * Roadmap 4 replaces it with card art.
+ */
 export const AVATAR =
-  "inline-flex shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-fuchsia-600 via-violet-600 to-sky-600 text-xs font-bold text-white uppercase";
+  "inline-flex shrink-0 items-center justify-center rounded-full bg-zinc-700 text-xs font-bold text-white uppercase";

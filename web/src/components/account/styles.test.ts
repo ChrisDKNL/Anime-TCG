@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ACCOUNT_CONTROL, BUTTON, INPUT, MENU_ITEM } from "./styles";
+import { ACCOUNT_CONTROL, AVATAR, BUTTON, INPUT, MENU_ITEM } from "./styles";
 
 /** The class tokens of a style string, so `min-h-10` does not match inside `sm:min-h-10`. */
 function tokens(classes: string): string[] {
@@ -28,5 +28,13 @@ describe("touch targets", () => {
 
   it("text buttons (Show/Hide, Close) are 40 px tall below sm and 28 px from sm up", () => {
     expect(tokens(BUTTON.text)).toEqual(expect.arrayContaining(["h-10", "sm:h-7"]));
+  });
+});
+
+describe("avatar placeholder", () => {
+  it("is a solid neutral circle with a white initial, no gradient (engineering standards §2)", () => {
+    const classes = tokens(AVATAR);
+    expect(classes).toEqual(expect.arrayContaining(["rounded-full", "bg-zinc-700", "text-white"]));
+    expect(classes.filter((token) => /gradient|^from-|^via-|^to-/.test(token))).toEqual([]);
   });
 });
