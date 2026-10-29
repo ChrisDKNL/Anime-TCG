@@ -142,7 +142,7 @@ The flat colour used for a thumbnail's frame (§3.2) is the flat background for 
 
 - **Not in step.** Several animated cards on one screen must not glint together. Each card sets a negative delay from its character id: `animation-delay: calc(var(--card-phase) * -1s)`, with `--card-phase` = `characterId mod 11` × 0.5 (0 to 5 s). Stable per character, so a card does not jump when the grid re-renders.
 - **Glow** is static: a `box-shadow` that never animates. At the tile size it may spill into the 12 px grid gap; that is intended.
-- **Where effects play** is §9 question 1; this spec is drawn for its recommendation: in the reveal, the dialog and the demo pack always; in the collection and market grids, the glow is always shown and the glint and drift play only while the card is hovered or focused.
+- **Where effects play** (owner's decision, §9): in the reveal, the card dialog and the landing demo pack always; in the collection and market grids, the glow is always shown and the glint and drift play only while the card is hovered or focused.
 - **Reduced motion** (`prefers-reduced-motion: reduce`): no glint (the `::after` layer is not rendered) and no drift (the pearl rests at `0% 40%`). The frames and glows stay, as still images. The reveal's entry animation is the 1c web spec's and stops too.
 - Nothing else on the card moves: no hover lift, scale, tilt or parallax (`docs/06-engineering-standards.md` §2 still applies to those).
 
@@ -173,12 +173,12 @@ The flat colour used for a thumbnail's frame (§3.2) is the flat background for 
 
 ## 7. Packs, pity and the odds page
 
-The owner's pack rules ("Owner, 2026-10-29"): slots 1 to 3 are Common or better, slot 4 Uncommon or better, slot 5 Rare or better; every 10th free pack is an **Enchanted** pack, whose slot 5 is Epic or better; about 1 pack in 2,500 is a **Radiant** pack, five cards of Epic or better including a Mythic; and a player's 300th pack without a Mythic contains one (**pity**). The rules are shown plainly and only where a player looks for them. **No countdown, no progress bar, no "next pack is Enchanted", no "N packs to go", no near-miss and no fanfare** (ADR 0004 §6).
+The owner's pack rules ("Owner, 2026-10-29"): slots 1 to 3 are Common or better, slot 4 Uncommon or better, slot 5 Rare or better; every 10th free pack is an **Enchanted** pack, whose slot 5 is Epic or better; about 1 pack in 2,500 is a **Radiant** pack, five cards of Epic or better including a Mythic; and a player's 300th pack without a Mythic contains one (**pity**). The rules are shown plainly and only where a player looks for them. **No countdown, no progress bar, no "next pack is Enchanted", no near-miss and no fanfare** (ADR 0004 §6). The one number shown on the pack page is the pity counter, which the owner chose (§7.4, §9); it is drawn with the least nudge possible.
 
 ### 7.1 On the pack page (Booster tab)
 
-- The pack control is unchanged by these rules: it never says which kind the next pack will be, and shows no pity progress.
-- Next to the control, a text button `Pack odds` opens the odds page (§7.3).
+- The pack control is unchanged by these rules: it never says which kind the next pack will be, and nothing about pity is on or inside it. The pity counter is a separate line under it (§7.4).
+- Under the control, a text button `Pack odds` opens the odds page (§7.3).
 - **After an Enchanted pack**: the reveal's heading reads `Enchanted pack`, and one line under the pull summary says `Every 10th free pack is Enchanted: its fifth card is Epic or better.`
 - **After a Radiant pack**: the heading reads `Radiant pack`, and the line says `About 1 pack in 2,500 is Radiant: five cards of Epic or better, one of them Mythic.`
 - **After a pity Mythic**: the line says `This Mythic came from the guarantee: a 300th pack in a row without a Mythic always has one.`
@@ -200,6 +200,34 @@ A native `<dialog>` (the Manage account shell, `max-w-lg`) opened by `Pack odds`
 
 The page has no call to action: its only button is `Close`.
 
+### 7.4 The pity counter (owner's decision)
+
+The owner chose to show how close the guarantee is, on the pack page ("Owner, 2026-10-29", over this spec's recommendation to show it nowhere). It is drawn so that it informs and does not pull:
+
+- **Wording**: plain fact, `Mythic guaranteed within <n> packs.` (`within 1 pack.` for one). `<n>` is the server's packs remaining until the guarantee: the pack that many opens from now contains a Mythic at the latest (§12, R5). If the server counts free packs only, the copy says `free packs` (`free pack`).
+- **Placement**: its own line under the pack control and its countdown, in the row with the `Pack odds` button (the counter left, the button right; stacked on a phone, counter first). Never on, inside or as part of the open-pack button, never in the button's accessible name or description, never next to a Karma price.
+- **Look**: `text-xs text-zinc-400 tabular-nums`, the same as the other secondary lines on the page. No progress bar, ring or meter; no Mythic colour, star or icon; no animation or transition when the number changes; no emphasis as it gets small.
+- **No other copy**: no "almost there", "only <n> to go", "soon", exclamation marks or anything that changes with the number. The sentence is the same at 300 and at 1.
+- **Data**: shown only when the server sends the number (`PacksResponse` and `PackOpened`, R5); `null` or absent means the line is not rendered. The UI never counts packs itself; it shows the number from the last answer.
+
+| State                                                                          | User sees                                                                                                                                          |
+| ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| pack page loading (`GET /api/packs` not answered)                              | No counter line                                                                                                                                    |
+| the server sends no number (`null`, absent, or no snapshot: cards unavailable) | No counter line                                                                                                                                    |
+| number `n` ≥ 2                                                                 | `Mythic guaranteed within <n> packs.`                                                                                                              |
+| number 1                                                                       | `Mythic guaranteed within 1 pack.`                                                                                                                 |
+| opening in flight                                                              | The number from the last answer, unchanged                                                                                                         |
+| after an opening                                                               | The number from `PackOpened`, replaced without transition                                                                                          |
+| after a pity Mythic                                                            | The counter restarts at the server's new number (for example `within 300 packs`); the reveal's line (§7.1) says the Mythic came from the guarantee |
+| after any other Mythic                                                         | The counter restarts at the server's new number; nothing else is said                                                                              |
+| stale (the server unreachable)                                                 | The number last received, as the rest of the page                                                                                                  |
+
+| Element      | Copy                                                                                                                          |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| Pity counter | `Mythic guaranteed within <n> packs.` / `Mythic guaranteed within 1 pack.` (with free packs only: `free packs` / `free pack`) |
+
+**Accessibility**: a plain `<p>` in the pack section, after the pack control in DOM order. It is **not** a live region and not referenced by `aria-describedby`, so a screen reader reads it once, when the player reaches it, and is not told the new number after every pack. Contrast `zinc-400` on `zinc-950`: 7.76:1.
+
 ## 8. Accessibility
 
 - The card is not itself a control. Where it opens something (a tile), the wrapping `<button>` is named as `collection-overview.md` §7 says, and the card's inner text is hidden from that name's computation only by being inside the button (the button's `aria-label` is the full sentence).
@@ -207,20 +235,19 @@ The page has no call to action: its only button is `Close`.
 - Stars: glyphs `aria-hidden`, text `<Tier>, <n> stars` (`1 star` for Common).
 - Rank: `Popularity rank <rank> of <pool>`.
 - Effects are decoration: no `aria-live`, nothing announced.
+- Pity counter: a plain paragraph, read once, never announced (§7.4).
 - Reduced motion: §5.3. Contrast: §4.2. Rarity is never colour alone: §6.1.
 
-## 9. Open questions
+## 9. Decisions
 
-For the owner; each is a choice of three, and this spec is drawn for the recommended one.
+Both questions of this spec's first version, answered by the owner on 2026-10-29:
 
-1. **Where the glint and the pearl drift play.** A collection page can hold 60 cards, a few dozen of them Epic or better.
-   - **A (recommended)**: always in the reveal, the dialog and the demo pack; in the collection and market grids, the glow is always shown and the glint and drift play only on the card under the pointer or keyboard focus. The grid stays calm, and a card still comes alive when the player looks at it.
-   - B: everywhere, always, with each card's phase offset so they do not flash together. The grid matches the reveal, but dozens of cards move at once.
-   - C: only in the reveal and the demo pack; the grids and the dialog show still frames with their glow. The calmest, but the dialog never shows the effect the player chose.
-2. **Showing pity progress** (how many packs since the last Mythic).
-   - **A (recommended)**: not shown anywhere; the guarantee is stated on the odds page, and a pity Mythic says where it came from. A count toward a prize is the countdown the owner ruled out.
-   - B: shown on the odds page only, as a plain number (`Packs since your last Mythic: 212`). Transparent, but it turns into a goal to grind toward.
-   - C: shown on the pack page. Most visible, and the nudge ADR 0004 §6 forbids.
+| Question                                 | Decision ("Owner, 2026-10-29")                                                                                                                                                                    | Where |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----- |
+| Where the glint and the pearl drift play | Option A: always in the reveal, the card dialog and the landing demo pack; in the collection and market grids the glow always shows, and the glint and drift play only on hover or keyboard focus | §5.3  |
+| Showing pity progress                    | Option C, the owner's choice over this spec's recommendation (A, not shown): a counter on the pack page, drawn with the least nudge possible                                                      | §7.4  |
+
+No question is open.
 
 ## 10. Tokens
 
@@ -272,7 +299,7 @@ All in `web/src/index.css`, replacing the current rarity block. Colours in `@the
 | ------------------------------------------------------ | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **1c web PR: pack reveal**                             | `collection-packs.md` §8 and its UI spec | the card at reveal size (§3.2), frames and effects (§5), stars and rank (§6), the special-pack headings and lines (§7.1); replaces `CharacterCard`'s frame, glow, `RarityBadge` overlay and gradient scrim; all tokens of §10 |
 | **1c web PR: odds**                                    | same                                     | the `Pack odds` button and dialog (§7.3), replacing the one-line odds text                                                                                                                                                    |
-| **Collection overview: tiles**                         | `collection-overview.md` §6.2            | the card at tile size with its caption under it; effects per §9 question 1                                                                                                                                                    |
+| **Collection overview: tiles**                         | `collection-overview.md` §6.2            | the card at tile size with its caption under it; effects per §5.3                                                                                                                                                             |
 | **Collection overview: dialog**                        | `collection-overview.md` §5.4            | the card at dialog size in place of the art                                                                                                                                                                                   |
 | **Collection overview: filter chips, per-tier totals** | `collection-overview.md` §6.3            | the six tier text colours (§4.2), chips on `zinc-950` only                                                                                                                                                                    |
 | **Market and shop**                                    | `market-and-shop.md`                     | the tile and dialog card, the thumbnail (§3.2), the shop's odds lines in the odds page's words                                                                                                                                |
@@ -287,4 +314,5 @@ All in `web/src/index.css`, replacing the current rarity block. Colours in `@the
 | R1  | **Rank on the card.** `collection-packs.md` §6.3 today says no favourites count or rank can leak through the serialiser; the owner now shows the rank | `CharacterPublic.rank: integer ≥ 1 \| null` (the favourites rank in the current snapshot, null when not in it) and `SnapshotInfo.characterCount` (the pool size), on every response that carries a character                                                                                                      |
 | R2  | **Six tiers.**                                                                                                                                        | `Rarity` = `common`, `uncommon`, `rare`, `epic`, `legendary`, `mythic`; `PerRarity` with six keys; `RARITY_LABEL` with `Uncommon`                                                                                                                                                                                 |
 | R3  | **Pack rules and their publication.**                                                                                                                 | `PublishedOdds` gains the share per card, the slot floors, the Enchanted interval, the Radiant chance, the pity count and the tier bands; `PackOpened` says which kind the pack was (`standard`, `enchanted`, `radiant`) and whether its Mythic came from pity; the spec states whether these apply to shop packs |
+| R5  | **Pity counter.**                                                                                                                                     | `PacksResponse` and `PackOpened` carry the packs remaining until the guarantee (`integer ≥ 1 \| null`), counted so that the pack that many opens from now has a Mythic at the latest; the spec states whether shop packs count                                                                                    |
 | R4  | **Economy numbers for six tiers.**                                                                                                                    | `economy.md` re-derives reference values, recycle values and market bounds for Uncommon (`collection-overview.md` §3.9 placeholders)                                                                                                                                                                              |
