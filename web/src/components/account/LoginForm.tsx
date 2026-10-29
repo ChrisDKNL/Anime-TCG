@@ -62,7 +62,7 @@ export function LoginForm({ onBack, onLoggedIn }: Props) {
           disabled={form.submitting}
           autoComplete="current-password"
         />
-        <div className="flex flex-col gap-2 sm:flex-row-reverse sm:justify-start">
+        <div className="flex flex-col gap-2 sm:flex-row">
           <SubmitButton
             blocked={form.submitting || waiting}
             className={`${BUTTON.primary} w-full sm:w-auto ${waiting ? "tabular-nums" : ""}`}

@@ -68,7 +68,7 @@ export function RegisterForm({ onBack, onRegistered }: Props) {
             inputMode="text"
             inputClassName="font-mono tracking-wide"
           />
-          <div className="flex flex-col gap-2 sm:flex-row-reverse sm:justify-start">
+          <div className="flex flex-col gap-2 sm:flex-row">
             <SubmitButton blocked={busy} className={`${BUTTON.primary} w-full sm:w-auto`}>
               {form.checking ? registerCopy.checking : registerCopy.continue}
             </SubmitButton>
@@ -122,7 +122,7 @@ export function RegisterForm({ onBack, onRegistered }: Props) {
             disabled={busy}
             autoComplete="new-password"
           />
-          <div className="flex flex-col gap-2 sm:flex-row-reverse sm:justify-start">
+          <div className="flex flex-col gap-2 sm:flex-row">
             <SubmitButton blocked={busy} className={`${BUTTON.primary} w-full sm:w-auto`}>
               {form.submitting ? registerCopy.submitting : registerCopy.submit}
             </SubmitButton>

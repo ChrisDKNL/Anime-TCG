@@ -303,7 +303,7 @@ function ConfirmDelete({ account, onCancel, onDeleted }: ConfirmDeleteProps) {
         disabled={form.deleting}
         autoComplete="current-password"
       />
-      <div className="flex flex-col gap-2 sm:flex-row-reverse sm:justify-start">
+      <div className="flex flex-col gap-2 sm:flex-row">
         {/* An empty password keeps the real `disabled`: focus is in the field then, and Enter must do nothing (§7 "Dialog"). */}
         <SubmitButton
           blocked={form.deleting || waiting}
