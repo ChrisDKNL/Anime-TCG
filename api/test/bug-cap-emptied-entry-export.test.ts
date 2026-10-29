@@ -11,7 +11,7 @@ import { activateSnapshot } from "../src/domain/pool/activate.js";
 import { buildSnapshot } from "../src/domain/pool/build.js";
 import { exportSnapshot } from "../src/domain/pool/export.js";
 import { readSnapshotFile } from "../src/domain/pool/file.js";
-import { type FixturePool, standardPool } from "./fixtures/pool.js";
+import { type FixtureCharacter, type FixturePool, standardPool } from "./fixtures/pool.js";
 import { currentSnapshotId, deleteSnapshots, loadSnapshot } from "./pool-support.js";
 import { createTestApp } from "./support.js";
 
@@ -37,6 +37,11 @@ import { createTestApp } from "./support.js";
  * (with DATABASE_URL and MIGRATIONS_DATABASE_URL on the test database). Not
  * hit by the owner's real file today: §5.1.10 says no character loses a
  * membership to the cap there.
+ *
+ * Fixed (§5.1.6): an entry the cap empties is not listed, and the franchises
+ * and the cap are worked out again without it, where it only connects like an
+ * entry outside the top 100; entries are ranked by position among the listed
+ * ones. The export then holds everything the rebuild needs.
  */
 
 const BASE = 800_000;
@@ -59,7 +64,7 @@ function poolEmptying(emptied: number, other: number): FixturePool {
   return pool;
 }
 
-describe("BUG: an entry the franchise cap empties breaks the --export round trip", () => {
+describe("regression: an entry the franchise cap empties keeps the --export round trip", () => {
   let app: App;
   const snapshots: number[] = [];
 
@@ -122,34 +127,87 @@ describe("BUG: an entry the franchise cap empties breaks the --export round trip
     await app.close();
   });
 
-  it("the emptied entry is the franchise's anchor: the rebuild keeps all 100 entries and franchise 900 001", async () => {
+  /** Every listed entry has a member, and every membership is in a listed entry. */
+  const expectEveryEntryHeld = (pool: Awaited<ReturnType<typeof shape>>) =>
+    expect(new Set(pool.memberships.map((row) => row.series))).toEqual(
+      new Set(pool.entries.map((row) => row.series)),
+    );
+
+  it("the emptied entry was the franchise's anchor: it is not listed, 900 002 anchors its own franchise, and the rebuild is identical", async () => {
     // Entry 900 001 (popularity rank 1, the smallest id) is emptied; 900 002 keeps the 60.
     const { original, copy, plan } = await roundTrip(poolEmptying(900_001, 900_002));
     const before = await shape(original.version);
-    // Preconditions: the original holds 900 001 as the anchor of its franchise, with no member.
-    expect(before.entries.find((row) => row.series === 900_001)).toEqual({
-      series: 900_001,
-      franchise: 900_001,
+    // Preconditions: 900 001 is not listed and cannot anchor; 900 002 is ranked first among the listed entries.
+    expect(before.entries.find((row) => row.series === 900_001)).toBeUndefined();
+    expect(before.franchises.find((row) => row.id === 900_001)).toBeUndefined();
+    expect(before.entries.find((row) => row.series === 900_002)).toEqual({
+      series: 900_002,
+      franchise: 900_002,
       rank: 1,
     });
+    expect(before.franchises.find((row) => row.id === 900_002)).toEqual({ id: 900_002, rank: 1 });
     expect(before.memberships.filter((row) => row.series === 900_001)).toEqual([]);
-    expect(original).toMatchObject({ entries: 100, skipped: 0 });
+    expectEveryEntryHeld(before);
+    expect(original).toMatchObject({ entries: 99, skipped: 0 });
 
     expect(await shape(copy.version)).toEqual(before);
     expect(plan.skipped.byReason()).toEqual({});
-    expect(copy).toMatchObject({ entries: 100, skipped: 0, capped: 0 });
+    expect(copy).toMatchObject({ entries: 99, skipped: 0, capped: 0 });
   });
 
-  it("the emptied entry is not the anchor: the rebuild still keeps every entry and reports nothing skipped", async () => {
+  it("the emptied entry is not the anchor: it is not listed, and the rebuild keeps every listed entry and reports nothing skipped", async () => {
     // Entry 900 004 is emptied; 900 003, its franchise's anchor, keeps the 60.
     const { original, copy, plan } = await roundTrip(poolEmptying(900_004, 900_003));
     const before = await shape(original.version);
     expect(before.memberships.filter((row) => row.series === 900_004)).toEqual([]);
-    expect(before.entries.find((row) => row.series === 900_004)?.franchise).toBe(900_003);
+    expect(before.entries.find((row) => row.series === 900_004)).toBeUndefined();
+    expect(before.entries.find((row) => row.series === 900_003)?.franchise).toBe(900_003);
+    expectEveryEntryHeld(before);
+    expect(original).toMatchObject({ entries: 99, skipped: 0 });
 
     expect(await shape(copy.version)).toEqual(before);
     expect(plan.skipped.byReason()).toEqual({});
-    expect(copy).toMatchObject({ entries: 100, skipped: 0 });
+    expect(copy).toMatchObject({ entries: 99, skipped: 0 });
+  });
+
+  it("a merge path through the emptied entry is grouped as one through an entry outside the top 100, before and after the round trip", async () => {
+    // A -SEQUEL- E -SEQUEL- h1 -SEQUEL- h2 -SEQUEL- B, with h1 and h2 outside the top 100. While E is
+    // listed, A, E and B are one franchise (two outside entries on E's path to B). E's members are all
+    // cut there, so E is not listed; the path from A to B then passes through three outside entries,
+    // more than FRANCHISE_MAX_HOPS, and A and B are two franchises, where B keeps its own six.
+    const [a, e, b, h1, h2] = [900_020, 900_021, 900_022, 950_001, 950_002];
+    const pool = standardPool();
+    pool.entries = pool.entries.map((entry) =>
+      entry.id === a
+        ? { ...entry, relations: [{ type: "SEQUEL", to: e }] }
+        : entry.id === e
+          ? { ...entry, relations: [{ type: "SEQUEL", to: h1 }] }
+          : entry,
+    );
+    pool.hops = [
+      { id: h1, relations: [{ type: "SEQUEL", to: h2 }] },
+      { id: h2, relations: [{ type: "SEQUEL", to: b }] },
+    ];
+    const extras: FixtureCharacter[] = Array.from({ length: 59 }, (_, i) => ({
+      id: 740_001 + i,
+      favourites: 1_000_000 + i,
+      in: [{ entry: a }],
+    }));
+    pool.characters.push(...extras, { id: 740_100, favourites: 2_000_000, in: [{ entry: b }] });
+
+    const { original, copy, plan } = await roundTrip(pool);
+    const before = await shape(original.version);
+    expect(before.entries.find((row) => row.series === e)).toBeUndefined();
+    expect(before.entries.find((row) => row.series === a)?.franchise).toBe(a);
+    expect(before.entries.find((row) => row.series === b)?.franchise).toBe(b);
+    expect(before.memberships.filter((row) => row.series === b)).toHaveLength(7);
+    expect(before.memberships.filter((row) => row.series === a)).toHaveLength(60);
+    expectEveryEntryHeld(before);
+    expect(original).toMatchObject({ entries: 99, skipped: 0 });
+
+    expect(await shape(copy.version)).toEqual(before);
+    expect(plan.skipped.byReason()).toEqual({});
+    expect(copy).toMatchObject({ entries: 99, skipped: 0, capped: 0 });
   });
 
   it("characters and tiers survive either way (the part of the round trip that does hold)", async () => {

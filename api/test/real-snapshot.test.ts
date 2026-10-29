@@ -1,8 +1,12 @@
 import { readFile } from "node:fs/promises";
-import { describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import type { App } from "../src/app.js";
+import { activateSnapshot } from "../src/domain/pool/activate.js";
 import { buildSnapshot } from "../src/domain/pool/build.js";
+import { exportSnapshot } from "../src/domain/pool/export.js";
 import { readSnapshotFile } from "../src/domain/pool/file.js";
-import { realSnapshotFile } from "./support.js";
+import { currentSnapshotId, deleteSnapshots } from "./pool-support.js";
+import { createTestApp, realSnapshotFile } from "./support.js";
 
 /**
  * The owner's first real snapshot (collection-packs.md §5.1.10), rebuilt from the file with and without
@@ -55,6 +59,43 @@ describe.skipIf(path === undefined)("the real snapshot of 2026-10-29", () => {
     }
     // Every character of the uncapped top 8 % stays in the pool.
     expect(removed.every((c) => c.favouritesRank > Math.round(5_173 * 0.08))).toBe(true);
+  });
+
+  describe("through the database", () => {
+    let app: App;
+    const snapshots: number[] = [];
+
+    beforeAll(async () => {
+      app = await createTestApp();
+      const current = await currentSnapshotId(app.db);
+      if (current !== null)
+        throw new Error(`snapshot ${current} is current; a previous test run left it behind`);
+    });
+    afterAll(async () => {
+      await deleteSnapshots(app.db, snapshots);
+      await app.close();
+    });
+
+    it("round-trips through --export: the rebuilt plan is the original, with nothing skipped or capped (§5.1.3)", async () => {
+      if (path === undefined) throw new Error("no file");
+      const { takenAt, input } = readSnapshotFile(await readFile(path, "utf8"));
+      const plan = buildSnapshot(input);
+      const activated = await activateSnapshot(app.db, plan, {
+        source: "file",
+        takenAt,
+        now: new Date(),
+        dryRun: false,
+      });
+      snapshots.push(activated.version);
+      const copy = buildSnapshot(readSnapshotFile(JSON.stringify(await exportSnapshot(app.db))).input);
+      expect(copy.entries).toEqual(plan.entries);
+      expect(copy.franchises).toEqual(plan.franchises);
+      expect(copy.edges).toEqual(plan.edges);
+      expect(copy.characters).toEqual(plan.characters);
+      expect(copy.tierCounts).toEqual(plan.tierCounts);
+      expect(copy.skipped.items).toBe(0);
+      expect(copy.capped).toBe(0);
+    });
   });
 
   it("leaves 20 franchises at exactly 60 members and none above, ONE PIECE among them", async () => {

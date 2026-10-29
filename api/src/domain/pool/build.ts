@@ -28,6 +28,7 @@ export class SnapshotRefused extends Error {
   }
 }
 
+/** A listed entry; its `popularityRank` is its position among the listed entries, which an export keeps. */
 export interface PlannedEntry extends Entry {
   franchiseId: number;
 }
@@ -54,7 +55,7 @@ export interface SnapshotPlan {
   characters: PlannedCharacter[];
   tierCounts: PerRarity;
   skipped: SkipTally;
-  /** Accepted characters the franchise cap left out of the pool entirely. */
+  /** Accepted characters the franchise cap left out of the pool entirely, those of the entries it emptied included. */
   capped: number;
   /** Per franchise id, the candidates it did not keep; only franchises that cut someone are listed. */
   cappedByFranchise: Map<number, number>;
@@ -118,6 +119,55 @@ export function capPerFranchise(
   return { characters: pool, capped: characters.length - pool.length, cappedByFranchise };
 }
 
+/** `characters` with only their memberships in `entryIds`; a character left with none is out. */
+function withinEntries(characters: readonly Candidate[], entryIds: ReadonlySet<number>): Candidate[] {
+  return characters.flatMap((character) => {
+    const memberships = new Map([...character.memberships].filter(([seriesId]) => entryIds.has(seriesId)));
+    return memberships.size === 0 ? [] : [{ ...character, memberships }];
+  });
+}
+
+interface SettledPool {
+  /** In popularity order, each ranked by its position among them. */
+  entries: Entry[];
+  franchises: Franchise[];
+  franchiseOf: Map<number, number>;
+  characters: Candidate[];
+  cappedByFranchise: Map<number, number>;
+}
+
+/**
+ * The listed entries, their franchises and the capped pool (collection-packs.md
+ * §5.1.6): an entry the cap leaves without a member is not listed, and the
+ * franchises and the cap are worked out again without it, where it only
+ * connects like an entry outside the top 100, until every listed entry keeps
+ * a member. So an emptied entry never anchors or titles a franchise, and an
+ * export, which holds only listed entries, rebuilds the same grouping. Each
+ * round lists fewer entries, so it ends.
+ */
+function settle(
+  accepted: readonly Entry[],
+  edges: readonly Edge[],
+  candidates: readonly Candidate[],
+  perFranchise: number,
+): SettledPool {
+  let listed = accepted;
+  for (;;) {
+    const entries = listed.map((entry, index) => ({ ...entry, popularityRank: index + 1 }));
+    const { franchises, franchiseOf } = buildFranchises(entries, edges);
+    const { characters, cappedByFranchise } = capPerFranchise(
+      withinEntries(candidates, new Set(entries.map((entry) => entry.id))),
+      franchiseOf,
+      perFranchise,
+    );
+    const withMembers = new Set(characters.flatMap((character) => [...character.memberships.keys()]));
+    if (entries.every((entry) => withMembers.has(entry.id))) {
+      return { entries, franchises, franchiseOf, characters, cappedByFranchise };
+    }
+    listed = entries.filter((entry) => withMembers.has(entry.id));
+  }
+}
+
 /**
  * Validates the pages, groups the entries into franchises, applies the
  * franchise cap, refuses a snapshot the game must not run on, and ranks
@@ -135,16 +185,15 @@ export function buildSnapshot(
     );
   }
   const validated = validate(input);
-  const { entries } = validated;
+  const { entries, franchises, franchiseOf, characters, cappedByFranchise } = settle(
+    validated.entries,
+    validated.edges,
+    validated.characters,
+    perFranchise,
+  );
   if (entries.length < SNAPSHOT_SERIES_MIN) {
     throw new SnapshotRefused(`Only ${entries.length} valid entries, fewer than ${SNAPSHOT_SERIES_MIN}.`);
   }
-  const { franchises, franchiseOf } = buildFranchises(entries, validated.edges);
-  const { characters, capped, cappedByFranchise } = capPerFranchise(
-    validated.characters,
-    franchiseOf,
-    perFranchise,
-  );
   if (characters.length < SNAPSHOT_CHARACTERS_MIN) {
     throw new SnapshotRefused(
       `Only ${characters.length} valid characters, fewer than ${SNAPSHOT_CHARACTERS_MIN}.`,
@@ -187,7 +236,7 @@ export function buildSnapshot(
     characters: planned,
     tierCounts: counts,
     skipped: validated.skipped,
-    capped,
+    capped: validated.characters.length - characters.length,
     cappedByFranchise,
     differingAppearances: validated.differingAppearances,
   };

@@ -459,6 +459,115 @@ describe("the franchise cap (collection-packs.md §5.1.3)", () => {
   });
 });
 
+describe("entries the cap empties (collection-packs.md §5.1.6)", () => {
+  /** `count` extras MAIN in `entry`, more favourited than any character of the standard pool. */
+  const stars = (entry: number, count: number, base: number): FixtureCharacter[] =>
+    extraCharacters(entry, count, (i) => 1_000_000 + i).map((c) => ({ ...c, id: c.id + base }));
+  const linked = (links: [number, number][]): FixturePool => {
+    const pool = standardPool();
+    pool.entries = pool.entries.map((entry) => {
+      const to = links
+        .filter(([from]) => from === entry.id)
+        .map(([, target]) => ({ type: "SEQUEL", to: target }));
+      return to.length === 0 ? entry : { ...entry, relations: to };
+    });
+    return pool;
+  };
+  const expectEveryEntryAndFranchiseHeld = (plan: ReturnType<typeof build>) => {
+    const held = new Set(plan.characters.flatMap((c) => c.memberships.map((m) => m.seriesId)));
+    expect(plan.entries.filter((entry) => !held.has(entry.id))).toEqual([]);
+    const franchiseOf = new Map(plan.entries.map((entry) => [entry.id, entry.franchiseId]));
+    const heldFranchises = new Set([...held].map((id) => franchiseOf.get(id)));
+    expect(plan.franchises.filter((franchise) => !heldFranchises.has(franchise.id))).toEqual([]);
+  };
+
+  it("does not list an emptied entry, so it cannot anchor or title its franchise, and ranks the rest among themselves", () => {
+    const pool = linked([[ENTRY, NEIGHBOUR]]);
+    pool.characters.push(...stars(NEIGHBOUR, 60, 0));
+    const plan = build(pool);
+    expect(plan.entries.map((entry) => entry.id)).not.toContain(ENTRY);
+    expect(plan.franchises.map((franchise) => franchise.id)).not.toContain(ENTRY);
+    expect(plan.entries[0]).toMatchObject({ id: NEIGHBOUR, popularityRank: 1, franchiseId: NEIGHBOUR });
+    expect(plan.franchises[0]).toEqual({ id: NEIGHBOUR, popularityRank: 1, entryIds: [NEIGHBOUR] });
+    expect(plan.entries.map((entry) => entry.popularityRank)).toEqual(
+      Array.from({ length: 99 }, (_, i) => i + 1),
+    );
+    // Entry 1's six leave with it, and entry 2's six are cut by entry 2: a cap, not a skip.
+    expect(plan.capped).toBe(12);
+    expect([...plan.cappedByFranchise]).toEqual([[NEIGHBOUR, 6]]);
+    expect(plan.skipped.items).toBe(0);
+    expectEveryEntryAndFranchiseHeld(plan);
+  });
+
+  it("ranks entries among the listed ones after a skipped entry too, so an export ranks them the same", () => {
+    const plan = build(withEntry(0, { title: "" }));
+    expect(plan.skipped.byReason()).toEqual({ "entry:title": 1 });
+    expect(plan.entries[0]).toMatchObject({ id: NEIGHBOUR, popularityRank: 1 });
+    expect(plan.entries.map((entry) => entry.popularityRank)).toEqual(
+      Array.from({ length: 99 }, (_, i) => i + 1),
+    );
+  });
+
+  it("still joins two entries through an emptied one within FRANCHISE_MAX_HOPS, counting it as outside the top 100", () => {
+    const [a, e, b] = [900_030, 900_031, 900_032];
+    const pool = linked([
+      [a, e],
+      [e, b],
+    ]);
+    pool.characters.push(...stars(a, 59, 0), ...stars(b, 1, 100));
+    const plan = build(pool);
+    expect(plan.entries.map((entry) => entry.id)).not.toContain(e);
+    expect(plan.franchises.find((franchise) => franchise.id === a)?.entryIds).toEqual([a, b]);
+    expectEveryEntryAndFranchiseHeld(plan);
+  });
+
+  it("splits two entries whose only path within FRANCHISE_MAX_HOPS ran through the emptied one, and caps each part again", () => {
+    // A - E - h1 - h2 - B: two outside entries from E to B, three from A once E is not listed.
+    const [a, e, b, h1, h2] = [900_020, 900_021, 900_022, 950_001, 950_002];
+    const pool = linked([
+      [a, e],
+      [e, h1],
+    ]);
+    pool.hops = [
+      { id: h1, relations: [{ type: "SEQUEL", to: h2 }] },
+      { id: h2, relations: [{ type: "SEQUEL", to: b }] },
+    ];
+    pool.characters.push(...stars(a, 59, 0), ...stars(b, 1, 100));
+    const input = readSnapshotFile(snapshotText(pool)).input;
+    // Precondition: while E is listed (no cap empties it), A, E and B are one franchise.
+    const uncapped = buildSnapshot(input, Infinity);
+    expect(uncapped.franchises.find((franchise) => franchise.id === a)?.entryIds).toEqual([a, e, b]);
+
+    const plan = buildSnapshot(input);
+    expect(plan.entries.map((entry) => entry.id)).not.toContain(e);
+    expect(plan.entries.find((entry) => entry.id === b)?.franchiseId).toBe(b);
+    // B alone keeps its six and its star; A alone keeps its 59 stars and its best original.
+    const members = (entry: number) =>
+      plan.characters.filter((c) => c.memberships.some((m) => m.seriesId === entry)).length;
+    expect(members(b)).toBe(7);
+    expect(members(a)).toBe(60);
+    expectEveryEntryAndFranchiseHeld(plan);
+  });
+
+  it("settles: building the plan's own entries and members again changes nothing", () => {
+    const pool = linked([[ENTRY, NEIGHBOUR]]);
+    pool.characters.push(...stars(NEIGHBOUR, 60, 0));
+    const first = build(pool);
+    const kept = new Set(first.characters.map((c) => c.id));
+    const listed = new Set(first.entries.map((entry) => entry.id));
+    const again = linked([[ENTRY, NEIGHBOUR]]);
+    again.characters = [...again.characters, ...stars(NEIGHBOUR, 60, 0)].filter((c) => kept.has(c.id));
+    again.entries = again.entries.filter((entry) => listed.has(entry.id));
+    again.hops = [{ id: ENTRY, relations: [{ type: "SEQUEL", to: NEIGHBOUR }] }];
+    const second = build(again);
+    expect(second.capped).toBe(0);
+    expect(second.skipped.items).toBe(0);
+    expect(second.entries).toEqual(first.entries);
+    expect(second.franchises).toEqual(first.franchises);
+    expect(second.characters).toEqual(first.characters);
+  });
+});
+
 describe("the visible-name rule (round 4, decision 7)", () => {
   const invisible = ["​", "­﻿", " ⁠ ", "‮", "‎‏", "⁡⁢⁣⁤"];
 

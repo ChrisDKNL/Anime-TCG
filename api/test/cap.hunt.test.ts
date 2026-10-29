@@ -31,8 +31,8 @@ import { createTestApp, testConfig } from "./support.js";
  *
  * Plan
  *  - Lead 1: the cap never leaves a franchise without members (every
- *    franchise is listed with total >= 1), and an entry it empties stays an
- *    entry of its franchise without breaking completion or packs.
+ *    franchise is listed with total >= 1), and an entry it empties is not
+ *    listed (§5.1.6), without breaking completion or packs.
  *  - Lead 2: crossover characters. X is cut by its primary (most popular)
  *    franchise and kept by another: in the pool once, only the keeping
  *    franchise's membership, primary moved there, counted there and only
@@ -51,10 +51,12 @@ import { createTestApp, testConfig } from "./support.js";
  *  - Y (40): MAIN in 900 001 and 900 002, both A;
  *  - Z (30): MAIN in 900 001 (A) and 900 060 (C);
  *  - V (10 000 000): MAIN in 900 001 (A) and 900 050 (B).
- * A has 12 + 60 + X + Y + Z + V = 76 candidates, keeps V and the 59 most
- * favourited extras and cuts 16; C has 6 + 60 + Z = 67 and keeps its 60 extras; B has
- * 6 + X + V = 8. Accepted 724, pool 703, capped 21 (A's 12 originals, C's 6,
- * extra 710 001, Y and Z). Entry 900 002 keeps no member.
+ * With both entries, A has 12 + 60 + X + Y + Z + V = 76 candidates and keeps
+ * V and the 59 most favourited extras, so entry 900 002 keeps no member and
+ * is not listed. A is then entry 900 001 alone: 6 + 60 + X + Y + Z + V = 70
+ * candidates, the same 60 kept, 10 cut. C has 6 + 60 + Z = 67 and keeps its
+ * 60 extras; B has 6 + X + V = 8. Accepted 724, pool 703, capped 21 (A's 12
+ * originals, C's 6, extra 710 001, Y and Z).
  */
 
 const BASE = 800_000;
@@ -146,17 +148,17 @@ describe("the franchise cap through the database, packs and the collection (PR #
     await app.close();
   });
 
-  it("reports the cap as the fixture works it out: 703 characters, 21 capped, A cut 16 and C cut 7", () => {
+  it("reports the cap as the fixture works it out: 703 characters, 21 capped, A cut 10 and C cut 7", () => {
     expect(capped).toMatchObject({
       characters: 703,
       capped: 21,
       cappedFranchises: 2,
       skipped: 0,
-      entries: 100,
+      entries: 99,
     });
     expect(capped.tierCounts).toEqual(tierCounts(703));
     const summary = new Map(capped.franchises.map((franchise) => [franchise.id, franchise]));
-    expect(summary.get(A)).toMatchObject({ entries: 2, characters: 60, capped: 16 });
+    expect(summary.get(A)).toMatchObject({ entries: 1, characters: 60, capped: 10 });
     expect(summary.get(B)).toMatchObject({ entries: 1, characters: 8, capped: 0 });
     expect(summary.get(C)).toMatchObject({ entries: 1, characters: 60, capped: 7 });
     expect(capped.franchises).toHaveLength(99);
@@ -247,12 +249,17 @@ describe("the franchise cap through the database, packs and the collection (PR #
       );
     });
 
-    it("keeps entry 900 002, which the cap emptied, as an entry of franchise A with no member", async () => {
+    it("does not list entry 900 002, which the cap emptied, and leaves A as entry 900 001 alone", async () => {
+      const entries = await app.db
+        .select({ series: poolSnapshotSeries.seriesId, rank: poolSnapshotSeries.popularityRank })
+        .from(poolSnapshotSeries)
+        .where(and(eq(poolSnapshotSeries.snapshotId, capped.version), eq(poolSnapshotSeries.franchiseId, A)));
+      expect(entries).toEqual([{ series: A, rank: 1 }]);
       const entry = await app.db
-        .select({ franchise: poolSnapshotSeries.franchiseId, rank: poolSnapshotSeries.popularityRank })
+        .select({ franchise: poolSnapshotSeries.franchiseId })
         .from(poolSnapshotSeries)
         .where(and(eq(poolSnapshotSeries.snapshotId, capped.version), eq(poolSnapshotSeries.seriesId, A2)));
-      expect(entry).toEqual([{ franchise: A, rank: 2 }]);
+      expect(entry).toEqual([]);
       const members = await app.db
         .select({ character: poolSnapshotMemberships.characterId })
         .from(poolSnapshotMemberships)
@@ -287,7 +294,7 @@ describe("the franchise cap through the database, packs and the collection (PR #
       expect(collection.completion.pool).toEqual({ owned: 3, total: 703 });
       const completion = new Map(collection.completion.franchises.map((row) => [row.franchiseId, row]));
       expect(completion.get(A)?.owned).toBe(0);
-      // A2 is no franchise of snapshot 2 (it merged into A), so it is named for the entry but has no completion row.
+      // Snapshot 2 does not list A2 (the cap emptied it), so it is named for the entry but has no completion row.
       expect(completion.has(A2)).toBe(false);
       expect(collection.franchises.map((ref) => ref.id)).toContain(A2);
     });
