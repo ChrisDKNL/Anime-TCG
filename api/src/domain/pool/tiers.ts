@@ -1,11 +1,12 @@
 import type { PerRarity } from "@anime-tcg/shared/api";
 import { PACK_SIZE } from "@anime-tcg/shared/economy";
-import { RARITIES, type Rarity, SHARE_SCALE, TIER_SHARE } from "@anime-tcg/shared/rarity";
+import { RARITIES, type Rarity, SHARE_SCALE, TIER_BAND } from "@anime-tcg/shared/rarity";
 
 /** One value per tier, filled tier by tier in rank order (a `PerRarity` when the values are counts). */
 export function perRarity<T>(value: (tier: Rarity) => T): Record<Rarity, T> {
   return {
     common: value("common"),
+    uncommon: value("uncommon"),
     rare: value("rare"),
     epic: value("epic"),
     legendary: value("legendary"),
@@ -18,8 +19,8 @@ const TOP_DOWN: readonly Rarity[] = [...RARITIES].reverse();
 
 /**
  * How many of `n` characters each tier holds (collection-packs.md §5.1.4).
- * The boundaries are cumulative, `round(n × cumulative share / SHARE_SCALE)`
- * half up, so the five counts always sum to `n` exactly.
+ * The boundaries are cumulative, `round(n × cumulative band / SHARE_SCALE)`
+ * half up, so the six counts always sum to `n` exactly.
  */
 export function tierCounts(n: number): PerRarity {
   if (!Number.isInteger(n) || n < 0) throw new RangeError(`${n} is not a character count`);
@@ -27,7 +28,7 @@ export function tierCounts(n: number): PerRarity {
   let cumulativeShare = 0;
   let previousBoundary = 0;
   for (const tier of TOP_DOWN) {
-    cumulativeShare += TIER_SHARE[tier];
+    cumulativeShare += TIER_BAND[tier];
     const boundary = Math.floor((n * cumulativeShare + SHARE_SCALE / 2) / SHARE_SCALE);
     counts.set(tier, boundary - previousBoundary);
     previousBoundary = boundary;

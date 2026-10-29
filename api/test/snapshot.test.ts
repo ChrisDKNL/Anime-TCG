@@ -145,7 +145,8 @@ describe("snapshot-pool against a local AniList stand-in (collection-packs.md §
     expect(await stagedPages()).toBe(0);
     expect(describeOutcome(outcome)).toEqual([
       `Snapshot ${outcome.summary.version} active: 100 entries in 99 franchises, 625 characters ` +
-        "(6 mythic, 25 legendary, 63 epic, 156 rare, 375 common); 0 skipped; 0 changed tier, 0 dropped, 625 added; " +
+        "(13 mythic, 37 legendary, 75 epic, 125 rare, 156 uncommon, 219 common); 0 skipped; 0 capped in 0 franchises; " +
+        "0 changed tier, 0 dropped, 625 added; " +
         `${FETCH_REQUESTS} AniList requests.`,
     ]);
   });
@@ -330,8 +331,8 @@ describe("snapshot-pool as a command", () => {
     snapshots.push(version);
     expect(result.stdout).toBe(
       `Snapshot ${version} active: 100 entries in 100 franchises, 600 characters ` +
-        "(6 mythic, 24 legendary, 60 epic, 150 rare, 360 common); " +
-        "0 skipped; 0 changed tier, 0 dropped, 600 added; read from a file.\n",
+        "(12 mythic, 36 legendary, 72 epic, 120 rare, 150 uncommon, 210 common); " +
+        "0 skipped; 0 capped in 0 franchises; 0 changed tier, 0 dropped, 600 added; read from a file.\n",
     );
     const [row] = await app.db.select().from(poolSnapshots).where(eq(poolSnapshots.id, version));
     expect(row).toMatchObject({
@@ -348,12 +349,28 @@ describe("snapshot-pool as a command", () => {
       favourites: 50,
       in: [{ entry: 900_003 }, { entry: 900_001, role: "SUPPORTING" }],
     };
+    // Entry 20's franchise is capped: 6 + 60 candidates, the 6 least favourited cut. 710 099 is cut there
+    // and kept by entry 30's franchise, so the export must hold it with only that membership.
+    for (let i = 1; i <= 60; i += 1) {
+      source.characters.push({ id: 710_000 + i, favourites: 100_000 + i, in: [{ entry: 900_020 }] });
+    }
+    source.characters.push({
+      id: 710_099,
+      favourites: 2,
+      in: [{ entry: 900_020 }, { entry: 900_030, role: "SUPPORTING" }],
+    });
     const original = await snapshotFromFile(app.db, snapshotText(source), { dryRun: false }, silent);
     snapshots.push(original.summary.version);
+    expect(original.summary).toMatchObject({ capped: 6, cappedFranchises: 1 });
+    expect(original.summary.franchises.find((franchise) => franchise.id === 900_020)).toMatchObject({
+      characters: 60,
+      capped: 7,
+    });
     const exported = await run(["--export"]);
     expect(exported.code).toBe(0);
     const copy = await run(["--stdin"], exported.stdout);
     expect(copy.code).toBe(0);
+    expect(copy.stdout).toContain("; 0 capped in 0 franchises; ");
     const version = versionIn(copy.stdout);
     snapshots.push(version);
 
@@ -393,6 +410,11 @@ describe("snapshot-pool as a command", () => {
     expect(await poolOf(version)).toEqual(first);
     expect(first.entries.find((row) => row.series === 900_010)?.franchise).toBe(900_001);
     expect(first.characters.find((row) => row.id === 800_001)?.primary).toBe(900_001);
+    expect(first.memberships.filter((row) => row.character === 710_099)).toEqual([
+      { character: 710_099, series: 900_030, role: "supporting" },
+    ]);
+    expect(first.characters.find((row) => row.id === 710_099)?.primary).toBe(900_030);
+    expect(first.memberships.filter((row) => row.series === 900_020)).toHaveLength(60);
     const file = JSON.parse(exported.stdout) as { relations: unknown[] };
     expect(file.relations).toHaveLength(1);
     expect(await exportSnapshot(app.db)).toMatchObject({

@@ -44,7 +44,15 @@ function logBuild(log: FetchLog, plan: SnapshotPlan): void {
 
 function logActivation(log: FetchLog, summary: ActivationSummary, startedAt: number): void {
   const { franchises, ...rest } = summary;
-  log.info({ ...rest, franchises: franchises.length, durationMs: Date.now() - startedAt }, "snapshot built");
+  const cappedByFranchise = Object.fromEntries(
+    franchises
+      .filter((franchise) => franchise.capped > 0)
+      .map((franchise) => [franchise.id, franchise.capped]),
+  );
+  log.info(
+    { ...rest, franchises: franchises.length, cappedByFranchise, durationMs: Date.now() - startedAt },
+    "snapshot built",
+  );
 }
 
 export interface SnapshotOutcome {
@@ -113,8 +121,9 @@ export function describeOutcome({ summary, requests }: SnapshotOutcome): string[
   const t = summary.tierCounts;
   const body =
     `${summary.entries} entries in ${summary.franchises.length} franchises, ${summary.characters} characters ` +
-    `(${t.mythic} mythic, ${t.legendary} legendary, ${t.epic} epic, ${t.rare} rare, ${t.common} common); ` +
-    `${summary.skipped} skipped; ${summary.changedTier} changed tier, ${summary.dropped} dropped, ${summary.added} added; ` +
+    `(${t.mythic} mythic, ${t.legendary} legendary, ${t.epic} epic, ${t.rare} rare, ${t.uncommon} uncommon, ${t.common} common); ` +
+    `${summary.skipped} skipped; ${summary.capped} capped in ${summary.cappedFranchises} franchises; ` +
+    `${summary.changedTier} changed tier, ${summary.dropped} dropped, ${summary.added} added; ` +
     (requests === null ? "read from a file." : `${requests} AniList requests.`);
   if (!summary.dryRun) return [`Snapshot ${summary.version} active: ${body}`];
   return [
@@ -122,7 +131,8 @@ export function describeOutcome({ summary, requests }: SnapshotOutcome): string[
     `Franchises (${summary.franchisesMerged} merged and ${summary.franchisesSplit} split since the current snapshot):`,
     ...summary.franchises.map(
       (f) =>
-        `  ${f.popularityRank}. ${JSON.stringify(f.title)} (${f.id}): ${f.entries} ${f.entries === 1 ? "entry" : "entries"}, ${f.characters} characters`,
+        `  ${f.popularityRank}. ${JSON.stringify(f.title)} (${f.id}): ${f.entries} ${f.entries === 1 ? "entry" : "entries"}, ${f.characters} characters` +
+        (f.capped === 0 ? "" : ` (${f.capped} capped)`),
     ),
   ];
 }

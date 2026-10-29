@@ -32,6 +32,8 @@ export interface FranchiseSummary {
   popularityRank: number;
   entries: number;
   characters: number;
+  /** Candidates the franchise cap did not keep in this franchise. */
+  capped: number;
 }
 
 /** What the command prints and logs about an activation (collection-packs.md §5.8, §7.1). */
@@ -44,6 +46,9 @@ export interface ActivationSummary {
   tierCounts: PerRarity;
   skipped: number;
   skippedByReason: Record<string, number>;
+  /** Accepted characters the franchise cap left out of the pool, and the franchises that cut any. */
+  capped: number;
+  cappedFranchises: number;
   changedTier: number;
   dropped: number;
   added: number;
@@ -122,11 +127,14 @@ function summarise(
       popularityRank: franchise.popularityRank,
       entries: franchise.entryIds.length,
       characters: membersOf.get(franchise.id)?.size ?? 0,
+      capped: plan.cappedByFranchise.get(franchise.id) ?? 0,
     })),
     characters: plan.characters.length,
     tierCounts: plan.tierCounts,
     skipped: plan.skipped.items,
     skippedByReason: plan.skipped.byReason(),
+    capped: plan.capped,
+    cappedFranchises: plan.cappedByFranchise.size,
     changedTier,
     dropped: [...previous.tiers.keys()].filter((id) => !current.has(id)).length,
     added: [...current.keys()].filter((id) => !previous.tiers.has(id)).length,

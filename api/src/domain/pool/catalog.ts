@@ -28,7 +28,12 @@ export interface CurrentSnapshot {
 
 export async function currentSnapshot(db: Queryable): Promise<CurrentSnapshot | null> {
   const [row] = await db
-    .select({ id: poolSnapshots.id, takenAt: poolSnapshots.takenAt, tierCounts: poolSnapshots.tierCounts })
+    .select({
+      id: poolSnapshots.id,
+      takenAt: poolSnapshots.takenAt,
+      characterCount: poolSnapshots.characterCount,
+      tierCounts: poolSnapshots.tierCounts,
+    })
     .from(poolSnapshots)
     .where(eq(poolSnapshots.isCurrent, true))
     .limit(1);
@@ -36,7 +41,7 @@ export async function currentSnapshot(db: Queryable): Promise<CurrentSnapshot | 
   const sizes = new Map(RARITIES.map((tier, index) => [tier, row.tierCounts[index] ?? 0]));
   return {
     id: row.id,
-    info: { version: row.id, takenAt: row.takenAt.toISOString() },
+    info: { version: row.id, takenAt: row.takenAt.toISOString(), characterCount: row.characterCount },
     tierSizes: perRarity((tier) => sizes.get(tier) ?? 0),
   };
 }
@@ -62,14 +67,15 @@ export interface DescribedCharacters {
 interface Placement {
   snapshotId: number;
   tier: Rarity;
+  favouritesRank: number;
   primarySeriesId: number;
 }
 
 /**
  * Each character as the game shows it now: the newest display strings, and
- * its franchises (primary first) and tier from the current snapshot, or,
- * for a character the current snapshot dropped, the franchises of the newest
- * snapshot that held it, with no tier.
+ * its franchises (primary first), tier and favourites rank from the current
+ * snapshot, or, for a character the current snapshot dropped, the
+ * franchises of the newest snapshot that held it, with no tier and no rank.
  */
 export async function describeCharacters(
   db: Queryable,
@@ -94,6 +100,7 @@ export async function describeCharacters(
       characterId: poolSnapshotCharacters.characterId,
       snapshotId: poolSnapshotCharacters.snapshotId,
       tier: poolSnapshotCharacters.tier,
+      favouritesRank: poolSnapshotCharacters.favouritesRank,
       primarySeriesId: poolSnapshotCharacters.primarySeriesId,
     })
     .from(poolSnapshotCharacters)
@@ -123,6 +130,7 @@ export async function describeCharacters(
       imageUrl: row.imageUrl,
       franchiseIds: franchises,
       tier: inCurrentSnapshot ? placement.tier : null,
+      rank: inCurrentSnapshot ? placement.favouritesRank : null,
       inCurrentSnapshot,
     });
   }

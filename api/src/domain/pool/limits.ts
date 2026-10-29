@@ -8,10 +8,20 @@
 export const SNAPSHOT_SERIES = 100;
 /** A snapshot with fewer valid entries is refused. */
 export const SNAPSHOT_SERIES_MIN = 90;
-/** A snapshot with fewer valid characters is refused: the smallest pool whose Mythic tier fills a pack. */
+/**
+ * A capped pool with fewer characters is refused. A sanity floor: the tier
+ * rule alone needs 225 (every tier a full pack), and a real snapshot holds
+ * thousands, so fewer than this means the fetch or the file is broken.
+ */
 export const SNAPSHOT_CHARACTERS_MIN = 500;
-/** A snapshot with more is refused. */
+/** A capped pool with more is refused; it bounds every response of the game. */
 export const SNAPSHOT_CHARACTERS_MAX = 6_000;
+/**
+ * Each franchise keeps its most-favourited characters up to this many
+ * (spec §5.1.3, the owner's cap), so no one franchise floods the packs.
+ * Applied at build time: a snapshot file is never changed by it.
+ */
+export const SNAPSHOT_CHARACTERS_PER_FRANCHISE = 60;
 /** The largest `--stdin` file, in bytes. */
 export const SNAPSHOT_FILE_MAX = 64 * 1024 * 1024;
 

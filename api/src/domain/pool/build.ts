@@ -6,10 +6,12 @@ import {
   FRANCHISE_MAX_REQUESTS,
   SNAPSHOT_CHARACTERS_MAX,
   SNAPSHOT_CHARACTERS_MIN,
+  SNAPSHOT_CHARACTERS_PER_FRANCHISE,
   SNAPSHOT_SERIES_MIN,
 } from "./limits.js";
 import { assignTiers, shortTier, tierCounts } from "./tiers.js";
 import {
+  type Candidate,
   type Edge,
   type Entry,
   type Role,
@@ -38,7 +40,7 @@ export interface PlannedCharacter {
   favourites: number;
   favouritesRank: number;
   tier: Rarity;
-  /** The most popular entry it is MAIN or SUPPORTING in. */
+  /** The most popular entry it is MAIN or SUPPORTING in, among the franchises that kept it. */
   primarySeriesId: number;
   memberships: { seriesId: number; role: Role }[];
 }
@@ -52,25 +54,97 @@ export interface SnapshotPlan {
   characters: PlannedCharacter[];
   tierCounts: PerRarity;
   skipped: SkipTally;
+  /** Accepted characters the franchise cap left out of the pool entirely. */
+  capped: number;
+  /** Per franchise id, the candidates it did not keep; only franchises that cut someone are listed. */
+  cappedByFranchise: Map<number, number>;
   differingAppearances: number;
 }
 
+/** Most favourited first, ties by AniList id ascending: the rank rule of §5.1.4, which the cap shares. */
+const byFavourites = (a: Candidate, b: Candidate) => b.favourites - a.favourites || a.id - b.id;
+
+export interface CappedPool {
+  /** The characters at least one franchise kept, each with only the memberships of the franchises that kept it. */
+  characters: Candidate[];
+  capped: number;
+  cappedByFranchise: Map<number, number>;
+}
+
 /**
- * Validates the pages, refuses a snapshot the game must not run on, and
- * builds its franchises and tiers. Refusal changes nothing: it happens
- * before any write.
+ * The franchise cap of collection-packs.md §5.1.3: each franchise keeps its
+ * `perFranchise` most-favourited candidates (the accepted characters MAIN or
+ * SUPPORTING in one of its entries), and a character stays in the pool when
+ * some franchise keeps it, with the memberships of the franchises that did.
+ * Idempotent: no franchise of the pool it returns has more than
+ * `perFranchise` members, so capping that pool again changes nothing.
  */
-export function buildSnapshot(input: SnapshotInput): SnapshotPlan {
+export function capPerFranchise(
+  characters: readonly Candidate[],
+  franchiseOf: ReadonlyMap<number, number>,
+  perFranchise: number = SNAPSHOT_CHARACTERS_PER_FRANCHISE,
+): CappedPool {
+  const franchiseOfEntry = (seriesId: number) => franchiseOf.get(seriesId) ?? seriesId;
+  const candidatesOf = new Map<number, Candidate[]>();
+  for (const character of characters) {
+    for (const franchiseId of new Set([...character.memberships.keys()].map(franchiseOfEntry))) {
+      const list = candidatesOf.get(franchiseId) ?? [];
+      list.push(character);
+      candidatesOf.set(franchiseId, list);
+    }
+  }
+
+  const keptBy = new Map<number, Set<number>>();
+  const cappedByFranchise = new Map<number, number>();
+  for (const [franchiseId, candidates] of candidatesOf) {
+    const kept = [...candidates].sort(byFavourites).slice(0, perFranchise);
+    for (const character of kept) {
+      const franchises = keptBy.get(character.id) ?? new Set<number>();
+      franchises.add(franchiseId);
+      keptBy.set(character.id, franchises);
+    }
+    if (candidates.length > kept.length) cappedByFranchise.set(franchiseId, candidates.length - kept.length);
+  }
+
+  const pool: Candidate[] = [];
+  for (const character of characters) {
+    const franchises = keptBy.get(character.id);
+    if (franchises === undefined) continue;
+    const memberships = new Map(
+      [...character.memberships].filter(([seriesId]) => franchises.has(franchiseOfEntry(seriesId))),
+    );
+    pool.push({ ...character, memberships });
+  }
+  return { characters: pool, capped: characters.length - pool.length, cappedByFranchise };
+}
+
+/**
+ * Validates the pages, groups the entries into franchises, applies the
+ * franchise cap, refuses a snapshot the game must not run on, and ranks
+ * and tiers the capped pool. Refusal changes nothing: it happens before any
+ * write. `perFranchise` is the cap; another cap is a rebuild from the same
+ * pages, which the snapshot file keeps unchanged.
+ */
+export function buildSnapshot(
+  input: SnapshotInput,
+  perFranchise: number = SNAPSHOT_CHARACTERS_PER_FRANCHISE,
+): SnapshotPlan {
   if (input.relations.length > FRANCHISE_MAX_REQUESTS) {
     throw new SnapshotRefused(
       `The franchise hops needed ${input.relations.length} relation requests, more than ${FRANCHISE_MAX_REQUESTS}.`,
     );
   }
   const validated = validate(input);
-  const { entries, characters } = validated;
+  const { entries } = validated;
   if (entries.length < SNAPSHOT_SERIES_MIN) {
     throw new SnapshotRefused(`Only ${entries.length} valid entries, fewer than ${SNAPSHOT_SERIES_MIN}.`);
   }
+  const { franchises, franchiseOf } = buildFranchises(entries, validated.edges);
+  const { characters, capped, cappedByFranchise } = capPerFranchise(
+    validated.characters,
+    franchiseOf,
+    perFranchise,
+  );
   if (characters.length < SNAPSHOT_CHARACTERS_MIN) {
     throw new SnapshotRefused(
       `Only ${characters.length} valid characters, fewer than ${SNAPSHOT_CHARACTERS_MIN}.`,
@@ -87,7 +161,6 @@ export function buildSnapshot(input: SnapshotInput): SnapshotPlan {
     );
   }
 
-  const { franchises, franchiseOf } = buildFranchises(entries, validated.edges);
   const rankOf = new Map(entries.map((entry) => [entry.id, entry.popularityRank]));
   const planned = assignTiers(characters).map((character): PlannedCharacter => {
     const memberships = [...character.memberships].map(([seriesId, role]) => ({ seriesId, role }));
@@ -114,6 +187,8 @@ export function buildSnapshot(input: SnapshotInput): SnapshotPlan {
     characters: planned,
     tierCounts: counts,
     skipped: validated.skipped,
+    capped,
+    cappedByFranchise,
     differingAppearances: validated.differingAppearances,
   };
 }

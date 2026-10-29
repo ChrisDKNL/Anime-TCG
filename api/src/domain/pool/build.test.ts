@@ -35,6 +35,20 @@ function withCharacter(index: number, change: Partial<FixtureCharacter>): Fixtur
 const ENTRY = 900_001;
 const NEIGHBOUR = 900_002;
 const CHARACTER = 800_001;
+const EXTRA = 700_000;
+
+/** `count` more characters MAIN in `entry`, ids `EXTRA + 1 ...`, with the favourites `favourites(i)` gives. */
+function extraCharacters(
+  entry: number,
+  count: number,
+  favourites: (i: number) => number,
+): FixtureCharacter[] {
+  return Array.from({ length: count }, (_, i) => ({
+    id: EXTRA + i + 1,
+    favourites: favourites(i),
+    in: [{ entry }],
+  }));
+}
 
 describe("buildSnapshot from a good pool", () => {
   it("keeps every entry and character, in one franchise each, with the tier split of §5.1.4", () => {
@@ -304,14 +318,29 @@ describe("refusals (collection-packs.md §5.1.7 step 1)", () => {
     expect(() => build(standardPool({ characters: 499 }))).toThrow(
       "Only 499 valid characters, fewer than 500.",
     );
-    expect(build(standardPool({ characters: 500 })).tierCounts.mythic).toBe(5);
+    expect(build(standardPool({ characters: 500 })).tierCounts.mythic).toBe(10);
   });
 
-  it("refuses more than SNAPSHOT_CHARACTERS_MAX and accepts exactly that many", () => {
-    expect(() => build(standardPool({ characters: 6_001 }))).toThrow(
-      "6001 valid characters, more than 6000.",
-    );
-    expect(build(standardPool({ characters: 6_000 })).characters).toHaveLength(6_000);
+  it("refuses a capped pool of more than SNAPSHOT_CHARACTERS_MAX and accepts exactly that many", () => {
+    const input = (characters: number) => readSnapshotFile(snapshotText(standardPool({ characters }))).input;
+    // Without the cap, 6 001 accepted characters are 6 001 in the pool; with it, no file reaches the refusal:
+    // 100 entries are at most 100 franchises of at most 60.
+    expect(() => buildSnapshot(input(6_001), Infinity)).toThrow("6001 valid characters, more than 6000.");
+    expect(buildSnapshot(input(6_000), Infinity).characters).toHaveLength(6_000);
+    const capped = buildSnapshot(input(6_001));
+    expect(capped.characters).toHaveLength(6_000);
+    expect(capped.capped).toBe(1);
+  });
+
+  it("counts the minimum on the capped pool, not on the accepted characters", () => {
+    // 444 + 100 = 544 accepted, but entry 1's franchise of 105 keeps 60: 499 in the pool. 445 gives 500.
+    const crowded = (base: number) => {
+      const pool = standardPool({ characters: base });
+      pool.characters.push(...extraCharacters(ENTRY, 100, () => 1));
+      return pool;
+    };
+    expect(() => build(crowded(444))).toThrow("Only 499 valid characters, fewer than 500.");
+    expect(build(crowded(445)).characters).toHaveLength(500);
   });
 
   it("refuses hops that needed more than FRANCHISE_MAX_REQUESTS relation requests", () => {
@@ -320,5 +349,184 @@ describe("refusals (collection-packs.md §5.1.7 step 1)", () => {
     expect(() => build(pool)).toThrow("needed 41 relation requests, more than 40");
     pool.hops = pool.hops.slice(0, 40 * 50);
     expect(build(pool).entries).toHaveLength(100);
+  });
+});
+
+describe("the franchise cap (collection-packs.md §5.1.3)", () => {
+  const crowd = (count: number, favourites: (i: number) => number) => {
+    const pool = standardPool();
+    pool.characters.push(...extraCharacters(ENTRY, count, favourites));
+    return pool;
+  };
+  const membersPerFranchise = (plan: ReturnType<typeof build>) => {
+    const franchiseOf = new Map(plan.entries.map((entry) => [entry.id, entry.franchiseId]));
+    const members = new Map<number, Set<number>>();
+    for (const character of plan.characters) {
+      for (const { seriesId } of character.memberships) {
+        const id = franchiseOf.get(seriesId) ?? seriesId;
+        members.set(id, (members.get(id) ?? new Set<number>()).add(character.id));
+      }
+    }
+    return members;
+  };
+
+  it("keeps a franchise of 61 candidates' 60 most favourited and drops the 61st", () => {
+    // Entry 1 holds 6 characters of the standard pool; 55 more with 100..154 favourites make 61.
+    const plan = build(crowd(55, (i) => 100 + i));
+    const ids = plan.characters.map((character) => character.id);
+    expect(ids).not.toContain(EXTRA + 1);
+    expect(ids).toContain(EXTRA + 2);
+    expect(plan.characters).toHaveLength(600 + 55 - 1);
+    expect(plan.capped).toBe(1);
+    expect([...plan.cappedByFranchise]).toEqual([[ENTRY, 1]]);
+    expect(plan.skipped.items).toBe(0);
+  });
+
+  it("keeps the lower id when equal favourites straddle the 60th place", () => {
+    const plan = build(crowd(55, () => 7));
+    const ids = plan.characters.map((character) => character.id);
+    expect(ids).toContain(EXTRA + 54);
+    expect(ids).not.toContain(EXTRA + 55);
+  });
+
+  it("keeps every member of a franchise of 60 or fewer", () => {
+    const plan = build(crowd(54, (i) => i));
+    expect(plan.characters).toHaveLength(654);
+    expect(plan.capped).toBe(0);
+    expect(plan.cappedByFranchise.size).toBe(0);
+  });
+
+  it("keeps a character one franchise cuts and another keeps, with only the keeping franchise's memberships and primary", () => {
+    const pool = crowd(54, (i) => 100 + i);
+    // The 61st of entry 1's franchise (the least favourited there), and one of seven in entry 2's.
+    pool.characters.push({
+      id: 799_999,
+      favourites: 50,
+      in: [
+        { entry: ENTRY, role: "MAIN" },
+        { entry: NEIGHBOUR, role: "SUPPORTING" },
+      ],
+    });
+    const plan = build(pool);
+    const crossover = plan.characters.find((character) => character.id === 799_999);
+    expect(crossover?.memberships).toEqual([{ seriesId: NEIGHBOUR, role: "supporting" }]);
+    expect(crossover?.primarySeriesId).toBe(NEIGHBOUR);
+    expect(plan.capped).toBe(0);
+    expect([...plan.cappedByFranchise]).toEqual([[ENTRY, 1]]);
+  });
+
+  it("caps a franchise of several entries as one, so no franchise has more than 60 members", () => {
+    const pool = withEntry(0, { relations: [{ type: "SEQUEL", to: NEIGHBOUR }] });
+    const second = pool.entries[1];
+    if (second === undefined) throw new Error("fixture too small");
+    pool.entries[1] = { ...second, relations: [{ type: "SIDE_STORY", to: 900_003 }] };
+    pool.characters.push(
+      ...extraCharacters(ENTRY, 40, (i) => i),
+      ...extraCharacters(900_003, 40, (i) => 40 + i).map((c) => ({ ...c, id: c.id + 1_000 })),
+    );
+    const plan = build(pool);
+    const members = membersPerFranchise(plan);
+    expect(members.get(ENTRY)?.size).toBe(60);
+    expect(Math.max(...[...members.values()].map((set) => set.size))).toBeLessThanOrEqual(60);
+    // Three entries of 6, plus 80: 98 candidates, 38 cut, the least favourited (EXTRA + 1 .. EXTRA + 38).
+    expect(plan.cappedByFranchise.get(ENTRY)).toBe(38);
+    expect(plan.characters.map((c) => c.id)).not.toContain(EXTRA + 38);
+    expect(plan.characters.map((c) => c.id)).toContain(EXTRA + 39);
+  });
+
+  it("ranks and tiers the capped pool: ranks 1 to N without gaps and §5.1.4's split of N", () => {
+    const plan = build(crowd(100, (i) => 10_000 + i));
+    const n = plan.characters.length;
+    // Entry 1's franchise: 6 + 100 candidates, 60 kept, 46 cut.
+    expect(n).toBe(600 + 100 - 46);
+    expect(plan.tierCounts).toEqual(tierCounts(n));
+    expect(plan.characters.map((c) => c.favouritesRank).sort((a, b) => a - b)).toEqual(
+      Array.from({ length: n }, (_, i) => i + 1),
+    );
+    // The 60 extras kept are the most favourited of the whole pool, so they hold ranks 1..60.
+    const top = plan.characters.filter((c) => c.favouritesRank <= 60).map((c) => c.id);
+    expect(top.every((id) => id > EXTRA + 40 && id <= EXTRA + 100)).toBe(true);
+  });
+
+  it("is idempotent: capping the capped pool changes nothing", () => {
+    const first = build(crowd(100, (i) => i));
+    const kept = new Set(first.characters.map((c) => c.id));
+    const again = crowd(100, (i) => i);
+    again.characters = again.characters.filter((c) => kept.has(c.id));
+    const second = build(again);
+    expect(second.capped).toBe(0);
+    expect(second.characters).toEqual(first.characters);
+  });
+});
+
+describe("the visible-name rule (round 4, decision 7)", () => {
+  const invisible = ["​", "­﻿", " ⁠ ", "‮", "‎‏", "⁡⁢⁣⁤"];
+
+  it.each(invisible.map((name) => [JSON.stringify(name), name]))(
+    "skips a character whose name %s has no visible character, as character:name",
+    (_label, name) => {
+      const plan = build(withCharacter(0, { name }));
+      expect(plan.skipped.byReason()).toEqual({ "character:name": 1 });
+      expect(plan.characters.map((c) => c.id)).not.toContain(CHARACTER);
+    },
+  );
+
+  it.each(invisible.map((native) => [JSON.stringify(native), native]))(
+    "skips a character whose native name %s has no visible character, rather than storing no native name",
+    (_label, native) => {
+      const plan = build(withCharacter(0, { native }));
+      expect(plan.skipped.byReason()).toEqual({ "character:name": 1 });
+    },
+  );
+
+  it("accepts visible letters among zero-width and direction characters, stored as sent apart from the trim", () => {
+    const name = " Ka​to‌‍ri⁠ ";
+    const native = "‮カトリ​";
+    const plan = build(withCharacter(0, { name, native }));
+    expect(plan.skipped.items).toBe(0);
+    expect(plan.characters.find((c) => c.id === CHARACTER)).toMatchObject({
+      name: name.trim(),
+      nameNative: native,
+    });
+  });
+
+  it("stores a native name that is empty after the trim as no native name", () => {
+    const plan = build(withCharacter(0, { native: "   " }));
+    expect(plan.characters.find((c) => c.id === CHARACTER)?.nameNative).toBeNull();
+  });
+});
+
+describe("canonical image URLs only (§5.1.6)", () => {
+  const refused: [string, string][] = [
+    ["an upper-case host", "https://S4.ANILIST.CO/file/a.png"],
+    ["a percent-encoded host", "https://s4%2Eanilist.co/file/a.png"],
+    ["the default port", "https://s4.anilist.co:443/file/a.png"],
+    ["backslashes", "https:\\\\s4.anilist.co\\file\\a.png"],
+    ["one slash after the scheme", "https:/s4.anilist.co/file/a.png"],
+    ["no slash after the scheme", "https:s4.anilist.co/file/a.png"],
+    ["three slashes after the scheme", "https:///s4.anilist.co/file/a.png"],
+    ["a full-width letter in the host", "https://ｓ4.anilist.co/a.png"],
+    ["an ideographic full stop in the host", "https://s4。anilist.co/a.png"],
+    ["a zero-width space in the host", "https://s4.anilist.co​/a.png"],
+    ["a soft hyphen in the host", "https://s4.ani­list.co/a.png"],
+    ["a trailing-dot host", "https://s4.anilist.co./a.png"],
+    ["no path", "https://s4.anilist.co"],
+    ["a path the parser would percent-encode", "https://s4.anilist.co/file/é.png"],
+    ["a dot segment the parser would remove", "https://s4.anilist.co/file/../a.png"],
+    ["a C1 control character", "https://s4.anilist.co/a\u0085.png"],
+  ];
+
+  it.each(refused)("skips an image URL with %s as character:image", (_label, image) => {
+    const plan = build(withCharacter(0, { image }));
+    expect(plan.skipped.byReason()).toEqual({ "character:image": 1 });
+    expect(plan.characters.map((c) => c.id)).not.toContain(CHARACTER);
+  });
+
+  it("accepts AniList's own form, which is already canonical", () => {
+    const image = "https://s4.anilist.co/file/anilistcdn/character/large/b40-abc.png";
+    expect(new URL(image).href).toBe(image);
+    const plan = build(withCharacter(0, { image }));
+    expect(plan.skipped.items).toBe(0);
+    expect(plan.characters.find((c) => c.id === CHARACTER)?.imageUrl).toBe(image);
   });
 });

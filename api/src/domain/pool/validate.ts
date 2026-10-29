@@ -102,14 +102,15 @@ function isRelationType(value: string): value is Edge["relationType"] {
   return RELATION_TYPES.has(value);
 }
 
-/** Whitespace or a C0/DEL control character anywhere: nothing a browser would have to repair in a URL it loads. */
-function hasSpaceOrControl(text: string): boolean {
-  if (/\s/u.test(text)) return true;
-  for (let i = 0; i < text.length; i += 1) {
-    const code = text.charCodeAt(i);
-    if (code < 0x20 || code === 0x7f) return true;
-  }
-  return false;
+/** Whitespace, a control character (C0, DEL, C1) or a backslash anywhere: what a URL served as is may not hold. */
+const SPACE_CONTROL_OR_BACKSLASH = /[\s\p{Cc}\\]/u;
+
+/** Whitespace and Unicode format characters (General Category Cf): zero-width spaces, direction marks, BOMs, soft hyphens. */
+const INVISIBLE = /[\s\p{Cf}]/gu;
+
+/** At least one character is left once every whitespace and format character is removed (round 4, decision 7). */
+function hasVisibleCharacter(text: string): boolean {
+  return text.replace(INVISIBLE, "") !== "";
 }
 
 function hasNul(...values: (string | null | undefined)[]): boolean {
@@ -126,20 +127,36 @@ function optionalText(value: string | null, max: number): string | null | undefi
 }
 
 /**
- * An https URL on exactly the image host, no userinfo, no port, nothing the
- * browser would have to repair, and of bounded length: it is served with
- * every card, so it is held to a limit like the names are.
+ * A name that is acceptable: trimmed, 1 to `max` characters, and with a
+ * visible character. Null when there is no name at all; `undefined` when it
+ * breaks a rule, which the caller rejects. The test only decides
+ * acceptance: the string kept is the trimmed one, format characters and all.
+ */
+function visibleText(value: string | null, max: number): string | null | undefined {
+  const trimmed = optionalText(value, max);
+  if (trimmed === null || trimmed === undefined) return trimmed;
+  return hasVisibleCharacter(trimmed) ? trimmed : undefined;
+}
+
+/**
+ * An image URL accepted only when it is already canonical (spec §5.1.6):
+ * the WHATWG parser would serialise it to exactly the same string, so the
+ * URL served, the URL the CSP judges and the URL the browser loads are one
+ * string, and nothing is repaired or rewritten on the way. Besides that: of
+ * bounded length (it is served with every card), https on exactly the image
+ * host, and no port, userinfo, whitespace, control character or backslash.
  */
 export function acceptableImageUrl(raw: string | null): boolean {
-  if (raw === null || raw.length > IMAGE_URL_MAX || hasSpaceOrControl(raw) || !URL.canParse(raw))
-    return false;
+  if (raw === null || raw.length > IMAGE_URL_MAX || SPACE_CONTROL_OR_BACKSLASH.test(raw)) return false;
+  if (!URL.canParse(raw)) return false;
   const url = new URL(raw);
   return (
+    url.href === raw &&
     url.protocol === "https:" &&
     url.hostname === IMAGE_HOST &&
+    url.port === "" &&
     url.username === "" &&
-    url.password === "" &&
-    url.port === ""
+    url.password === ""
   );
 }
 
@@ -178,9 +195,10 @@ function characterRejection(
   if (hasNul(node.name.full, node.name.native, node.image?.large, edge.role)) {
     return { reason: "nul", path: "node.name" };
   }
-  const name = optionalText(node.name.full, NAME_MAX);
+  const name = visibleText(node.name.full, NAME_MAX);
   if (name === null || name === undefined) return { reason: "name", path: "node.name.full" };
-  const nameNative = optionalText(node.name.native, NAME_MAX);
+  // A native name that is only invisible characters is a skip, not a missing native name.
+  const nameNative = visibleText(node.name.native, NAME_MAX);
   if (nameNative === undefined) return { reason: "name", path: "node.name.native" };
   const imageUrl = node.image?.large ?? null;
   if (imageUrl === null || !acceptableImageUrl(imageUrl))
