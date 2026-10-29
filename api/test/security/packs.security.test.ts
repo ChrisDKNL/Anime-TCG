@@ -2,7 +2,18 @@ import { randomUUID } from "node:crypto";
 import { Readable, Writable } from "node:stream";
 import type { CollectionResponse, PackOpened, PacksResponse } from "@anime-tcg/shared/api";
 import { PACK_CAP, PACK_SIZE } from "@anime-tcg/shared/economy";
-import { ODDS_SCALE, RARITIES, type Rarity, SLOT_ODDS } from "@anime-tcg/shared/rarity";
+import {
+  ENCHANTED_INTERVAL,
+  ENCHANTED_SLOT_ODDS,
+  ODDS_SCALE,
+  PITY_PACKS,
+  RADIANT_ODDS,
+  RADIANT_SLOT_ODDS,
+  RARITIES,
+  type Rarity,
+  SLOT_FLOOR,
+  SLOT_ODDS,
+} from "@anime-tcg/shared/rarity";
 import { eq, inArray } from "drizzle-orm";
 import type { LightMyRequestResponse } from "fastify";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
@@ -87,8 +98,9 @@ import {
  * 7. Leaks: every JSON body carries only declared keys and no uuid besides
  *    its own openingId (no card id, account id, session hash, other openings).
  * 8. Odds: the published integers are the ones the roll applies (every
- *    threshold edge through the real route) and the published tier sizes are
- *    the ranges the pick draws from.
+ *    threshold edge of every slot, Enchanted and Radiant table, and both
+ *    sides of the Radiant chance, through the real route) and the published
+ *    tier sizes are the ranges the pick draws from.
  * 9. Forcing: no header, cookie, user agent or requestId value moves a tier;
  *    the outcome is a function of the server generator only.
  * 10. Brute force: the 21st opening from one address within the window is
@@ -97,9 +109,10 @@ import {
  * 11. No player reset: reset, snapshot, pool and AniList routes do not exist.
  * 12. Hostile snapshot files through `snapshot-pool --stdin`: markup, RTL
  *    overrides, zero-width characters and BOMs stored and served as text
- *    (trim only); NUL skipped; image URLs that leave s4.anilist.co, or spell
- *    it in a form the URL parser has to repair, skipped; cycles and
- *    self-relations finite; 10 000 edges read as 200; 6 001 characters,
+ *    (trim only); a name or native name with no visible character skipped;
+ *    NUL skipped; image URLs that leave s4.anilist.co, or spell it in a form
+ *    the URL parser has to repair, skipped; cycles and self-relations finite;
+ *    10 000 edges read as 200; 6 001 characters capped to a pool of 6 000;
  *    10 000 nesting levels and a file over SNAPSHOT_FILE_MAX refused without
  *    reading the rest; two runs at once leave exactly one current snapshot.
  */
@@ -109,8 +122,8 @@ const MINUTE = 60_000;
 const YEAR = 365 * 24 * 60 * MINUTE;
 const PASSWORD = "correct horse battery";
 const UUID_PATTERN = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
-/** Rarest first: each threshold of the roll is the running sum of the tiers above it (§5.4). */
-const ROLL_ORDER: readonly Rarity[] = ["mythic", "legendary", "epic", "rare", "common"];
+/** Rarest first: each threshold of a table's roll is the running sum of the tiers above it (§5.4.4). */
+const ROLL_ORDER: readonly Rarity[] = [...RARITIES].reverse();
 
 /** Every key a declared response of the three routes (or the error envelope) may carry. */
 const DECLARED_KEYS = new Set<string>([
@@ -122,14 +135,30 @@ const DECLARED_KEYS = new Set<string>([
   "nextPackInSeconds",
   "odds",
   "scale",
-  "perSlot",
+  "slots",
+  "floor",
+  "share",
   "perPack",
+  "enchanted",
+  "every",
+  "radiant",
+  "chance",
+  "lastSlot",
+  "pity",
+  "packs",
+  "freePacksOnly",
+  "bandScale",
+  "tierBands",
   "tierSizes",
   "snapshot",
   "version",
   "takenAt",
+  "characterCount",
+  "packsUntilGuarantee",
   "openingId",
   "openedAt",
+  "packKind",
+  "pityMythic",
   "cards",
   "kind",
   "slot",
@@ -140,6 +169,7 @@ const DECLARED_KEYS = new Set<string>([
   "imageUrl",
   "franchiseIds",
   "tier",
+  "rank",
   "inCurrentSnapshot",
   "rarity",
   "variant",
@@ -230,23 +260,39 @@ describe("packs and collection, adversarial (collection-packs.md §9)", () => {
       expect((await openPack(app, client.cookie)).statusCode).toBe(201);
     return client;
   }
-  /** Scripts one pack's tier rolls; each pick takes the first character the tier's shuffle still has. */
-  function scriptTiers(rolls: readonly number[], tierOf: (r: number) => Rarity): void {
+  /**
+   * Scripts one opening: the plan roll (§5.4.4 step 1), then per slot its tier roll (none for a slot the
+   * plan forces) and a pick that takes the first character the tier's shuffle still has.
+   */
+  function scriptPack(planRoll: number, slots: readonly { roll: number | null; tier: Rarity }[]): void {
+    script.script.push(planRoll);
     const drawn = new Map<Rarity, number>();
-    for (const r of rolls) {
-      const tier = tierOf(r);
+    for (const { roll, tier } of slots) {
       const k = drawn.get(tier) ?? 0;
       drawn.set(tier, k + 1);
-      script.script.push(r, k);
+      if (roll !== null) script.script.push(roll);
+      script.script.push(k);
     }
   }
-  const publishedTier = (perSlot: Record<Rarity, number>) => (r: number) => {
+  /** The tier a roll lands on in one published table, read the way §5.4.4 says the server reads it. */
+  const publishedTier = (table: Record<Rarity, number>) => (r: number) => {
     let threshold = 0;
     for (const tier of ROLL_ORDER) {
-      threshold += perSlot[tier];
+      threshold += table[tier];
       if (r < threshold) return tier;
     }
     throw new RangeError(`roll ${r} is past the published scale`);
+  };
+  /** The roll values either side of every boundary between the tiers a published table can land on. */
+  const edgesOf = (table: Record<Rarity, number>, scale: number) => {
+    const edges = [0];
+    let threshold = 0;
+    for (const tier of ROLL_ORDER) {
+      threshold += table[tier];
+      if (table[tier] > 0 && threshold < scale) edges.push(threshold - 1, threshold);
+    }
+    edges.push(scale - 1);
+    return edges;
   };
 
   beforeAll(async () => {
@@ -403,6 +449,14 @@ describe("packs and collection, adversarial (collection-packs.md §9)", () => {
       ["now", { now: "2099-01-01T00:00:00.000Z" }],
       ["openedAt", { openedAt: "2099-01-01T00:00:00.000Z" }],
       ["packs", { packs: -5 }],
+      ["packKind", { packKind: "radiant" }],
+      ["pity", { pity: true }],
+      ["pityMythic", { pityMythic: true }],
+      ["enchanted", { enchanted: true }],
+      ["radiant", { radiant: true }],
+      ["packsUntilGuarantee", { packsUntilGuarantee: 1 }],
+      ["packsSinceMythic", { packsSinceMythic: 299 }],
+      ["freePacksOpened", { freePacksOpened: 9 }],
     ];
 
     it.each(outcomeFields)(
@@ -723,7 +777,8 @@ describe("packs and collection, adversarial (collection-packs.md §9)", () => {
       const requestId = randomUUID();
       await forceNextPack(app.db, script, s1, [BASE + 1, BASE + 2, BASE + 3, BASE + 4, BASE + 5]);
       const forA = body<PackOpened>(await openPack(app, a.cookie, requestId));
-      await forceNextPack(app.db, script, s1, [BASE + 591, BASE + 592, BASE + 593, BASE + 594, BASE + 595]);
+      // Six tiers and slot floors (spec round 4): B's pack is three Commons, an Uncommon and a Rare.
+      await forceNextPack(app.db, script, s1, [BASE + 591, BASE + 592, BASE + 593, BASE + 241, BASE + 121]);
       const resB = await openPack(app, b.cookie, requestId);
       expect(resB.statusCode).toBe(201);
       const forB = body<PackOpened>(resB);
@@ -733,9 +788,11 @@ describe("packs and collection, adversarial (collection-packs.md §9)", () => {
         BASE + 591,
         BASE + 592,
         BASE + 593,
-        BASE + 594,
-        BASE + 595,
+        BASE + 241,
+        BASE + 121,
       ]);
+      expect(forB.packKind).toBe("standard");
+      expect(forA.packKind).toBe("radiant");
       expect((await cardsOf(b.account.id)).map((card) => card.characterId).sort()).toEqual(
         forB.cards.map((card) => card.character.id).sort(),
       );
@@ -792,11 +849,12 @@ describe("packs and collection, adversarial (collection-packs.md §9)", () => {
 
     it("the unique (account_id, request_id) backstop: deals that bypass the lock commit one opening per key", async () => {
       const { cookie, account } = await player();
-      const source = { snapshotId: s1, tiers: await tierPool(app.db, s1) };
+      const pool = { snapshotId: s1, tiers: await tierPool(app.db, s1) };
       const requestId = randomUUID();
+      const locked = { id: account.id, packsAnchorAt: null, packsSinceMythic: 0, freePacksOpened: 0 };
       const deal = () =>
         app.db.transaction((tx) =>
-          dealPack(tx, { accountId: account.id, requestId, openedAt: now }, cryptoRng, source),
+          dealPack(tx, { account: locked, requestId, openedAt: now }, cryptoRng, pool, "free"),
         );
       const results = await Promise.allSettled([deal(), deal()]);
       expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
@@ -818,14 +876,15 @@ describe("packs and collection, adversarial (collection-packs.md §9)", () => {
       const c = await player();
       const stranger = await player();
       const aIds = [BASE + 1, BASE + 2, BASE + 3, BASE + 4, BASE + 5];
-      const cIds = [BASE + 596, BASE + 597, BASE + 598, BASE + 599, BASE + 600];
+      // Six tiers and slot floors (spec round 4): C's pack is three Commons, an Uncommon and a Rare.
+      const cIds = [BASE + 596, BASE + 597, BASE + 598, BASE + 242, BASE + 122];
       await forceNextPack(app.db, script, s1, aIds);
       const opened = body<PackOpened>(await openPack(app, a.cookie));
       await forceNextPack(app.db, script, s1, cIds);
       await openPack(app, c.cookie);
 
       const ofC = body<CollectionResponse>(await getCollection(app, c.cookie));
-      expect(ofC.entries.map((entry) => entry.character.id).sort()).toEqual(cIds);
+      expect(ofC.entries.map((entry) => entry.character.id).sort()).toEqual([...cIds].sort());
       expect(ofC.totals.cards).toBe(PACK_SIZE);
       const ofStranger = await getCollection(app, stranger.cookie);
       expect(body<CollectionResponse>(ofStranger).entries).toEqual([]);
@@ -900,20 +959,46 @@ describe("packs and collection, adversarial (collection-packs.md §9)", () => {
   });
 
   describe("8. the published odds are the applied odds", () => {
-    it("GET /api/packs publishes SLOT_ODDS out of ODDS_SCALE, perPack as recomputed from them, and the snapshot's real tier sizes", async () => {
+    // Six tiers (spec round 4): the published odds are five slot tables with floors, the Enchanted and
+    // Radiant tables and chance, the pity count, the shares, the per-pack figures and the tier bands.
+    it("GET /api/packs publishes the applied tables and rules out of ODDS_SCALE, share and perPack as recomputed from them, and the snapshot's real tier sizes", async () => {
       const { cookie } = await player();
       const odds = body<PacksResponse>(await getPacks(app, cookie)).odds;
       expect(odds).not.toBeNull();
       if (odds === null) return;
+      const asRecord = (table: Record<Rarity, number>) =>
+        Object.fromEntries(RARITIES.map((t) => [t, table[t]]));
       expect(odds.scale).toBe(ODDS_SCALE);
-      expect(odds.perSlot).toEqual(SLOT_ODDS);
-      expect(RARITIES.reduce((sum, tier) => sum + odds.perSlot[tier], 0)).toBe(odds.scale);
+      expect(odds.slots).toHaveLength(PACK_SIZE);
+      expect(odds.slots.map((slot) => slot.odds)).toEqual(SLOT_ODDS.map(asRecord));
+      expect(odds.slots.map((slot) => slot.floor)).toEqual([...SLOT_FLOOR]);
+      for (const [index, slot] of odds.slots.entries()) {
+        expect(
+          RARITIES.reduce((sum, tier) => sum + slot.odds[tier], 0),
+          `slot ${index}`,
+        ).toBe(odds.scale);
+        for (const tier of RARITIES.slice(0, RARITIES.indexOf(slot.floor))) expect(slot.odds[tier]).toBe(0);
+      }
+      expect(odds.enchanted).toEqual({
+        every: ENCHANTED_INTERVAL,
+        slot: PACK_SIZE - 1,
+        floor: "epic",
+        odds: asRecord(ENCHANTED_SLOT_ODDS),
+      });
+      expect(odds.radiant).toEqual({
+        chance: RADIANT_ODDS,
+        odds: asRecord(RADIANT_SLOT_ODDS),
+        lastSlot: "mythic",
+      });
+      expect(odds.pity).toEqual({ packs: PITY_PACKS, freePacksOnly: true });
       const scale = BigInt(odds.scale);
       for (const tier of RARITIES) {
         const all = scale ** BigInt(PACK_SIZE);
-        const none = (scale - BigInt(odds.perSlot[tier])) ** BigInt(PACK_SIZE);
+        const none = odds.slots.reduce((product, slot) => product * (scale - BigInt(slot.odds[tier])), 1n);
         const ppm = (2n * (all - none) * 1_000_000n + all) / (2n * all);
         expect(odds.perPack[tier], tier).toBe(Number(ppm));
+        const sum = odds.slots.reduce((total, slot) => total + slot.odds[tier], 0);
+        expect(odds.share[tier], tier).toBe(Math.round((sum * 1_000_000) / (PACK_SIZE * odds.scale)));
       }
       const rows = await app.db
         .select({ tier: poolSnapshotCharacters.tier })
@@ -922,35 +1007,87 @@ describe("packs and collection, adversarial (collection-packs.md §9)", () => {
       for (const tier of RARITIES) {
         expect(odds.tierSizes[tier], tier).toBe(rows.filter((row) => row.tier === tier).length);
       }
+      expect(odds.snapshot.characterCount).toBe(rows.length);
     });
 
-    it("every threshold edge of the published integers lands on the published tier through the real route, and the pick draws from the published tier size", async () => {
-      const { cookie } = await player();
+    it("every threshold edge of every published table, and both sides of the Radiant chance, land on the published tier through the real route, and each pick draws from the published tier size", async () => {
+      const { cookie, account } = await player();
       const odds = body<PacksResponse>(await getPacks(app, cookie)).odds;
       if (odds === null) throw new Error("no odds published");
-      const tierOf = publishedTier(odds.perSlot);
-      const edges: number[] = [];
-      let threshold = 0;
-      for (const tier of ROLL_ORDER.slice(0, -1)) {
-        threshold += odds.perSlot[tier];
-        edges.push(threshold - 1, threshold);
-      }
-      const rolls = [0, ...edges, odds.scale - 1];
-      expect(rolls).toHaveLength(2 * PACK_SIZE);
-      for (const pack of [rolls.slice(0, PACK_SIZE), rolls.slice(PACK_SIZE)]) {
+      type Rule = Record<Rarity, number> | Rarity;
+      const last = odds.enchanted.slot;
+      const standard: Rule[] = odds.slots.map((slot) => slot.odds);
+      const enchanted: Rule[] = standard.map((rule, slot) => (slot === last ? odds.enchanted.odds : rule));
+      const radiant: Rule[] = standard.map((_, slot) =>
+        slot === last ? odds.radiant.lastSlot : odds.radiant.odds,
+      );
+      /** Packs that between them put every edge of every slot's table into that slot. */
+      const edgePacks = (rules: Rule[]) => {
+        const edges = rules.map((rule) => (typeof rule === "string" ? [null] : edgesOf(rule, odds.scale)));
+        const count = Math.max(...edges.map((list) => list.length));
+        return Array.from({ length: count }, (_, k) => edges.map((list) => list[k % list.length] ?? null));
+      };
+      const packs = [
+        // Not Radiant: the plan roll at the Radiant chance itself, or the top of the scale.
+        ...edgePacks(standard).map((rolls, k) => ({
+          kind: "standard",
+          plan: k % 2 === 0 ? odds.radiant.chance : odds.scale - 1,
+          opened: 0,
+          rules: standard,
+          rolls,
+        })),
+        ...edgePacks(enchanted).map((rolls) => ({
+          kind: "enchanted",
+          plan: odds.scale - 1,
+          opened: odds.enchanted.every - 1,
+          rules: enchanted,
+          rolls,
+        })),
+        // Radiant: the plan roll at 0 or one below the chance.
+        ...edgePacks(radiant).map((rolls, k) => ({
+          kind: "radiant",
+          plan: k % 2 === 0 ? 0 : odds.radiant.chance - 1,
+          opened: 0,
+          rules: radiant,
+          rolls,
+        })),
+      ];
+      expect(packs.length).toBe(8 + 6 + 6);
+      for (const pack of packs) {
+        await app.db
+          .update(accounts)
+          .set({ packsAnchorAt: null, packsSinceMythic: 0, freePacksOpened: pack.opened })
+          .where(eq(accounts.id, account.id));
+        const tiers = pack.rules.map((rule, slot) => {
+          const r = pack.rolls[slot];
+          if (typeof rule === "string") return rule;
+          if (r === undefined || r === null) throw new Error("a rolled slot needs a roll");
+          return publishedTier(rule)(r);
+        });
         draws.length = 0;
-        scriptTiers(pack, tierOf);
+        scriptPack(
+          pack.plan,
+          tiers.map((tier, slot) => ({ roll: pack.rolls[slot] ?? null, tier })),
+        );
         const res = await openPack(app, cookie);
         expect(res.statusCode).toBe(201);
         const opened = body<PackOpened>(res);
-        expect(opened.cards.map((card) => card.rarity)).toEqual(pack.map(tierOf));
+        expect(opened.packKind).toBe(pack.kind);
+        expect(opened.cards.map((card) => card.rarity)).toEqual(tiers);
         for (const card of opened.cards) expect(card.character.tier).toBe(card.rarity);
-        // The generator is asked for exactly (0, scale) per tier and (k, tierSizes[tier]) per pick.
-        expect(draws).toHaveLength(2 * PACK_SIZE);
-        pack.forEach((r, slot) => {
-          expect(draws[2 * slot]).toEqual({ min: 0, max: odds.scale, value: r });
-          expect(draws[2 * slot + 1]?.max).toBe(odds.tierSizes[tierOf(r)]);
+        // The generator is asked for (0, scale) for the plan and per rolled slot, and (k, tierSizes[tier]) per pick.
+        const expected: { min: number; max: number; value: number }[] = [
+          { min: 0, max: odds.scale, value: pack.plan },
+        ];
+        const drawn = new Map<Rarity, number>();
+        tiers.forEach((tier, slot) => {
+          const r = pack.rolls[slot];
+          if (r !== undefined && r !== null) expected.push({ min: 0, max: odds.scale, value: r });
+          const k = drawn.get(tier) ?? 0;
+          drawn.set(tier, k + 1);
+          expected.push({ min: k, max: odds.tierSizes[tier], value: k });
         });
+        expect(draws).toEqual(expected);
       }
     });
   });
@@ -968,12 +1105,16 @@ describe("packs and collection, adversarial (collection-packs.md §9)", () => {
       ["a key spelling mythic in hex", {}, () => "deadbeef-0000-4000-8000-00000000000a"],
     ];
 
+    // Six tiers and slot floors (spec round 4): the top of the scale is each slot's floor, so a generator
+    // that only ever answers it deals three Commons, an Uncommon and a Rare, in a standard pack.
     it.each(attempts)(
-      "with %s, a generator rolling Common deals five Commons",
+      "with %s, a generator rolling the top of the scale deals each slot's floor",
       async (_label, headers, key) => {
         const { cookie } = await player();
-        const tierOf = publishedTier(SLOT_ODDS);
-        scriptTiers(Array<number>(PACK_SIZE).fill(ODDS_SCALE - 1), tierOf);
+        scriptPack(
+          ODDS_SCALE - 1,
+          SLOT_ODDS.map((table) => ({ roll: ODDS_SCALE - 1, tier: publishedTier(table)(ODDS_SCALE - 1) })),
+        );
         const { cookie: crumbs, ...rest } = headers;
         const res = await app.inject({
           method: "POST",
@@ -987,24 +1128,29 @@ describe("packs and collection, adversarial (collection-packs.md §9)", () => {
           payload: { requestId: key() },
         });
         expect(res.statusCode).toBe(201);
-        expect(body<PackOpened>(res).cards.map((card) => card.rarity)).toEqual(
-          Array(PACK_SIZE).fill("common"),
-        );
+        expect(body<PackOpened>(res)).toMatchObject({ packKind: "standard", pityMythic: false });
+        expect(body<PackOpened>(res).cards.map((card) => card.rarity)).toEqual([...SLOT_FLOOR]);
+        // The plan roll and the five tier rolls, every one of them the generator's.
         expect(draws.filter((call) => call.max === ODDS_SCALE)).toEqual(
-          Array.from({ length: PACK_SIZE }, () => ({ min: 0, max: ODDS_SCALE, value: ODDS_SCALE - 1 })),
+          Array.from({ length: 1 + PACK_SIZE }, () => ({ min: 0, max: ODDS_SCALE, value: ODDS_SCALE - 1 })),
         );
       },
     );
 
-    it("on the real generator the dealt rarities are exactly what its tier rolls map to", async () => {
+    it("on the real generator the dealt rarities and pack kind are exactly what its plan and tier rolls map to", async () => {
       const { cookie } = await player();
-      const tierOf = publishedTier(SLOT_ODDS);
       for (let i = 0; i < PACK_CAP; i += 1) {
         draws.length = 0;
         const opened = body<PackOpened>(await openPack(app, cookie));
-        const tierRolls = draws.filter((call) => call.min === 0 && call.max === ODDS_SCALE);
-        expect(tierRolls).toHaveLength(PACK_SIZE);
-        expect(opened.cards.map((card) => card.rarity)).toEqual(tierRolls.map((call) => tierOf(call.value)));
+        const [plan, ...tierRolls] = draws.filter((call) => call.min === 0 && call.max === ODDS_SCALE);
+        if (plan === undefined) throw new Error("no plan roll");
+        const radiant = plan.value < RADIANT_ODDS;
+        expect(opened.packKind).toBe(radiant ? "radiant" : "standard");
+        const expected = radiant
+          ? [...tierRolls.map((call) => publishedTier(RADIANT_SLOT_ODDS)(call.value)), "mythic"]
+          : tierRolls.map((call, slot) => publishedTier(SLOT_ODDS[slot] ?? SLOT_ODDS[0])(call.value));
+        expect(tierRolls).toHaveLength(radiant ? PACK_SIZE - 1 : PACK_SIZE);
+        expect(opened.cards.map((card) => card.rarity)).toEqual(expected);
       }
     });
   });
@@ -1169,13 +1315,41 @@ describe("packs and collection, adversarial (collection-packs.md §9)", () => {
     it("stores markup, RTL overrides, zero-width characters and BOMs as text, trimmed only, and serves them byte for byte", async () => {
       const ids = hostileNames.map((_, index) => H_CHAR + index + 1);
       const stored = await app.db.select().from(characters).where(inArray(characters.id, ids));
-      for (const [index, [name, native]] of hostileNames.entries()) {
-        const row = stored.find((character) => character.id === H_CHAR + index + 1);
+      // The visible-name rule (spec round 4, decision 7): a name, or a native name, of only whitespace and
+      // format characters skips its character. Two of the hostile pairs are that (a lone zero-width space).
+      const visible = (text: string) => text.replace(/[\s\p{Cf}]/gu, "") !== "";
+      const acceptable = ([name, native]: [string, string | null]) =>
+        visible(name.trim()) && (native === null || native.trim() === "" || visible(native.trim()));
+      expect(hostileNames.filter((pair) => !acceptable(pair))).toEqual([
+        ["Ka​to‌‍⁠ri", "​"],
+        ["​", null],
+      ]);
+      const inPool = new Set(
+        (
+          await app.db
+            .select({ id: poolSnapshotCharacters.characterId })
+            .from(poolSnapshotCharacters)
+            .where(eq(poolSnapshotCharacters.snapshotId, hostile))
+        ).map((row) => row.id),
+      );
+      const accepted: number[] = [];
+      for (const [index, pair] of hostileNames.entries()) {
+        const id = H_CHAR + index + 1;
+        const row = stored.find((character) => character.id === id);
+        if (!acceptable(pair)) {
+          expect(row, `invisible ${index}`).toBeUndefined();
+          expect(inPool.has(id), `invisible ${index}`).toBe(false);
+          continue;
+        }
+        const [name, native] = pair;
+        accepted.push(id);
         expect(row?.name, `name ${index}`).toBe(name.trim());
         expect(row?.nameNative, `native ${index}`).toBe(
           native === null || native.trim() === "" ? null : native.trim(),
         );
       }
+      // Two packs of five: the eight accepted hostile characters and the next two, all Mythic (a Radiant pack).
+      const dealt = [...accepted, H_CHAR + 11, H_CHAR + 12];
       const titles = await app.db
         .select()
         .from(series)
@@ -1186,19 +1360,21 @@ describe("packs and collection, adversarial (collection-packs.md §9)", () => {
       }
 
       const { cookie } = await player();
-      await forceNextPack(app.db, script, hostile, ids.slice(0, PACK_SIZE));
+      await forceNextPack(app.db, script, hostile, dealt.slice(0, PACK_SIZE));
       const first = await openPack(app, cookie);
-      await forceNextPack(app.db, script, hostile, ids.slice(PACK_SIZE));
+      await forceNextPack(app.db, script, hostile, dealt.slice(PACK_SIZE));
       const second = await openPack(app, cookie);
       const served = [...body<PackOpened>(first).cards, ...body<PackOpened>(second).cards];
+      expect(served.map((card) => card.character.id)).toEqual(dealt);
+      const servedRows = await app.db.select().from(characters).where(inArray(characters.id, dealt));
       for (const card of served) {
-        const row = stored.find((character) => character.id === card.character.id);
+        const row = servedRows.find((character) => character.id === card.character.id);
         expect(card.character.name).toBe(row?.name);
         expect(card.character.nameNative).toBe(row?.nameNative);
       }
       const collection = body<CollectionResponse>(await getCollection(app, cookie));
       for (const entry of collection.entries) {
-        expect(entry.character.name).toBe(stored.find((row) => row.id === entry.character.id)?.name);
+        expect(entry.character.name).toBe(servedRows.find((row) => row.id === entry.character.id)?.name);
       }
       for (const [index, [title, native]] of hostileTitles.entries()) {
         expect(collection.franchises.find((franchise) => franchise.id === H_ENTRY + index + 1)).toMatchObject(
@@ -1370,17 +1546,24 @@ describe("packs and collection, adversarial (collection-packs.md §9)", () => {
       expect(validate(input).edges.filter((edge) => edge.fromId === entry.id)).toHaveLength(200);
     });
 
-    it("refuses a file of SNAPSHOT_CHARACTERS_MAX + 1 valid characters and leaves the current snapshot as it was", async () => {
-      const before = await currentSnapshotId(app.db);
+    // The franchise cap (spec round 5, decision 2) bounds the pool by construction: at most 100 entries, so
+    // at most 100 franchises of at most 60. A file of 6 001 valid characters can no longer reach the
+    // refusal of a pool above SNAPSHOT_CHARACTERS_MAX (build.test.ts proves that refusal with the cap off);
+    // what it must still never do is put more than SNAPSHOT_CHARACTERS_MAX characters into the pool.
+    it("never builds a pool above SNAPSHOT_CHARACTERS_MAX from a file of SNAPSHOT_CHARACTERS_MAX + 1 valid characters: the cap keeps 6 000", async () => {
       const pool = standardPool({
         entryBase: H_ENTRY,
         characterBase: H_CHAR,
         characters: SNAPSHOT_CHARACTERS_MAX + 1,
       });
       const result = await run(Readable.from([snapshotText(pool)]));
-      expect(result.code).toBe(1);
-      expect(result.stderr).toMatch(/more than 6000\./);
-      expect(await currentSnapshotId(app.db)).toBe(before);
+      expect(result.code).toBe(0);
+      expect(result.stdout).toMatch(/, 6000 characters .*; 1 capped in 1 franchises; /);
+      const rows = await app.db
+        .select({ id: poolSnapshotCharacters.characterId })
+        .from(poolSnapshotCharacters)
+        .where(eq(poolSnapshotCharacters.snapshotId, result.version));
+      expect(rows).toHaveLength(SNAPSHOT_CHARACTERS_MAX);
     });
 
     it("refuses a file nested 10 000 levels deep", async () => {
