@@ -93,3 +93,10 @@ export const RELATION_EDGES_MAX = 200;
 export const GENRES_MAX = 20;
 export const GENRE_LENGTH = { min: 1, max: 50 } as const;
 export const START_YEAR = { min: 1900, max: 2100 } as const;
+/**
+ * The largest Postgres `integer`, the column type of every id, favourites
+ * and popularity a snapshot stores. A page integer above it makes its item
+ * malformed in the schema parse, so the build skips it instead of the
+ * activation failing on an out-of-range insert.
+ */
+export const PG_INTEGER_MAX = 2_147_483_647;

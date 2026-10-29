@@ -123,6 +123,29 @@ describe("entry validation (collection-packs.md §5.1.6), each rule with a valid
     ["an empty genre", { genres: [""] }, "entry:genres"],
     ["a genre of 51 characters", { genres: ["g".repeat(51)] }, "entry:genres"],
     ["genres that are not an array", { genres: "Action" }, "entry:malformed"],
+    ["a title of only zero-width and format characters", { title: "\u200b\u200d\u2060" }, "entry:title"],
+    ["a title of only control characters", { title: "\u0007\u009b\u0085" }, "entry:title"],
+    [
+      "an invisible English title beside a valid romaji one",
+      { title: "\u200b", romaji: "Shingeki no Kyojin" },
+      "entry:title",
+    ],
+    ["a native title of only invisible characters", { native: "\u0085\u200e" }, "entry:title"],
+    ["a popularity above 2 147 483 647", { popularity: 2_147_483_648 }, "entry:malformed"],
+    [
+      "an id above 2 147 483 647",
+      {
+        raw: {
+          id: 2_147_483_648,
+          title: { english: "x", romaji: null, native: null },
+          startDate: { year: 2000 },
+          popularity: 1,
+          genres: [],
+          relations: { edges: [] },
+        },
+      },
+      "entry:malformed",
+    ],
     ["a NUL in the title", { title: "Bad\u0000Title" }, "entry:nul"],
     ["a NUL in a genre", { genres: ["Ac\u0000tion"] }, "entry:nul"],
   ];
@@ -148,6 +171,9 @@ describe("entry validation (collection-packs.md §5.1.6), each rule with a valid
     ["a start year of 2100", { year: 2100 }],
     ["no start year", { year: null }],
     ["a popularity of 0", { popularity: 0 }],
+    ["a popularity of 2 147 483 647", { popularity: 2_147_483_647 }],
+    ["a title with visible letters beside control and format characters", { title: "Ti\u0007t\u200ble" }],
+    ["genres of format characters, which the title rule does not cover", { genres: ["\u200b"] }],
     ["20 genres of 50 characters", { genres: Array.from({ length: 20 }, (_, i) => `${i}`.padEnd(50, "g")) }],
     ["no genres", { genres: [] }],
   ])("accepts %s", (_label, change) => {
@@ -212,6 +238,10 @@ describe("character validation, each rule with a valid neighbour", () => {
     ],
     ["negative favourites", { favourites: -1 }, "character:favourites"],
     ["string favourites", { favourites: "10" }, "character:malformed"],
+    ["favourites above 2 147 483 647", { favourites: 2_147_483_648 }, "character:malformed"],
+    ["an id above 2 147 483 647", { id: 2_147_483_648 }, "character:malformed"],
+    ["a name of only control characters", { name: "\u0007\u009b\u0085" }, "character:name"],
+    ["a native name of only control and format characters", { native: "\u001b\u200b" }, "character:name"],
     ["a NUL in the name", { name: "Ere\u0000n" }, "character:nul"],
     ["a NUL in the image URL", { image: `${imageUrl(1)}\u0000` }, "character:nul"],
   ];
@@ -227,6 +257,12 @@ describe("character validation, each rule with a valid neighbour", () => {
     const plan = build(withCharacter(0, { in: [{ entry: ENTRY, role: "BACKGROUND" }] }));
     expect(plan.skipped.byReason()).toEqual({ "character:role": 1 });
     expect(plan.characters.map((character) => character.id)).not.toContain(CHARACTER);
+  });
+
+  it("accepts favourites of 2 147 483 647, the largest the column holds", () => {
+    const plan = build(withCharacter(0, { favourites: 2_147_483_647 }));
+    expect(plan.skipped.items).toBe(0);
+    expect(plan.characters.find((character) => character.id === CHARACTER)?.favourites).toBe(2_147_483_647);
   });
 
   it("counts null favourites as 0", () => {
@@ -291,6 +327,12 @@ describe("relation edges", () => {
     expect(plan.skipped.byReason()).toEqual({ "edge:relation_type": 1 });
     expect(plan.edges.filter((edge) => edge.fromId === ENTRY)).toHaveLength(198);
     expect(plan.franchises).toHaveLength(100);
+  });
+
+  it("drops and counts an edge to an id above 2 147 483 647 as malformed, keeping the entry", () => {
+    const plan = build(withEntry(0, { relations: [{ type: "SEQUEL", to: 2_147_483_648 }] }));
+    expect(plan.skipped.byReason()).toEqual({ "edge:malformed": 1 });
+    expect(plan.entries[0]?.id).toBe(ENTRY);
   });
 
   it("merges two entries joined through an entry outside the top 100 read by the hop requests", () => {

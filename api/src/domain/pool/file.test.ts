@@ -3,8 +3,14 @@ import { describe, expect, it } from "vitest";
 import { snapshotFile, snapshotText, standardPool } from "../../../test/fixtures/pool.js";
 import { SnapshotRefused } from "./build.js";
 import { readCapped, readSnapshotFile } from "./file.js";
-import { SNAPSHOT_FILE_MAX } from "./limits.js";
-import { nestsDeeperThan, PageShapeError, parseCharactersPage, parseSeriesPage } from "./pages.js";
+import { PG_INTEGER_MAX, SNAPSHOT_FILE_MAX } from "./limits.js";
+import {
+  nestsDeeperThan,
+  PageShapeError,
+  parseCharactersPage,
+  parseRelationsPage,
+  parseSeriesPage,
+} from "./pages.js";
 
 const refusal = (text: string) => {
   try {
@@ -169,6 +175,58 @@ describe("page parse", () => {
       null,
       { relationType: "SEQUEL", node: { id: 4, type: "ANIME" } },
     ]);
+  });
+
+  it("makes an item malformed when an id, popularity or favourites will not fit a Postgres integer", () => {
+    const entry = (id: number, popularity: number) => ({
+      id,
+      title: { english: "A", romaji: null, native: null },
+      startDate: null,
+      popularity,
+      genres: [],
+      relations: { edges: [{ relationType: "SEQUEL", node: { id: PG_INTEGER_MAX + 1, type: "ANIME" } }] },
+    });
+    const series = parseSeriesPage({
+      data: {
+        Page: {
+          media: [
+            entry(PG_INTEGER_MAX + 1, 1),
+            entry(1, PG_INTEGER_MAX + 1),
+            entry(PG_INTEGER_MAX, PG_INTEGER_MAX),
+          ],
+        },
+      },
+    }).data.Page.media;
+    expect(series.slice(0, 2)).toEqual([null, null]);
+    expect(series[2]).toMatchObject({ id: PG_INTEGER_MAX, popularity: PG_INTEGER_MAX });
+    expect(series[2]?.relations?.edges).toEqual([null]);
+
+    const hops = parseRelationsPage({
+      data: { Page: { media: [{ id: PG_INTEGER_MAX + 1, relations: null }] } },
+    });
+    expect(hops.data.Page.media).toEqual([null]);
+
+    const character = (id: number, favourites: number) => ({
+      role: "MAIN",
+      node: { id, name: { full: "x", native: null }, image: null, favourites },
+    });
+    const characters = parseCharactersPage({
+      data: {
+        Media: {
+          main: {
+            pageInfo: { hasNextPage: false },
+            edges: [
+              character(PG_INTEGER_MAX + 1, 0),
+              character(1, PG_INTEGER_MAX + 1),
+              character(PG_INTEGER_MAX, PG_INTEGER_MAX),
+            ],
+          },
+          supporting: { pageInfo: { hasNextPage: false }, edges: [] },
+        },
+      },
+    }).data.Media.main.edges;
+    expect(characters.slice(0, 2)).toEqual([null, null]);
+    expect(characters[2]?.node).toMatchObject({ id: PG_INTEGER_MAX, favourites: PG_INTEGER_MAX });
   });
 
   it("refuses a series page of more than 50 entries and a characters page without both roles", () => {

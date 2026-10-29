@@ -4,6 +4,7 @@ import {
   ANILIST_CHARACTERS_PER_PAGE,
   ANILIST_SERIES_PER_PAGE,
   JSON_MAX_DEPTH,
+  PG_INTEGER_MAX,
   RELATION_EDGES_MAX,
 } from "./limits.js";
 
@@ -20,27 +21,30 @@ import {
 
 const NullableString = Type.Union([Type.String(), Type.Null()]);
 const NullableInteger = Type.Union([Type.Integer(), Type.Null()]);
+/** An integer that fits the Postgres `integer` column it is stored in. */
+const StoredInteger = Type.Integer({ maximum: PG_INTEGER_MAX });
+const NullableStoredInteger = Type.Union([StoredInteger, Type.Null()]);
 
 export const RelationEdge = Type.Object({
   relationType: Type.String(),
-  node: Type.Object({ id: Type.Integer(), type: NullableString }),
+  node: Type.Object({ id: StoredInteger, type: NullableString }),
 });
 export type RelationEdge = Static<typeof RelationEdge>;
 
 const RelationEdges = Type.Object({ edges: Type.Array(Type.Union([RelationEdge, Type.Null()])) });
 
 export const SeriesItem = Type.Object({
-  id: Type.Integer(),
+  id: StoredInteger,
   title: Type.Object({ english: NullableString, romaji: NullableString, native: NullableString }),
   startDate: Type.Union([Type.Object({ year: NullableInteger }), Type.Null()]),
-  popularity: NullableInteger,
+  popularity: NullableStoredInteger,
   genres: Type.Union([Type.Array(Type.String()), Type.Null()]),
   relations: Type.Union([RelationEdges, Type.Null()]),
 });
 export type SeriesItem = Static<typeof SeriesItem>;
 
 export const RelationsItem = Type.Object({
-  id: Type.Integer(),
+  id: StoredInteger,
   relations: Type.Union([RelationEdges, Type.Null()]),
 });
 export type RelationsItem = Static<typeof RelationsItem>;
@@ -48,10 +52,10 @@ export type RelationsItem = Static<typeof RelationsItem>;
 export const CharacterEdge = Type.Object({
   role: NullableString,
   node: Type.Object({
-    id: Type.Integer(),
+    id: StoredInteger,
     name: Type.Object({ full: NullableString, native: NullableString }),
     image: Type.Union([Type.Object({ large: NullableString }), Type.Null()]),
-    favourites: NullableInteger,
+    favourites: NullableStoredInteger,
   }),
 });
 export type CharacterEdge = Static<typeof CharacterEdge>;
