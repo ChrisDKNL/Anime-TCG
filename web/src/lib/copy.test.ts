@@ -48,6 +48,30 @@ describe("copy", () => {
     expect(copy.metaLine(3, "2025-01-02T00:00:00.000Z")).toBe("3 cards · Created 2 Jan 2025");
   });
 
+  it("writes every month in three letters, September as Sep (§8 `D Mon YYYY`)", () => {
+    expect(copy.metaLine(1, "2026-09-05T12:00:00.000Z")).toBe("1 card · Created 5 Sep 2026");
+    const months = Array.from({ length: 12 }, (_, month) =>
+      copy
+        .metaLine(0, new Date(2026, month, 15, 12).toISOString())
+        .split(" ")
+        .at(-2),
+    );
+    expect(months).toEqual([
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec",
+    ]);
+  });
+
   it("builds the document title", () => {
     expect(copy.documentTitle(null)).toBe("Anime TCG");
     expect(copy.documentTitle("Chris")).toBe("\u2068Chris\u2069 · Anime TCG");

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ApiError, NetworkError } from "./api";
-import { toFailure } from "./failures";
+import { rethrowUnlessKnown, toFailure } from "./failures";
 
 describe("toFailure", () => {
   it("classifies the two failure families", () => {
@@ -13,5 +13,17 @@ describe("toFailure", () => {
   it("rethrows anything that is not an api outcome", () => {
     const bug = new TypeError("undefined is not a function");
     expect(() => toFailure(bug)).toThrow(bug);
+  });
+});
+
+describe("rethrowUnlessKnown", () => {
+  it("lets api answers and network failures through", () => {
+    expect(() => rethrowUnlessKnown(new NetworkError("down"))).not.toThrow();
+    expect(() => rethrowUnlessKnown(new ApiError(500, { code: "internal", message: "m" }))).not.toThrow();
+  });
+
+  it("rethrows anything else", () => {
+    const bug = new TypeError("undefined is not a function");
+    expect(() => rethrowUnlessKnown(bug)).toThrow(bug);
   });
 });

@@ -139,9 +139,19 @@ export function cardCount(n: number): string {
   return n === 1 ? "1 card" : `${n} cards`;
 }
 
-const createdFormat = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric" });
+/**
+ * §8's three-letter months. Intl's short month is locale data, not a format:
+ * en-GB has written September as "Sept" since CLDR 38, so the names are fixed here.
+ */
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
+
+/** `D Mon YYYY` in the viewer's time zone, e.g. `5 Sep 2026`. */
+function createdDate(createdAt: string): string {
+  const date = new Date(createdAt);
+  return `${date.getDate()} ${MONTHS[date.getMonth()] ?? ""} ${date.getFullYear()}`;
+}
 
 /** `<N cards> · Created <D Mon YYYY>` for the Manage account header. */
 export function metaLine(cards: number, createdAt: string): string {
-  return `${cardCount(cards)} · Created ${createdFormat.format(new Date(createdAt))}`;
+  return `${cardCount(cards)} · Created ${createdDate(createdAt)}`;
 }

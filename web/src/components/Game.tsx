@@ -6,7 +6,7 @@ import type { useCharacterPool } from "../hooks/useCharacterPool";
 import { useInventory } from "../hooks/useInventory";
 import { useFocusTarget, useShellContext } from "../hooks/useShell";
 import { manageCopy, menuCopy } from "../lib/copy";
-import { toFailure } from "../lib/failures";
+import { rethrowUnlessKnown } from "../lib/failures";
 import { openPack } from "../lib/pack";
 import type { Card } from "../types";
 import { AccountControl } from "./account/AccountControl";
@@ -74,7 +74,7 @@ export function Game({ frame, account, pool }: Props) {
       clearNotice();
       announce(menuCopy.loggedOut);
     } catch (err) {
-      toFailure(err);
+      rethrowUnlessKnown(err);
       setSession({ signedIn: false });
       unreachable();
     }

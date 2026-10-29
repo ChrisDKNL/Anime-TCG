@@ -29,12 +29,12 @@ export function useMenu(itemCount: number) {
 
   useEffect(() => {
     if (!open) return;
-    const onPointerDown = (event: MouseEvent) => {
+    const onMouseDown = (event: MouseEvent) => {
       const root = rootRef.current;
       if (root !== null && event.target instanceof Node && !root.contains(event.target)) setOpen(false);
     };
-    document.addEventListener("mousedown", onPointerDown);
-    return () => document.removeEventListener("mousedown", onPointerDown);
+    document.addEventListener("mousedown", onMouseDown);
+    return () => document.removeEventListener("mousedown", onMouseDown);
   }, [open]);
 
   /** Enter and Space arrive here as a click. */

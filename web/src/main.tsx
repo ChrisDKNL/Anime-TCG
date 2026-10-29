@@ -5,9 +5,12 @@ import "./index.css";
 import App from "./App";
 import { createQueryClient } from "./lib/queryClient";
 
+const container = document.getElementById("root");
+if (container === null) throw new Error("index.html has no #root element to mount the app in");
+
 const queryClient = createQueryClient();
 
-createRoot(document.getElementById("root")!).render(
+createRoot(container).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <App />

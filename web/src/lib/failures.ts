@@ -10,6 +10,11 @@ import { ApiError, NetworkError } from "./api";
 export type Failure =
   { kind: "api"; code: ErrorCode; retryAfterSeconds: number | undefined } | { kind: "network" };
 
+/** For a caller that treats every api answer and every network failure alike: a client bug still surfaces. */
+export function rethrowUnlessKnown(err: unknown): void {
+  if (!(err instanceof NetworkError) && !(err instanceof ApiError)) throw err;
+}
+
 export function toFailure(err: unknown): Failure {
   if (err instanceof NetworkError) return { kind: "network" };
   if (err instanceof ApiError)
