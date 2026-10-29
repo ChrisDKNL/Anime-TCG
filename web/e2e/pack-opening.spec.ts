@@ -77,18 +77,21 @@ test("opens a pack, badges new cards, and keeps the collection in memory only: a
     [OLD_KEY, OLD_VALUE] as const,
   );
 
+  // Signed in, `/` is replaced by /packs (navigation-and-landing.md §3.3 step 7).
   await page.goto("/");
+  await expect(page).toHaveURL(/\/packs$/);
   const open = page.getByRole("button", { name: /open booster pack/i });
   await expect(open).toBeEnabled();
 
   await open.click();
   await expect(page.getByRole("article")).toHaveCount(5);
   await expect(page.getByText("New", { exact: true })).toHaveCount(5);
-  await expect(page.getByRole("button", { name: /collection \(5\)/i })).toBeVisible();
+  await expect(page.getByRole("link", { name: /collection \(5\)/i })).toBeVisible();
 
   await open.click();
-  await expect(page.getByRole("button", { name: /collection \(10\)/i })).toBeVisible();
-  await page.getByRole("button", { name: /collection \(10\)/i }).click();
+  await expect(page.getByRole("link", { name: /collection \(10\)/i })).toBeVisible();
+  await page.getByRole("link", { name: /collection \(10\)/i }).click();
+  await expect(page).toHaveURL(/\/collection$/);
   await expect(page.getByText("10 cards")).toBeVisible();
   const touchesOldKey = (call: string) => call === "clear" || call.endsWith(` ${OLD_KEY}`);
   const firstLoad = await page.evaluate(() => window.__storageCalls ?? []);
@@ -98,11 +101,12 @@ test("opens a pack, badges new cards, and keeps the collection in memory only: a
 
   // Until roadmap 1c the collection lives in memory for the session only (accounts.md §3.1.3, §3.7):
   // a reload starts it empty, and the old key is neither read, rewritten nor deleted.
+  // The reload is on /collection now that it has an address; the collection comes back empty there.
   await page.reload();
-  await expect(page.getByRole("button", { name: /open booster pack/i })).toBeEnabled();
-  await expect(page.getByRole("button", { name: /collection \(0\)/i })).toBeVisible();
-  await page.getByRole("button", { name: /collection \(0\)/i }).click();
+  await expect(page.getByRole("link", { name: /collection \(0\)/i })).toBeVisible();
   await expect(page.getByText("Your collection is empty. Open a pack to get started.")).toBeVisible();
+  await page.getByRole("link", { name: "Packs", exact: true }).click();
+  await expect(page.getByRole("button", { name: /open booster pack/i })).toBeEnabled();
   const afterReload = await page.evaluate(() => window.__storageCalls ?? []);
   expect(afterReload).toContain("getItem anime-tcg:character-pool:v1");
   expect(afterReload.filter(touchesOldKey)).toEqual([]);
