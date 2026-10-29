@@ -92,26 +92,3 @@ export const TIER_BAND = {
   legendary: 600,
   mythic: 200,
 } as const satisfies OddsTable;
-
-/**
- * The proof of concept's three tiers and float weights, which the browser
- * roll still uses until the 1c web PR replaces it with the server's packs
- * and deletes everything below (collection-packs.md §3, §8). The server
- * reads none of it.
- */
-export const LEGACY_RARITIES = ["common", "rare", "legendary"] as const;
-export type LegacyRarity = (typeof LEGACY_RARITIES)[number];
-
-/** Base drop rates of the browser roll: Common 70 %, Rare 25 %, Legendary 5 %. */
-export const BASE_WEIGHTS: Record<LegacyRarity, number> = {
-  common: 0.7,
-  rare: 0.25,
-  legendary: 0.05,
-};
-
-/**
- * How much popularity bends the browser roll's base odds. At 0 every
- * character has identical 70/25/5 odds; at 1 the most popular character's
- * legendary chance roughly triples.
- */
-export const POPULARITY_INFLUENCE = 0.6;
