@@ -16,8 +16,17 @@ import {
 } from "@anime-tcg/shared/rarity";
 import { describe, expect, it } from "vitest";
 import { perRarity, tierCounts } from "../pool/tiers.js";
-import { atLeastOnePerPack, floorOf, PACK_TABLES, publishedOdds, shareOfCards } from "./odds.js";
-import { planPack, tierForRoll } from "./roll.js";
+import { atLeastOnePerPack, floorOf, publishedOdds, shareOfCards } from "./odds.js";
+import { LAST_SLOT, planPack, tierForRoll } from "./roll.js";
+
+/** A standard pack's five tables, an Enchanted pack's and a Radiant pack's (its last slot a certain Mythic), in slot order. */
+const PACK_TABLES = {
+  standard: SLOT_ODDS,
+  enchanted: SLOT_ODDS.map((table, slot) => (slot === LAST_SLOT ? ENCHANTED_SLOT_ODDS : table)),
+  radiant: SLOT_ODDS.map((_, slot) =>
+    slot === LAST_SLOT ? perRarity((tier) => (tier === "mythic" ? ODDS_SCALE : 0)) : RADIANT_SLOT_ODDS,
+  ),
+} satisfies Record<string, readonly OddsTable[]>;
 
 const below = (floor: Rarity) => RARITIES.slice(0, RARITIES.indexOf(floor));
 const asRecord = (table: OddsTable) => perRarity((tier) => table[tier]);

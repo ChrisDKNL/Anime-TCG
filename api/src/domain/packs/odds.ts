@@ -32,11 +32,6 @@ export function floorOf(table: OddsTable): Rarity {
   return floor;
 }
 
-/** A slot forced to `tier` without a roll, as a table: the whole scale on that tier. */
-export function certain(tier: Rarity): OddsTable {
-  return perRarity((candidate) => (candidate === tier ? ODDS_SCALE : 0));
-}
-
 /**
  * The chance that a pack whose slots roll `tables` holds at least one card
  * of `tier`, in parts per million: `1 − Π (1 − odds / scale)`, computed
@@ -55,13 +50,6 @@ export function shareOfCards(tables: readonly OddsTable[], tier: Rarity): number
   return toPartsPerMillion(sum, BigInt(ODDS_SCALE) * BigInt(tables.length));
 }
 
-/** A standard pack's five tables, an Enchanted pack's and a Radiant pack's, in slot order. */
-export const PACK_TABLES = {
-  standard: SLOT_ODDS,
-  enchanted: SLOT_ODDS.map((table, slot) => (slot === LAST_SLOT ? ENCHANTED_SLOT_ODDS : table)),
-  radiant: SLOT_ODDS.map((_, slot) => (slot === LAST_SLOT ? certain("mythic") : RADIANT_SLOT_ODDS)),
-} as const satisfies Record<string, readonly OddsTable[]>;
-
 /**
  * What `GET /api/packs` publishes (spec §5.4.8, §6.2): the integers the roll
  * applies, the special rules, the tier bands, and what the tables mean for a
@@ -77,8 +65,8 @@ export function publishedOdds(tierSizes: PerRarity, snapshot: SnapshotInfo): Pub
       }
       return { floor, odds: perRarity((tier) => table[tier]) };
     }),
-    share: perRarity((tier) => shareOfCards(PACK_TABLES.standard, tier)),
-    perPack: perRarity((tier) => atLeastOnePerPack(PACK_TABLES.standard, tier)),
+    share: perRarity((tier) => shareOfCards(SLOT_ODDS, tier)),
+    perPack: perRarity((tier) => atLeastOnePerPack(SLOT_ODDS, tier)),
     enchanted: {
       every: ENCHANTED_INTERVAL,
       slot: LAST_SLOT,
