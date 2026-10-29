@@ -30,8 +30,18 @@ export interface ShellActions {
   clearNotice: () => void;
 }
 
+/**
+ * What the live region says, numbered: the same text announced twice is two
+ * announcements, and the number lets the region write it as new nodes so a
+ * screen reader reads it again (§7 "Live region").
+ */
+export interface Announcement {
+  text: CopyText;
+  id: number;
+}
+
 export interface ShellState {
-  announcement: CopyText;
+  announcement: Announcement;
   notice: Notice;
 }
 
@@ -49,12 +59,15 @@ export type ShellContextValue = ShellActions & Registry;
  */
 export function useShell(): { state: ShellState; context: ShellContextValue } {
   const queryClient = useQueryClient();
-  const [announcement, setAnnouncement] = useState<CopyText>("");
+  const [announcement, setAnnouncement] = useState<Announcement>({ text: "", id: 0 });
   const [notice, setNotice] = useState<Notice>("none");
   const elements = useRef(new Map<FocusTarget, HTMLElement>());
   const pending = useRef<FocusTarget | null>(null);
 
-  const announce = useCallback((text: CopyText) => setAnnouncement(text), []);
+  const announce = useCallback(
+    (text: CopyText) => setAnnouncement((previous) => ({ text, id: previous.id + 1 })),
+    [],
+  );
   const clearNotice = useCallback(() => setNotice("none"), []);
   const unreachable = useCallback(() => setNotice("unreachable"), []);
 

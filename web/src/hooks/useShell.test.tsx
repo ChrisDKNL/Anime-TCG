@@ -73,6 +73,25 @@ describe("useShell", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Hello");
   });
 
+  it("announcing the same text again writes it again, so a screen reader repeats it", () => {
+    renderWithProviders(<Controls />);
+    const region = screen.getByRole("status");
+    const announceButton = screen.getByRole("button", { name: "announce" });
+    act(() => announceButton.click());
+    const first = region.firstChild;
+    expect(first).toHaveTextContent("Hello");
+
+    const observer = new MutationObserver(() => undefined);
+    observer.observe(region, { childList: true, subtree: true, characterData: true });
+    act(() => announceButton.click());
+    const added = observer.takeRecords().flatMap((record) => [...record.addedNodes]);
+    observer.disconnect();
+
+    expect(region).toHaveTextContent("Hello");
+    expect(added).toHaveLength(1);
+    expect(region.firstChild).not.toBe(first);
+  });
+
   it("sessionEnded signs the query out, sets the notice and requests the heading", () => {
     const { queryClient } = renderWithProviders(
       <>
