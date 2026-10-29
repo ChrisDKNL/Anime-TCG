@@ -230,7 +230,7 @@ Breakpoints are Tailwind defaults: phone `< 640`, `sm ≥ 640`, `lg ≥ 1024`. T
 
 No new design tokens are needed; everything below is existing utilities. (If the engineer finds the red "danger" utilities repeated more than three times, propose a `--color-danger` token in a follow-up; do not add it in this PR.)
 
-- **Avatar placeholder**: circle (`size-7` in the header, `size-10` in the Manage dialog header), `bg-gradient-to-br from-fuchsia-600 via-violet-600 to-sky-600` (the pack button's gradient), first character of the login in `text-xs font-bold text-white uppercase`. Roadmap 4 replaces this with a card-art avatar.
+- **Avatar placeholder**: circle (`size-7` in the header, `size-10` in the Manage dialog header), solid `bg-zinc-700` (manager decision 2026-10-29: no gradient, per `docs/06-engineering-standards.md` §2), first character of the login in `text-xs font-bold text-white uppercase`. Roadmap 4 replaces this with a card-art avatar.
 - **Account control**: `rounded-xl bg-zinc-900 px-2 py-1.5 text-sm text-zinc-200 hover:bg-zinc-800`, same focus ring as the Inventory select (`focus-visible:ring-2 focus-visible:ring-violet-500`). Signed out it is the same button with the text `Account` and no avatar. Chevron is an inline SVG, `aria-hidden`.
 - **Menu**: `rounded-xl border border-zinc-800 bg-zinc-900 p-1 shadow-xl shadow-black/40`; items `rounded-lg px-3 py-2 text-sm`; focused/hovered item `bg-zinc-800`; `Log out` is plain `text-zinc-200` (it is not destructive). Divider `border-t border-zinc-800 my-1`.
 - **Panel / dialog**: `rounded-2xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-100`; headings `text-lg font-bold`; section headings `text-sm font-semibold text-zinc-200`; body `text-sm text-zinc-400`; step indicator `text-xs text-zinc-500`.
@@ -249,14 +249,14 @@ No new design tokens are needed; everything below is existing utilities. (If the
 - **Register steps**: step indicator is text (`Step 1 of 2`), part of the heading's `aria-describedby`. Step 2's `Back` keeps the entered code; a server-side code rejection at submit returns to step 1 with focus on the code field.
 - **Dialog**: native `<dialog>` via `showModal()` gives the focus trap, `Escape` and background inertness, `aria-labelledby` its heading. Initial focus: the dialog element itself (`tabindex="-1"`) in Manage account; the `Password` field in delete-confirm (the user has to type anyway, and `Enter` with an empty field does nothing because the delete button is disabled). Closing returns focus to the Account control.
 - **Forms**: every field has a visible `<label>`; hints, rules and errors are linked with `aria-describedby`; invalid fields get `aria-invalid="true"`; on submit, focus moves to the first invalid field in DOM order, whether the error came from the client check or from the server. Errors render in a `role="alert"` region inside the form so screen readers hear them once. Validation on submit, not on keystroke. While a request is in flight the submit button is disabled and keeps focus; it is not removed from the DOM.
-- **Password fields**: `type="password"`; each has its own Show/Hide `<button type="button" aria-pressed>` with accessible name `Show password` / `Hide password` (for confirm fields: `Show password confirmation` / `Hide password confirmation`). Toggling does not move focus and does not clear the value. Toggles are disabled while the form is submitting. `autocomplete`: Register `Login` → `username`, `Password` and `Confirm password` → `new-password`; Log in `Login` → `username`, `Password` → `current-password`; Manage `Login` → `username`; `Current password` → `current-password`; `New password` and `Confirm new password` → `new-password`; delete-confirm `Password` → `current-password`. `autocapitalize="off" spellcheck="false"` on every login and password field. No `maxlength` attribute on passwords (a hard cut-off would silently truncate what the user thinks they typed; validate on submit instead); `maxlength="24"` is fine on login.
+- **Password fields**: `type="password"`; each has its own Show/Hide `<button type="button" aria-pressed>` with accessible name `Show password` / `Hide password` (in Manage account's Password section: `Show current password` / `Hide current password` and `Show new password` / `Hide new password`) (for confirm fields: `Show password confirmation` / `Hide password confirmation`). Toggling does not move focus and does not clear the value. Toggles are disabled while the form is submitting. `autocomplete`: Register `Login` → `username`, `Password` and `Confirm password` → `new-password`; Log in `Login` → `username`, `Password` → `current-password`; Manage `Login` → `username`; `Current password` → `current-password`; `New password` and `Confirm new password` → `new-password`; delete-confirm `Password` → `current-password`. `autocapitalize="off" spellcheck="false"` on every login and password field. No `maxlength` attribute on passwords (a hard cut-off would silently truncate what the user thinks they typed; validate on submit instead); `maxlength="24"` is fine on login.
 - **Invite code field**: `autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text"`. Not a password field; the value is visible (it is not a secret).
 - **Wait**: the message is a `role="status"` element rendered once when the wait starts; the countdown lives in the button's text, which is _not_ a live region, so screen readers are not read a number every second. When the wait ends, the live region announces `You can try again now.` and focus is unchanged.
 - **Live region**: one app-level visually hidden `role="status" aria-live="polite"` element for register/login/logout/rename/password/delete announcements (§8). Failure banners use `role="alert"`; the session-ended banner uses `role="status"` and moves focus to the Account screen heading, which is why it does not need to be an alert.
 - **Delete confirm**: the final button's accessible name is `Delete <login>`; the panel sets `aria-describedby` to the body paragraph.
 - **Contrast**: hints and rules in `text-zinc-500` on `bg-zinc-900` are at the floor; everything that must be read (logins, errors, body copy) is `zinc-200` or lighter / `red-300` on `zinc-900`.
 - **Reduced motion**: only the 150 ms enter transitions exist; they are disabled under `prefers-reduced-motion: reduce`, in the same media block as `card-reveal`.
-- **Touch targets**: menu items, toggles and form buttons are at least 40 px tall on phone.
+- **Touch targets**: menu items, toggles, form buttons, inputs, the dialog Close button and the Account control are at least 40 px tall on phone (`min-h-10` / `h-10` below `sm`); this wins over the §6 sizes, which apply from `sm` up (manager decision 2026-10-29).
 
 ## 8. Copy
 
@@ -356,14 +356,14 @@ Exact strings. `<login>` is the account login, `<N>` a number, `<S>` the countdo
 
 **Delete confirmation**
 
-| Element               | Copy                                                                    |
-| --------------------- | ----------------------------------------------------------------------- |
-| Heading               | `Delete <login>?`                                                       |
-| Body                  | `This permanently deletes <login> and its <N cards>. There is no undo.` |
-| Password label        | `Password`                                                              |
-| Buttons               | `Delete <login>` / while deleting `Deleting…` · `Cancel`                |
-| Error: wrong password | `That password is incorrect.`                                           |
-| Live region on delete | `Deleted <login>.`                                                      |
+| Element               | Copy                                                                                                                                         |
+| --------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Heading               | `Delete <login>?`                                                                                                                            |
+| Body                  | `This permanently deletes <login> and its <N cards>. There is no undo.`; with 0 cards: `This permanently deletes <login>. There is no undo.` |
+| Password label        | `Password`                                                                                                                                   |
+| Buttons               | `Delete <login>` / while deleting `Deleting…` · `Cancel`                                                                                     |
+| Error: wrong password | `That password is incorrect.`                                                                                                                |
+| Live region on delete | `Deleted <login>.`                                                                                                                           |
 
 **Banners and in-form failures**
 
@@ -394,3 +394,14 @@ Recorded 2026-10-28 from the `security-officer` review of the backend foundation
 
 - Before 1b: least-privilege DB role for the api (migrations as owner, requests as `anime_app` with DML only).
 - Before 1b: sign-in must destroy any pre-auth session before creating the authenticated one; add an absolute session lifetime (90 d) alongside the sliding 30 d.
+
+## 11. Decisions recorded during the build (2026-10-29)
+
+Made by the manager on the tester's, quality-controller's and security-officer's findings in PR #25; they override the sections named.
+
+- While a request is in flight the submit button is `aria-disabled` (not `disabled`), so it keeps focus as §7 requires; a second activation sends nothing.
+- One live region, mounted once for the app's lifetime; a repeated message is announced again.
+- Logins embedded in text are isolated: `<bdi>` in the DOM, U+2068/U+2069 in plain strings (`document.title`, `aria-label`, the Reset confirm).
+- Leaving the delete confirm (Cancel or the first Escape) returns focus to `Delete account…`.
+- Form buttons: the primary button comes first in the DOM and sits on the left from `sm` up, so Tab moves left to right (`flex-row-reverse` removed).
+- Avatar and touch targets: see §6 and §7.
