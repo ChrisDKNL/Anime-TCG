@@ -160,11 +160,15 @@ Caddy sets on every response, including the ones it proxies from the api:
 - `X-Content-Type-Options: nosniff`
 - `Referrer-Policy: strict-origin-when-cross-origin`
 - `Permissions-Policy: camera=(), microphone=(), geolocation=()`
-- No `Server` header.
+- No `Server` or `Via` header.
+
+The headers live in a `(site_headers)` snippet that the site and `handle_errors` both import, so Caddy's own error responses (a missing asset's 404, a 405 on the shell, a 502 while the api is down) carry them too, with the error status and an empty body. The CI `docker` job asserts this.
 
 `connect-src 'self'` already covers `/api`, which is why the api is proxied under the same origin instead of getting CORS. `style-src` is `'self'` with no `'unsafe-inline'`: React applies the `style` prop through the CSSOM, which CSP does not govern, and the production build links its CSS via `<link>` with no inline `<style>`. The dev server, which does inject `<style>` elements, never runs behind this `Caddyfile`. If SSR or a `?inline` CSS import is ever introduced, this must be revisited (a nonce or hash, not `'unsafe-inline'`). `img-src` and `connect-src` name the only remote hosts the app uses (`web/src/lib/anilist.ts`); adding a new remote host means updating `Caddyfile`, this file and `EXPECTED_CSP` in `.github/workflows/ci.yml` together.
 
-The api adds `Cache-Control: no-store` to every response of its own (nothing from `/api` is cacheable) and its own `X-Content-Type-Options: nosniff`; helmet's remaining defaults are harmless duplicates of Caddy's. Caching of the static site: `/assets/*` is content-hashed by Vite and served with `Cache-Control: public, max-age=31536000, immutable`; everything else (`index.html` included) is `no-cache`, so a new deploy is picked up on the next load.
+The api adds `Cache-Control: no-store` to every response of its own (nothing from `/api` is cacheable) and its own `X-Content-Type-Options: nosniff`; helmet's remaining defaults are harmless duplicates of Caddy's. Caching of the static site: `/assets/*` is content-hashed by Vite and served with `Cache-Control: public, max-age=31536000, immutable`; `index.html` is `no-cache`, so a new deploy is picked up on the next load; a missing `/assets/*` file and Caddy's error responses get no `Cache-Control`.
+
+Routing: `/api` and everything under `/api/` go to the api with the path unchanged. Every other path serves the app's `index.html` (status 200, `no-cache`) and the client router decides what to show, including its not-found page; only `/assets/*` answers a missing file with a plain 404 instead of the app.
 
 Left to the proxy: TLS, `Strict-Transport-Security`, and anything that needs to know the public hostname.
 
