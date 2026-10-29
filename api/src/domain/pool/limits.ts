@@ -69,6 +69,12 @@ export const NAME_MAX = 200;
 export const TITLE_MAX = 300;
 /** The one image host the CSP allows in `img-src` (C8); a unit test keeps this and the Caddyfile in step. */
 export const IMAGE_HOST = "s4.anilist.co";
+/**
+ * The longest image URL accepted. Not in the spec's table: an engineering
+ * bound, like NAME_MAX, so no string a card carries is unbounded. AniList's
+ * CDN URLs are under 100 characters.
+ */
+export const IMAGE_URL_MAX = 2_048;
 
 /** Nesting deeper than any AniList page or snapshot file has; deeper input is refused before it is parsed. */
 export const JSON_MAX_DEPTH = 32;

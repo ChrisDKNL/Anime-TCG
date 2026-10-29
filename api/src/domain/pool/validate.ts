@@ -3,6 +3,7 @@ import {
   GENRE_LENGTH,
   GENRES_MAX,
   IMAGE_HOST,
+  IMAGE_URL_MAX,
   NAME_MAX,
   START_YEAR,
   TITLE_MAX,
@@ -124,9 +125,14 @@ function optionalText(value: string | null, max: number): string | null | undefi
   return characterLength(trimmed) > max ? undefined : trimmed;
 }
 
-/** An https URL on exactly the image host, no userinfo, no port, nothing the browser would have to repair. */
+/**
+ * An https URL on exactly the image host, no userinfo, no port, nothing the
+ * browser would have to repair, and of bounded length: it is served with
+ * every card, so it is held to a limit like the names are.
+ */
 export function acceptableImageUrl(raw: string | null): boolean {
-  if (raw === null || hasSpaceOrControl(raw) || !URL.canParse(raw)) return false;
+  if (raw === null || raw.length > IMAGE_URL_MAX || hasSpaceOrControl(raw) || !URL.canParse(raw))
+    return false;
   const url = new URL(raw);
   return (
     url.protocol === "https:" &&
@@ -141,7 +147,8 @@ function entryRejection(item: SeriesItem): { reason: string; path: string } | Om
   if (item.id < 1) return { reason: "id", path: "id" };
   const { english, romaji, native } = item.title;
   if (hasNul(english, romaji, native, ...(item.genres ?? []))) return { reason: "nul", path: "title" };
-  const title = optionalText(english, TITLE_MAX) ?? optionalText(romaji, TITLE_MAX);
+  // English, else romaji: a romaji title only stands in when there is no English one, not when the English one is too long.
+  const title = optionalText(english?.trim() ? english : romaji, TITLE_MAX);
   if (title === null || title === undefined) return { reason: "title", path: "title" };
   const titleNative = optionalText(native, TITLE_MAX);
   if (titleNative === undefined) return { reason: "title", path: "title.native" };

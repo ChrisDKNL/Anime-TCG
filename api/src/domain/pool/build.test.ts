@@ -94,6 +94,11 @@ describe("entry validation (collection-packs.md §5.1.6), each rule with a valid
     ["a blank title and no romaji", { title: "   ", romaji: null }, "entry:title"],
     ["a title of 301 characters", { title: "t".repeat(301) }, "entry:title"],
     ["a native title of 301 characters", { native: "n".repeat(301) }, "entry:title"],
+    [
+      "an English title of 301 characters beside a valid romaji one",
+      { title: "t".repeat(301), romaji: "Ok" },
+      "entry:title",
+    ],
     ["a start year of 1899", { year: 1899 }, "entry:year"],
     ["a start year of 2101", { year: 2101 }, "entry:year"],
     ["a fractional start year", { year: 2001.5 }, "entry:malformed"],
@@ -185,6 +190,11 @@ describe("character validation, each rule with a valid neighbour", () => {
     ["a data: image", { image: "data:image/png;base64,AAAA" }, "character:image"],
     ["an image on another AniList host", { image: "https://img.anilist.co/a.png" }, "character:image"],
     ["an image URL with a space", { image: "https://s4.anilist.co/a b.png" }, "character:image"],
+    [
+      "an image URL of 2 049 characters",
+      { image: `https://s4.anilist.co/${"a".repeat(2_027)}` },
+      "character:image",
+    ],
     ["negative favourites", { favourites: -1 }, "character:favourites"],
     ["string favourites", { favourites: "10" }, "character:malformed"],
     ["a NUL in the name", { name: "Ere\u0000n" }, "character:nul"],
