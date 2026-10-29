@@ -2,12 +2,7 @@ import { useMenu } from "../../hooks/useMenu";
 import { useFocusTarget } from "../../hooks/useShell";
 import { header } from "../../lib/copy";
 import { Avatar } from "./Avatar";
-
-const CONTROL =
-  "inline-flex max-w-full items-center gap-2 rounded-xl bg-zinc-900 px-2 py-1.5 text-sm text-zinc-200 hover:bg-zinc-800 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-zinc-900";
-
-const MENU_ITEM =
-  "block w-full rounded-lg px-3 py-2 text-left text-sm text-zinc-200 hover:bg-zinc-800 focus:bg-zinc-800 focus:outline-none";
+import { ACCOUNT_CONTROL, MENU_ITEM } from "./styles";
 
 interface SignedInProps {
   login: string;
@@ -50,7 +45,7 @@ export function AccountControl({ login, disabled, onManage, onLogout }: SignedIn
         aria-label={header.accountMenuLabel(login)}
         onClick={onButtonClick}
         onKeyDown={onButtonKeyDown}
-        className={CONTROL}
+        className={ACCOUNT_CONTROL}
       >
         <Avatar login={login} size="sm" />
         <bdi className="max-w-[8rem] truncate sm:max-w-[10rem]" title={login}>
@@ -109,7 +104,7 @@ export function AccountControl({ login, disabled, onManage, onLogout }: SignedIn
 /** The signed-out header control: a plain button that brings the Account screen back to its choice (§4.5). */
 export function AccountButton({ onClick }: { onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} className={CONTROL}>
+    <button type="button" onClick={onClick} className={ACCOUNT_CONTROL}>
       {header.accountSignedOut}
     </button>
   );

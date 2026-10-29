@@ -173,7 +173,7 @@ export function PasswordField({
             disabled={disabled}
             aria-pressed={shown}
             aria-label={shown ? names.hide : names.show}
-            className={`absolute inset-y-0 right-2 my-auto h-7 ${BUTTON.text}`}
+            className={`absolute inset-y-0 right-2 my-auto ${BUTTON.text}`}
           >
             {shown ? common.hide : common.show}
           </button>
