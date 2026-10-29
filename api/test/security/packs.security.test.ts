@@ -310,7 +310,7 @@ describe("packs and collection, adversarial (collection-packs.md §9)", () => {
   afterAll(async () => {
     vi.useRealTimers();
     await deleteAccounts(app.db, made);
-    await deleteSnapshots(app.db, snapshots);
+    await deleteSnapshots(snapshots);
     await app.close();
   });
 

@@ -104,7 +104,7 @@ describe("snapshot-pool against a local AniList stand-in (collection-packs.md §
   afterAll(async () => {
     await fake.close();
     await deleteAccounts(app.db, made);
-    await deleteSnapshots(app.db, snapshots);
+    await deleteSnapshots(snapshots);
     await app.close();
   });
 
@@ -308,7 +308,7 @@ describe("snapshot-pool as a command", () => {
   });
   afterAll(async () => {
     await app.db.delete(poolFetches);
-    await deleteSnapshots(app.db, snapshots);
+    await deleteSnapshots(snapshots);
     await app.close();
   });
 

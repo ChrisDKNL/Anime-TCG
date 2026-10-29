@@ -92,7 +92,7 @@ describe("a snapshot update under existing collections", () => {
   });
   afterAll(async () => {
     await deleteAccounts(app.db, made);
-    await deleteSnapshots(app.db, snapshots);
+    await deleteSnapshots(snapshots);
     await app.close();
   });
 

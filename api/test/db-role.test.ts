@@ -9,10 +9,15 @@ import {
   cards,
   characters,
   packOpenings,
+  poolSnapshotCharacters,
+  poolSnapshotSeries,
   poolSnapshots,
+  series,
   sessions,
 } from "../src/db/schema.js";
-import { clearAccountData, createTestApp, insertAccount } from "./support.js";
+import { createDb } from "../src/db/client.js";
+import { resetCollection } from "../src/domain/collection/reset.js";
+import { clearAccountData, createTestApp, insertAccount, migrationsDatabaseUrl } from "./support.js";
 
 /** Postgres `insufficient_privilege`; drizzle wraps the pg error as `cause`. */
 const PERMISSION_DENIED = "42501";
@@ -140,11 +145,17 @@ describe("app database role", () => {
     pulledAt: new Date(),
   });
 
+  /** The app role may not delete a snapshot or a character (0004), so the probe rows go as the owner. */
   afterAll(async () => {
-    await app.db.delete(accounts);
-    await app.db.delete(characters).where(eq(characters.id, PROBE_CHARACTER));
-    if (probeSnapshots.length > 0)
-      await app.db.delete(poolSnapshots).where(inArray(poolSnapshots.id, probeSnapshots));
+    const owner = createDb(migrationsDatabaseUrl());
+    try {
+      await owner.delete(accounts);
+      await owner.delete(characters).where(eq(characters.id, PROBE_CHARACTER));
+      if (probeSnapshots.length > 0)
+        await owner.delete(poolSnapshots).where(inArray(poolSnapshots.id, probeSnapshots));
+    } finally {
+      await owner.$client.end();
+    }
   });
 
   it("can write the 1c tables down to a card, which 0001's default privileges granted as well", async () => {
@@ -154,6 +165,77 @@ describe("app database role", () => {
     expect(
       await app.db.select({ variant: cards.variant }).from(cards).where(eq(cards.accountId, accountId)),
     ).toEqual([{ variant: "standard" }]);
+  });
+
+  it("holds exactly the rights 0001 granted less 0004's revokes, table by table", async () => {
+    const grants = await app.db.execute<{ table_name: string; rights: string }>(sql`
+      select table_name, string_agg(privilege_type, ',' order by privilege_type) as rights
+      from information_schema.role_table_grants
+      where grantee = 'anime_app' and table_schema = 'public'
+      group by table_name order by table_name
+    `);
+    const all = "DELETE,INSERT,SELECT,UPDATE";
+    expect(grants.rows).toEqual([
+      { table_name: "accounts", rights: all },
+      { table_name: "auth_throttle", rights: all },
+      { table_name: "cards", rights: "INSERT,SELECT" },
+      { table_name: "characters", rights: "INSERT,SELECT,UPDATE" },
+      { table_name: "pack_openings", rights: "DELETE,INSERT,SELECT" },
+      { table_name: "pool_fetch_pages", rights: all },
+      { table_name: "pool_fetches", rights: all },
+      { table_name: "pool_snapshot_characters", rights: "INSERT,SELECT" },
+      { table_name: "pool_snapshot_franchises", rights: "INSERT,SELECT" },
+      { table_name: "pool_snapshot_memberships", rights: "INSERT,SELECT" },
+      { table_name: "pool_snapshot_relations", rights: "INSERT,SELECT" },
+      { table_name: "pool_snapshot_series", rights: "INSERT,SELECT" },
+      { table_name: "pool_snapshots", rights: "INSERT,SELECT,UPDATE" },
+      { table_name: "series", rights: "INSERT,SELECT,UPDATE" },
+      { table_name: "sessions", rights: all },
+    ]);
+  });
+
+  it("cannot rewrite a granted card's rarity, delete a card on its own or change an opening (0004)", async () => {
+    const accountId = await insertAccount(app.db, "RarityProbe");
+    await app.db.insert(cards).values(card(accountId, await seedOpening(accountId), 0));
+    await expect(
+      app.db.update(cards).set({ rarity: "common" }).where(eq(cards.accountId, accountId)),
+    ).rejects.toMatchObject({ cause: { code: PERMISSION_DENIED } });
+    await expect(app.db.delete(cards).where(eq(cards.accountId, accountId))).rejects.toMatchObject({
+      cause: { code: PERMISSION_DENIED },
+    });
+    await expect(app.db.update(packOpenings).set({ pity: true })).rejects.toMatchObject({
+      cause: { code: PERMISSION_DENIED },
+    });
+  });
+
+  it("cannot change or delete a snapshot's rows, delete the snapshot, or delete a character or series (0004)", async () => {
+    await seedOpening(await insertAccount(app.db, "SnapshotProbe"));
+    await expect(
+      app.db.delete(poolSnapshotCharacters).where(eq(poolSnapshotCharacters.characterId, PROBE_CHARACTER)),
+    ).rejects.toMatchObject({ cause: { code: PERMISSION_DENIED } });
+    await expect(app.db.update(poolSnapshotSeries).set({ popularity: 0 })).rejects.toMatchObject({
+      cause: { code: PERMISSION_DENIED },
+    });
+    await expect(app.db.delete(poolSnapshots)).rejects.toMatchObject({ cause: { code: PERMISSION_DENIED } });
+    await expect(app.db.delete(characters)).rejects.toMatchObject({ cause: { code: PERMISSION_DENIED } });
+    await expect(app.db.delete(series)).rejects.toMatchObject({ cause: { code: PERMISSION_DENIED } });
+  });
+
+  it("still deletes an account with its openings and cards, by cascade", async () => {
+    const accountId = await insertAccount(app.db, "CascadeProbe");
+    await app.db.insert(cards).values(card(accountId, await seedOpening(accountId), 0));
+    await app.db.delete(accounts).where(eq(accounts.id, accountId));
+    expect(await app.db.select().from(cards).where(eq(cards.accountId, accountId))).toEqual([]);
+    expect(await app.db.select().from(packOpenings).where(eq(packOpenings.accountId, accountId))).toEqual([]);
+  });
+
+  it("still resets a collection: the openings go and their cards by cascade", async () => {
+    const accountId = await insertAccount(app.db, "ResetProbe");
+    await app.db.insert(cards).values(card(accountId, await seedOpening(accountId), 0));
+    const result = await resetCollection(app.db, "ResetProbe", { confirm: true });
+    expect(result).toMatchObject({ applied: true, cards: 1, openings: 1 });
+    expect(await app.db.select().from(cards).where(eq(cards.accountId, accountId))).toEqual([]);
+    expect(await app.db.select().from(packOpenings).where(eq(packOpenings.accountId, accountId))).toEqual([]);
   });
 
   it("refuses a card slot outside the pack's five (0004)", async () => {

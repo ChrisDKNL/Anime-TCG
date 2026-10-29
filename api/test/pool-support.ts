@@ -12,7 +12,7 @@ import {
 import { and, eq, inArray, notExists, sql } from "drizzle-orm";
 import type { LightMyRequestResponse } from "fastify";
 import type { App } from "../src/app.js";
-import type { Db } from "../src/db/client.js";
+import { createDb, type Db } from "../src/db/client.js";
 import {
   accounts,
   cards,
@@ -32,7 +32,7 @@ import type { TierPool } from "../src/domain/packs/roll.js";
 import { cryptoRng, type Rng } from "../src/domain/packs/rng.js";
 import { tierPool } from "../src/domain/pool/catalog.js";
 import { type FixturePool, snapshotText } from "./fixtures/pool.js";
-import { registerAccount, type SignedInClient, send } from "./support.js";
+import { migrationsDatabaseUrl, registerAccount, type SignedInClient, send } from "./support.js";
 
 /** Loads a fixture pool the way `snapshot-pool --stdin` does and makes it current. */
 export async function loadSnapshot(db: Db, pool: FixturePool, now = new Date()): Promise<ActivationSummary> {
@@ -51,48 +51,56 @@ export async function currentSnapshotId(db: Db): Promise<number | null> {
 /**
  * Removes the snapshots a test file made, and the character and series rows
  * no remaining snapshot or card names. The accounts holding cards from them
- * must be gone first (their cards go with them).
+ * must be gone first (their cards go with them). Runs as the owner: the app
+ * role may not delete a snapshot or its reference data (0003's revokes).
  */
-export async function deleteSnapshots(db: Db, ids: readonly number[]): Promise<void> {
+export async function deleteSnapshots(ids: readonly number[]): Promise<void> {
   if (ids.length === 0) return;
-  await db.delete(poolSnapshotMemberships).where(inArray(poolSnapshotMemberships.snapshotId, [...ids]));
-  await db.delete(poolSnapshotCharacters).where(inArray(poolSnapshotCharacters.snapshotId, [...ids]));
-  await db.delete(poolSnapshotRelations).where(inArray(poolSnapshotRelations.snapshotId, [...ids]));
-  await db.delete(poolSnapshotSeries).where(inArray(poolSnapshotSeries.snapshotId, [...ids]));
-  await db.delete(poolSnapshotFranchises).where(inArray(poolSnapshotFranchises.snapshotId, [...ids]));
-  await db.delete(poolSnapshots).where(inArray(poolSnapshots.id, [...ids]));
-  await db.delete(characters).where(
-    and(
-      notExists(
-        db
-          .select({ one: sql`1` })
-          .from(poolSnapshotCharacters)
-          .where(eq(poolSnapshotCharacters.characterId, characters.id)),
-      ),
-      notExists(
-        db
-          .select({ one: sql`1` })
-          .from(cards)
-          .where(eq(cards.characterId, characters.id)),
-      ),
-    ),
-  );
-  await db.delete(series).where(
-    and(
-      notExists(
-        db
-          .select({ one: sql`1` })
-          .from(poolSnapshotSeries)
-          .where(eq(poolSnapshotSeries.seriesId, series.id)),
-      ),
-      notExists(
-        db
-          .select({ one: sql`1` })
-          .from(poolSnapshotFranchises)
-          .where(eq(poolSnapshotFranchises.franchiseId, series.id)),
-      ),
-    ),
-  );
+  const db = createDb(migrationsDatabaseUrl());
+  try {
+    await db.transaction(async (tx) => {
+      await tx.delete(poolSnapshotMemberships).where(inArray(poolSnapshotMemberships.snapshotId, [...ids]));
+      await tx.delete(poolSnapshotCharacters).where(inArray(poolSnapshotCharacters.snapshotId, [...ids]));
+      await tx.delete(poolSnapshotRelations).where(inArray(poolSnapshotRelations.snapshotId, [...ids]));
+      await tx.delete(poolSnapshotSeries).where(inArray(poolSnapshotSeries.snapshotId, [...ids]));
+      await tx.delete(poolSnapshotFranchises).where(inArray(poolSnapshotFranchises.snapshotId, [...ids]));
+      await tx.delete(poolSnapshots).where(inArray(poolSnapshots.id, [...ids]));
+      await tx.delete(characters).where(
+        and(
+          notExists(
+            tx
+              .select({ one: sql`1` })
+              .from(poolSnapshotCharacters)
+              .where(eq(poolSnapshotCharacters.characterId, characters.id)),
+          ),
+          notExists(
+            tx
+              .select({ one: sql`1` })
+              .from(cards)
+              .where(eq(cards.characterId, characters.id)),
+          ),
+        ),
+      );
+      await tx.delete(series).where(
+        and(
+          notExists(
+            tx
+              .select({ one: sql`1` })
+              .from(poolSnapshotSeries)
+              .where(eq(poolSnapshotSeries.seriesId, series.id)),
+          ),
+          notExists(
+            tx
+              .select({ one: sql`1` })
+              .from(poolSnapshotFranchises)
+              .where(eq(poolSnapshotFranchises.franchiseId, series.id)),
+          ),
+        ),
+      );
+    });
+  } finally {
+    await db.$client.end();
+  }
 }
 
 export async function deleteAccounts(db: Db, ids: readonly string[]): Promise<void> {
