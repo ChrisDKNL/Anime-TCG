@@ -177,6 +177,7 @@ describe("ManageAccountDialog", () => {
 
       await user.click(screen.getByRole("button", { name: "Cancel" }));
       expect(screen.getByRole("heading", { name: "Manage account" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Delete account…" })).toHaveFocus();
     });
 
     it("Escape on the confirm panel goes back to the sections instead of closing", async () => {
@@ -185,6 +186,7 @@ describe("ManageAccountDialog", () => {
       const dialog = screen.getByRole("dialog");
       fireEvent(dialog, new Event("cancel", { cancelable: true }));
       expect(screen.getByRole("heading", { name: "Manage account" })).toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Delete account…" })).toHaveFocus();
       expect(onClose).not.toHaveBeenCalled();
     });
 

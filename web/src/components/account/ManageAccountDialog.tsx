@@ -9,7 +9,8 @@ import { FormBanner } from "./FormBanner";
 import { PasswordField, SubmitButton, TextField } from "./fields";
 import { BODY_TEXT, BUTTON, HINT_TEXT, PANEL_HEADING, SECTION_HEADING } from "./styles";
 
-type Panel = "sections" | "confirmDelete";
+/** `backFromDelete` is the sections again, entered from the confirm panel: focus returns to its trigger. */
+type Panel = "sections" | "confirmDelete" | "backFromDelete";
 
 interface Props {
   open: boolean;
@@ -44,7 +45,7 @@ export function ManageAccountDialog({ open, account, onClose, onRenamed, onDelet
   const handleCancel = (event: SyntheticEvent<HTMLDialogElement>) => {
     if (panel === "confirmDelete") {
       event.preventDefault();
-      setPanel("sections");
+      setPanel("backFromDelete");
     }
   };
 
@@ -63,16 +64,17 @@ export function ManageAccountDialog({ open, account, onClose, onRenamed, onDelet
       onClose={handleClose}
       className="pop-in m-auto max-h-[85vh] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-100 backdrop:bg-zinc-950/70 backdrop:backdrop-blur-sm focus:outline-none"
     >
-      {open && panel === "sections" && (
+      {open && panel !== "confirmDelete" && (
         <Sections
           account={account}
+          focusDeleteTrigger={panel === "backFromDelete"}
           onClose={() => ref.current?.close()}
           onRenamed={onRenamed}
           onDeleteRequested={() => setPanel("confirmDelete")}
         />
       )}
       {open && panel === "confirmDelete" && (
-        <ConfirmDelete account={account} onCancel={() => setPanel("sections")} onDeleted={onDeleted} />
+        <ConfirmDelete account={account} onCancel={() => setPanel("backFromDelete")} onDeleted={onDeleted} />
       )}
     </dialog>
   );
@@ -80,12 +82,19 @@ export function ManageAccountDialog({ open, account, onClose, onRenamed, onDelet
 
 interface SectionsProps {
   account: AccountPublic;
+  /** Back from the delete confirm (Cancel or Escape): `Delete account…` takes focus instead of <body>. */
+  focusDeleteTrigger: boolean;
   onClose: () => void;
   onRenamed: (account: AccountPublic) => void;
   onDeleteRequested: () => void;
 }
 
-function Sections({ account, onClose, onRenamed, onDeleteRequested }: SectionsProps) {
+function Sections({ account, focusDeleteTrigger, onClose, onRenamed, onDeleteRequested }: SectionsProps) {
+  const deleteTriggerRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (focusDeleteTrigger) deleteTriggerRef.current?.focus();
+  }, [focusDeleteTrigger]);
+
   return (
     <div className="flex flex-col">
       <div className="flex items-start justify-between gap-4">
@@ -125,7 +134,12 @@ function Sections({ account, onClose, onRenamed, onDeleteRequested }: SectionsPr
           {manageCopy.deleteSection}
         </h3>
         <p className={BODY_TEXT}>{manageCopy.deleteExplanation}</p>
-        <button type="button" onClick={onDeleteRequested} className={`${BUTTON.dangerOutline} self-start`}>
+        <button
+          ref={deleteTriggerRef}
+          type="button"
+          onClick={onDeleteRequested}
+          className={`${BUTTON.dangerOutline} self-start`}
+        >
           {manageCopy.deleteTrigger}
         </button>
       </section>
