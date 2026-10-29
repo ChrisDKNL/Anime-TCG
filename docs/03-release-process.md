@@ -19,10 +19,10 @@ Since 2026-10-29 (owner's request) acceptance follows `main` on its own; the loc
 1. checks the commit out in the acceptance checkout with git hooks disabled, builds it as `acceptance-<12-character sha>` (the tag is passed in the environment; the env file with the secrets is never edited) and starts the stack with `--wait` (the api applies pending migrations at start), then checks that the running containers carry the new tag;
 2. loads the newest card snapshot file from the owner's snapshot folder if acceptance has no current snapshot;
 3. smoke-tests `/` (title and script bundle), `/api/session` and the api's own health probe;
-4. on success, closes the previous `Acceptance ready: <sha>` issue and opens a new one listing the merged changes, locked to collaborators, which notifies the owner. Only the owner's reply counts: `acceptance ok <sha>` or what is wrong. The verdict is recorded in a `docs/releases/` note as before;
-5. on failure, rolls back the images and the code (not the database: the older build then runs on the newer schema) and smoke-tests the rollback, then opens `Acceptance deploy failed: <sha>` with the reason. It does not retry that commit, or a later one with the same app content; the next app change is tried. If Docker or git stops answering during a deploy, the run counts as an outage, not a failure, and the next run tries again.
+4. on success, closes the previous `Acceptance ready: <sha>` issue and opens a new one listing the merged changes, locked to collaborators. The watcher opens issues with the owner's own token, and GitHub does not notify anyone of their own activity, so the owner has **Include your own updates** turned on in GitHub's email notification settings; that email is the notification. Only the owner's reply counts: `acceptance ok <sha>` or what is wrong. The verdict is recorded in a `docs/releases/` note as before;
+5. on failure, rolls back the images and the code (not the database: the older build then runs on the newer schema) and smoke-tests the rollback, then opens `Acceptance deploy failed: <sha>` with the reason. It does not retry that commit, or a later one with the same app content; the next app change is tried. If Docker or the network (GitHub, the npm registry) stops answering during a deploy, the run counts as an outage, not a failure, and the next run tries again.
 
-Docs-only merges are not deployed and notify nobody. A range made only of Dependabot's auto-merged commits waits until its newest commit is 72 hours old. An issue that GitHub refuses (offline, an expired token) is retried on the next run. It keeps the current and previous acceptance images and removes older `anime-tcg-(web|api):acceptance-*` tags only. Production is untouched: it still runs only an owner-approved tag, deployed through the handoff below.
+Docs-only merges are not deployed and notify nobody. While the newest of Dependabot's auto-merged app commits in a range is under 72 hours old, the whole range waits, even when it also holds the owner's own merges. An issue that GitHub refuses (offline, an expired token) is retried on the next run. It keeps the current and previous acceptance images and removes older `anime-tcg-(web|api):acceptance-*` tags only. Production is untouched: it still runs only an owner-approved tag, deployed through the handoff below.
 
 ## Sprint
 
@@ -42,7 +42,7 @@ You are the local Claude Code session on the dev station. Do the following in or
 1. Fetch and check out the candidate: git fetch --tags origin && git checkout <tag>
 2. Acceptance follows main automatically ("Automatic acceptance"). If it already runs the candidate's sha,
    use it; otherwise disable the task AnimeTCG-AcceptanceWatch first, deploy the candidate to acceptance
-   (compose profile "acceptance") with TAG set in the environment, and re-enable the task afterwards.
+   (compose profile "acceptance") with TAG set in the environment, and re-enable the task after the owner's verdict (step 5 or 6), so a merge to main does not replace the candidate during the check. After step 6 stops the stack, the watcher brings acceptance back only with the next app change.
    Report the acceptance URL.
 3. Run the smoke checks below against acceptance and paste the results.
 4. WAIT: ask the owner to verify the acceptance checklist below in the browser and to reply

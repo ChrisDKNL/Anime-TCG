@@ -19,7 +19,7 @@ ENVF=.env.acceptance.local
 STATE=$BASE/acceptance-deployed      # sha of the running deployment
 TAGFILE=$BASE/acceptance-tag         # its image tag (compose reads TAG from the environment, not the env file)
 FAILED=$BASE/acceptance-failed       # sha that failed; not retried
-PENDING=$BASE/acceptance-notify      # an issue that could not be opened yet: title, then body
+PENDING=$BASE/acceptance-notify.d    # issues not opened yet, one file each: title, then body
 LOG=$BASE/acceptance-watch.log
 LOCK=$BASE/.acceptance-watch.lock
 SNAPDIR=/c/Users/Matrix/.anime-tcg/snapshots
@@ -32,7 +32,8 @@ export PATH="$PATH:/c/Program Files/GitHub CLI:/c/Program Files/Docker/Docker/re
 TO=/usr/bin/timeout # Windows has its own timeout.exe
 
 log() { printf '%s %s\n' "$(date '+%F %T')" "$*" >>"$LOG"; }
-git() { command git -c core.hooksPath=/dev/null "$@"; } # no hook from the repo ever runs on the host
+# No hook from the repo ever runs on the host: this reaches every git process, those run under timeout included.
+export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=core.hooksPath GIT_CONFIG_VALUE_0=/dev/null HUSKY=0
 
 if [ -f "$LOG" ] && [ "$(wc -c <"$LOG")" -gt 1000000 ]; then mv -f "$LOG" "$LOG.1"; fi
 
@@ -42,24 +43,32 @@ fi
 trap 'rmdir "$LOCK" 2>/dev/null' EXIT
 
 docker_up() { $TO 30 docker info >/dev/null 2>&1; }
+net_up() { $TO 30 git ls-remote -q origin HEAD >/dev/null 2>&1 && $TO 15 curl -fsS -o /dev/null https://registry.npmjs.org/; }
 
-open_issue() { # $1 title, $2 body; kept in $PENDING until GitHub accepts it
-  printf '%s\n%s' "$1" "$2" >"$PENDING"
-  local url
-  if url=$($TO 60 gh issue create -R "$REPO" --title "$1" --body "$2" 2>>"$LOG"); then
-    rm -f "$PENDING"
+send_issue() { # $1 queued file (title on line 1, body after it); removed once GitHub accepts it
+  local title body url
+  title=$(head -1 "$1")
+  body=$(tail -n +2 "$1")
+  if url=$($TO 60 gh issue create -R "$REPO" --title "$title" --body "$body" 2>>"$LOG"); then
+    rm -f "$1"
     log "opened $url"
     $TO 30 gh issue lock -R "$REPO" "${url##*/}" >>"$LOG" 2>&1 || log "could not lock $url"
   else
-    log "could not open the issue \"$1\"; retried next run"
+    log "could not open the issue \"$title\"; retried next run"
   fi
 }
 
-# a notification that failed last time goes out first
-if [ -f "$PENDING" ]; then
-  title=$(head -1 "$PENDING")
-  body=$(tail -n +2 "$PENDING")
-  open_issue "$title" "$body"
+open_issue() { # $1 title, $2 body: queued first, so nothing is lost while GitHub is unreachable
+  mkdir -p "$PENDING"
+  local f
+  f="$PENDING/$(date +%s)-$$-$RANDOM"
+  printf '%s\n%s' "$1" "$2" >"$f"
+  send_issue "$f"
+}
+
+# notifications that failed earlier go out first, oldest first
+if [ -d "$PENDING" ]; then
+  for f in $(find "$PENDING" -maxdepth 1 -type f | sort); do send_issue "$f"; done
 fi
 
 docker_up || { log "docker not answering; skipped"; exit 0; }
@@ -75,46 +84,54 @@ if [ -f "$FAILED" ] && git diff --quiet "$(cat "$FAILED")" "$new" -- "${APP_PATH
   exit 0 # same app content as the commit that failed
 fi
 
-# Dependabot merges itself; give a range made only of its commits 72 hours before it runs here
-authors=$(git log --format='%an' "$old..$new" -- "${APP_PATHS[@]}" | sort -u)
-if [ "$authors" = "dependabot[bot]" ]; then
-  newest=$(git log -1 --format='%ct' "$old..$new" -- "${APP_PATHS[@]}")
-  if [ $(($(date +%s) - newest)) -lt "$DEPENDABOT_DELAY" ]; then exit 0; fi
+# Dependabot merges itself: while its newest app commit in the range is under 72 hours old, wait
+newest=$(git log -1 --author='dependabot\[bot\]' --format='%ct' "$old..$new" -- "${APP_PATHS[@]}")
+if [ -n "$newest" ] && [ $(($(date +%s) - newest)) -lt "$DEPENDABOT_DELAY" ]; then
+  waitmark=$BASE/.acceptance-dependabot-wait
+  if [ "$(cat "$waitmark" 2>/dev/null)" != "$new" ]; then
+    echo "$new" >"$waitmark"
+    log "$new waits for a Dependabot update until $(date -d "@$((newest + DEPENDABOT_DELAY))" '+%F %H:%M')"
+  fi
+  exit 0
 fi
 
 short=$(git rev-parse --short=12 "$new")
 newtag="acceptance-$short"
 oldshort=$(git rev-parse --short=12 "$old")
 
-dc() { docker compose --env-file "$ENVF" --profile acceptance "$@"; }
+dc() { # $1 timeout in seconds, $2 image tag, then the compose arguments
+  local t=$1 tag=$2
+  shift 2
+  TAG="$tag" $TO "$t" docker compose --env-file "$ENVF" --profile acceptance "$@"
+}
 
 deploy() { # $1 sha, $2 tag, $3 build|nobuild
   git checkout -q --detach "$1" || return 1
   local args=(up -d --wait --wait-timeout 240)
   if [ "$3" = build ]; then args+=(--build); else args+=(--no-build); fi
-  TAG="$2" $TO 1800 docker compose --env-file "$ENVF" --profile acceptance "${args[@]}" >>"$LOG" 2>&1 || return 1
-  [ "$(docker inspect -f '{{.Config.Image}}' anime-tcg-api-acceptance 2>/dev/null)" = "anime-tcg-api:$2" ] || return 1
-  [ "$(docker inspect -f '{{.Config.Image}}' anime-tcg-acceptance 2>/dev/null)" = "anime-tcg-web:$2" ] || return 1
+  dc 1800 "$2" "${args[@]}" >>"$LOG" 2>&1 || return 1
+  [ "$($TO 30 docker inspect -f '{{.Config.Image}}' anime-tcg-api-acceptance 2>/dev/null)" = "anime-tcg-api:$2" ] || return 1
+  [ "$($TO 30 docker inspect -f '{{.Config.Image}}' anime-tcg-acceptance 2>/dev/null)" = "anime-tcg-web:$2" ] || return 1
   for c in anime-tcg-db-acceptance anime-tcg-api-acceptance anime-tcg-acceptance; do
-    docker update --restart unless-stopped "$c" >/dev/null 2>&1
+    $TO 30 docker update --restart unless-stopped "$c" >/dev/null 2>&1
   done
 }
 
 smoke() {
   local html asset
-  html=$($TO 15 curl -fsS "$URL/") || { echo "GET / failed"; return 1; }
+  html=$($TO 15 curl -fsS "$URL/" 2>>"$LOG") || { echo "GET / failed"; return 1; }
   grep -q '<title>Anime TCG' <<<"$html" || { echo "GET / has no Anime TCG title"; return 1; }
   asset=$(grep -oE '/assets/index-[A-Za-z0-9_-]+\.js' <<<"$html" | head -1)
   [ -n "$asset" ] || { echo "GET / names no script bundle"; return 1; }
   [ "$($TO 15 curl -s -o /dev/null -w '%{http_code}' "$URL$asset")" = 200 ] || { echo "the script bundle $asset is not 200"; return 1; }
-  grep -q '"signedIn":false' <<<"$($TO 15 curl -fsS "$URL/api/session")" || { echo "GET /api/session is not signed-out JSON"; return 1; }
-  grep -q '"db":"ok"' <<<"$(TAG="$1" dc exec -T api-acceptance wget -qO- http://127.0.0.1:3000/healthz)" || { echo "the api health probe has no db ok"; return 1; }
+  grep -q '"signedIn":false' <<<"$($TO 15 curl -fsS "$URL/api/session" 2>>"$LOG")" || { echo "GET /api/session is not signed-out JSON"; return 1; }
+  grep -q '"db":"ok"' <<<"$(dc 30 "$1" exec -T api-acceptance wget -qO- http://127.0.0.1:3000/healthz 2>>"$LOG")" || { echo "the api health probe has no db ok"; return 1; }
 }
 
 ensure_snapshot() { # $1 tag
   local has file
-  has=$(TAG="$1" dc exec -T db-acceptance psql -U anime -d anime -tAc \
-    "select case when to_regclass('pool_snapshots') is null then 'none' else (select count(*)::text from pool_snapshots where is_current) end" | tr -d '[:space:]')
+  has=$(dc 30 "$1" exec -T db-acceptance psql -U anime -d anime -tAc \
+    "select case when to_regclass('pool_snapshots') is null then 'none' else (select count(*)::text from pool_snapshots where is_current) end" 2>>"$LOG" | tr -d '[:space:]')
   case "$has" in
     none) return 0 ;; # this build has no card pool yet
     0) ;;
@@ -124,7 +141,7 @@ ensure_snapshot() { # $1 tag
   file=$(find "$SNAPDIR" -maxdepth 1 -name 'snapshot-*.json' 2>/dev/null | sort | tail -1)
   [ -n "$file" ] || { echo "acceptance has no card snapshot and the owner's snapshot folder has no file"; return 1; }
   log "loading card snapshot $(basename "$file")"
-  TAG="$1" dc exec -T api-acceptance node api/dist/cli/snapshot-pool.js --stdin <"$file" >>"$LOG" 2>&1 || { echo "loading the card snapshot $(basename "$file") failed"; return 1; }
+  dc 600 "$1" exec -T api-acceptance node api/dist/cli/snapshot-pool.js --stdin <"$file" >>"$LOG" 2>&1 || { echo "loading the card snapshot $(basename "$file") failed"; return 1; }
 }
 
 log "deploying $new (was $old)"
@@ -141,8 +158,8 @@ changes=$(git log --reverse --format='- %s' "$old..$new")
 compare="https://github.com/$REPO/compare/$oldshort...$short"
 
 if [ -n "$reason" ]; then
-  if ! docker_up || ! $TO 30 git rev-parse -q --verify "$new" >/dev/null; then
-    log "transient: $reason, with docker or git not answering; retried next run"
+  if ! docker_up || ! net_up; then
+    log "transient: $reason, with docker or the network not answering; retried next run"
     exit 0
   fi
   log "FAILED $new: $reason; rolling back to $old ($oldtag)"
@@ -158,14 +175,15 @@ if [ -n "$reason" ]; then
   exit 1
 fi
 
-echo "$new" >"$STATE"
-echo "$newtag" >"$TAGFILE"
+# the tag first, so a crash in between never pairs a new sha with an old tag
+echo "$newtag" >"$TAGFILE.new" && mv -f "$TAGFILE.new" "$TAGFILE"
+echo "$new" >"$STATE.new" && mv -f "$STATE.new" "$STATE"
 rm -f "$FAILED"
 log "deployed $new as $newtag"
 
 # keep only the current and previous acceptance images (never another project's)
-docker images --format '{{.Repository}}:{{.Tag}}' | grep -E '^anime-tcg-(web|api):acceptance-' |
-  grep -v -e ":$newtag\$" -e ":$oldtag\$" | xargs -r docker rmi >>"$LOG" 2>&1
+$TO 30 docker images --format '{{.Repository}}:{{.Tag}}' | grep -E '^anime-tcg-(web|api):acceptance-' |
+  grep -v -e ":$newtag\$" -e ":$oldtag\$" | xargs -r "$TO" 120 docker rmi >>"$LOG" 2>&1
 
 for n in $($TO 60 gh issue list -R "$REPO" --state open --author "@me" --search 'in:title "Acceptance ready:"' --json number -q '.[].number' 2>/dev/null); do
   $TO 60 gh issue close -R "$REPO" "$n" --comment "Superseded: acceptance now runs $short." >>"$LOG" 2>&1
