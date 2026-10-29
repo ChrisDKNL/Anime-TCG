@@ -35,7 +35,8 @@ import {
  * - Register in two steps (trimmed code and login, untrimmed password), land on /packs with its `h1`
  *   focused, the login in the header, the page in the title, and the live region announcing.
  * - Log in (trimmed login), same landing. Log out from the keyboard: the landing page at `/`, title
- *   reset, its `h1` focused, `Logged out.` announced, no body on the request. Inventory Reset names the login.
+ *   reset, its `h1` focused, `Logged out.` announced, no body on the request. The collection has no
+ *   Reset: the owner's command is the only one (collection-packs.md §5.6).
  *
  * Boot (§3.1, §4.1)
  * - While the session check runs: the wordmark only, no Account control, no page links, no page;
@@ -90,7 +91,7 @@ const landingHeading = (page: Page) => h1(page, "Anime TCG");
 const packsHeading = (page: Page) => h1(page, "Packs");
 const logInHeading = (page: Page) => h1(page, "Log in");
 const mainNav = (page: Page) => page.getByRole("navigation", { name: "Main" });
-const packButton = (page: Page) => page.getByRole("button", { name: /open booster pack/i });
+const packButton = (page: Page) => page.getByRole("button", { name: "Open pack", exact: true });
 const loginField = (page: Page) => page.getByRole("textbox", { name: "Login", exact: true });
 /** The Log in and Register forms' Password field; on /account the delete dialog has its own (`deletePassword`). */
 const passwordField = (page: Page) => page.getByLabel("Password", { exact: true });
@@ -134,7 +135,8 @@ async function fillCredentials(page: Page, login = "Chris", password = "correct 
 async function signedInPage(page: Page) {
   await page.goto("/");
   await expect(page).toHaveURL(/\/packs$/);
-  await expect(packButton(page)).toBeEnabled();
+  // The pack button is usable once the allowance has answered (packs-page.md §4.1).
+  await expect(page.getByText("3 of 3 packs ready")).toBeVisible();
 }
 
 /** The menu item is a link to the /account page now (§3.4). */
@@ -537,28 +539,14 @@ test.describe("signed in (§3.5, §3.6)", () => {
     await expect(page).toHaveTitle("Anime TCG");
   });
 
-  test("the Inventory Reset confirm names the login", async ({ page, api }) => {
+  test("the collection has no Reset: the owner's command is the only reset", async ({ page, api }) => {
     api.on("GET /api/session", signedIn(CHRIS));
     await signedInPage(page);
     await packButton(page).click();
     await expect(page.getByRole("article")).toHaveCount(5);
     await mainNav(page).getByRole("link", { name: "Collection (5)" }).click();
-
-    const messages: string[] = [];
-    page.once("dialog", (dialog) => {
-      messages.push(dialog.message());
-      void dialog.dismiss();
-    });
-    await page.getByRole("button", { name: "Reset" }).click();
-    await expect
-      .poll(() => messages)
-      .toEqual([`Delete every card in ${isolated("Chris")}? This cannot be undone.`]);
-    await expect(page.getByText("5 cards")).toBeVisible();
-
-    page.once("dialog", (dialog) => void dialog.accept());
-    await page.getByRole("button", { name: "Reset" }).click();
-    await expect(page.getByText("Your collection is empty. Open a pack to get started.")).toBeVisible();
-    await expect(mainNav(page).getByRole("link", { name: "Collection (0)" })).toBeVisible();
+    await expect(page.getByText("5 cards · No duplicates")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Reset" })).toHaveCount(0);
   });
 
   test("session ended on rename: /login replaces the page, account state gone, neutral banner, focus on Log in", async ({

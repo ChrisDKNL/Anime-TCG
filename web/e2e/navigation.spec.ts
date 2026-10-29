@@ -67,10 +67,12 @@ test("Back and Forward: title and focus follow, and each entry's scroll position
   api,
 }) => {
   api.on("GET /api/session", signedIn(CHRIS));
+  api.game.cap = 4;
+  api.game.available = 4;
   await page.setViewportSize({ width: 800, height: 420 });
   await page.goto("/packs");
-  const open = page.getByRole("button", { name: /open booster pack/i });
-  await expect(open).toBeEnabled();
+  const open = page.getByRole("button", { name: "Open pack", exact: true });
+  await expect(page.getByText("4 of 4 packs ready")).toBeVisible();
   for (let pack = 1; pack <= 4; pack += 1) {
     await open.click();
     await expect(mainNav(page).getByRole("link", { name: `Collection (${pack * 5})` })).toBeVisible();
@@ -111,7 +113,7 @@ test("Back and Forward: title and focus follow, and each entry's scroll position
   await expect.poll(() => focusedHeading(page)).toBe("Packs");
   // The last reveal is still there, without its entrance (§3.10 step 2).
   await expect(page.getByRole("article")).toHaveCount(5);
-  await expect(page.locator("article.card-reveal")).toHaveCount(0);
+  await expect(page.locator("li.animate-card-enter")).toHaveCount(0);
 });
 
 test.describe("addresses (§3.1 rule 2, §4.7)", () => {

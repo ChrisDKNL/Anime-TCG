@@ -1,13 +1,13 @@
 /// <reference lib="dom" />
 import { expect, test, type Page } from "@playwright/test";
-import { isolated, mockAniList } from "./support/fake-api";
+import { isolated, mockCardImages } from "./support/fake-api";
 
 /**
  * Test plan: two tabs of one browser against the real api through the Vite /api proxy
  * (docs/design/navigation-and-landing.md §3.2 step 2, §3.5 steps 7 and 8; accounts.md §4.8).
  *
  * Skipped unless REAL_API_URL, REAL_API_INVITE_CODE and DATABASE_URL are set, exactly as
- * accounts.real.spec.ts (see there for how to start the api). AniList stays mocked.
+ * accounts.real.spec.ts (see there for how to start the api). AniList's image CDN stays mocked.
  *
  * 1. Register a fresh login in tab 1; tab 2 (same cookie jar) opens /account and is signed in.
  * 2. Tab 1 logs out: the server ends the session.
@@ -58,7 +58,7 @@ test.describe("two tabs against the real api", () => {
     context,
   }) => {
     test.setTimeout(60_000);
-    await mockAniList(page);
+    await mockCardImages(page);
 
     await page.goto("/register");
     await page.getByRole("textbox", { name: "Invite code" }).fill(INVITE_CODE!);
@@ -71,7 +71,7 @@ test.describe("two tabs against the real api", () => {
     await expect(controlFor(page, LOGIN)).toBeVisible();
 
     const other = await context.newPage();
-    await mockAniList(other);
+    await mockCardImages(other);
     await other.goto("/account");
     await expect(h1(other, "Manage account")).toBeVisible();
     await expect(controlFor(other, LOGIN)).toBeVisible();

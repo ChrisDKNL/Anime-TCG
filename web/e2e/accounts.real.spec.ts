@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
-import { isolated, mockAniList } from "./support/fake-api";
+import { isolated, mockCardImages } from "./support/fake-api";
 
 /**
  * Test plan: the accounts journey against the real api through the Vite /api proxy
@@ -11,7 +11,7 @@ import { isolated, mockAniList } from "./support/fake-api";
  * DATABASE_URL (the app role) points at the api's database for the cleanup. Example:
  *   REAL_API_URL=http://localhost:5174 REAL_API_INVITE_CODE=e2e-invite-code E2E_PORT=5174 \
  *     npx playwright test accounts.real.spec.ts
- * The api's WEB_ORIGIN must equal REAL_API_URL (CSRF origin check). AniList stays mocked.
+ * The api's WEB_ORIGIN must equal REAL_API_URL (CSRF origin check). AniList's image CDN stays mocked.
  *
  * One serial journey on a fresh login per run, so the steps share the server's state:
  * 1. Register with the invite code typed in another case with spaces (the server trims and
@@ -71,7 +71,7 @@ test.describe("accounts journey against the real api", () => {
     browser,
   }) => {
     test.setTimeout(120_000);
-    await mockAniList(page);
+    await mockCardImages(page);
     const other = await newSignedOutContext(browser);
 
     try {
@@ -149,7 +149,7 @@ test.describe("accounts journey against the real api", () => {
         }
 
         const otherPage = await other.newPage();
-        await mockAniList(otherPage);
+        await mockCardImages(otherPage);
         await otherPage.goto("/");
         await openLogInForm(otherPage);
         await logIn(otherPage, RENAMED, PASSWORD_1, "incorrect");
