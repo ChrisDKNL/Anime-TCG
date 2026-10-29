@@ -184,12 +184,25 @@ There is no player-facing reset; the owner resets one account's collection:
 
 ```bash
 docker compose --env-file .env.production.local --profile production exec -T api-production \
-  node api/dist/cli/reset-collection.js <login>             # Would reset "<login>": 214 cards, 43 openings; pity and Enchanted counters to zero.
+  node api/dist/cli/reset-collection.js <login>             # Would reset "<login>": 214 cards, 43 openings; pity and Enchanted counters to zero; balance 2750 to 0.
 docker compose --env-file .env.production.local --profile production exec -T api-production \
-  node api/dist/cli/reset-collection.js <login> --confirm   # Collection reset for "<login>": 214 cards and 43 openings removed; packs full; counters reset.
+  node api/dist/cli/reset-collection.js <login> --confirm   # Collection reset for "<login>": 214 cards and 43 openings removed; packs full; counters reset; balance 2750 set to 0.
+docker compose --env-file .env.production.local --profile production exec -T api-production \
+  node api/dist/cli/reset-collection.js <login> --keep-karma --confirm   # ...; balance 2750 kept.
 ```
 
-Without `--confirm` it only counts. With it, the account's pack openings and their cards are deleted, its allowance is full again and both pack counters are 0 as on registration (the guarantee reads 300 free packs again and the next Enchanted pack is the 10th), in one transaction under the same account lock an opening takes, so an opening running at that moment is either removed whole or kept whole. The login, password, sessions and account id stay; a signed-in player sees the empty collection on the next fetch. The login is matched case-insensitively; an unknown one is exit code 1.
+Without `--confirm` it only counts. With it, the account's pack openings and their cards are deleted, its allowance is full again and both pack counters are 0 as on registration (the guarantee reads 300 free packs again and the next Enchanted pack is the 10th), in one transaction under the same account lock an opening takes, so an opening running at that moment is either removed whole or kept whole. The Karma balance is your choice per reset (`docs/design/economy.md` §8.10): by default it goes to 0 with one `owner_reset` ledger row of minus the balance (none when it is already 0); with `--keep-karma` it stays and nothing is written to the ledger. Either way the account's ledger and recycles stay as its history. The login, password, sessions and account id stay; a signed-in player sees the empty collection on the next fetch. The login is matched case-insensitively; an unknown one is exit code 1.
+
+### Audit the Karma ledger
+
+Run before every release and after any restore of the database (C16):
+
+```bash
+docker compose --env-file .env.production.local --profile production exec -T api-production \
+  node api/dist/cli/audit-ledger.js   # Ledger consistent: 10 accounts, 1234 entries.
+```
+
+Read-only, in one repeatable-read transaction, so it can run while the game does. It checks every account against `docs/design/economy.md` §7: the balance equals the sum of its ledger rows and the newest row's `balance_after`; `seq` runs 1, 2, 3 ... with no gap and each row's `balance_after` follows from the one before; every row has its kind's sign; every shop opening has its 400-Karma debit; every recycle has its credit of count × the recycle value and removed exactly that many cards of its own entry (or none, after a reset deleted them); no credit lacks its recycle; no card is removed by nothing or held in escrow. A consistent ledger is one line on stdout and exit 0; otherwise one line per failing account on stderr (`Account "<login>" (<id>): <what is wrong>; ...`) and exit 1. A failure is a bug or a tampered database: stop and investigate before releasing. `DATABASE_URL` only.
 
 ## Rollback
 
