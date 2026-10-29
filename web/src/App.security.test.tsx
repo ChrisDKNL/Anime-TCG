@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { makeAccount, noContent } from "./test/api";
 import { liveRegion, renderApp } from "./test/app";
+import { fill } from "./test/user";
 
 /**
  * T1 (docs/05-security.md): whatever login the server returns is rendered as
@@ -90,7 +91,7 @@ describe("an RTL override login", () => {
     const remove = screen.getByRole("button", { name: `Delete ${login}` });
     expect(onlyBdi(remove).textContent).toBe(login);
 
-    await user.type(screen.getByLabelText("Password"), "correct horse");
+    await fill(user, screen.getByLabelText("Password"), "correct horse");
     await user.click(remove);
     await waitFor(() => expect(liveRegion()).toHaveTextContent(`Deleted ${login}.`));
     expect(liveRegion().textContent).toBe(`Deleted ${login}.`);

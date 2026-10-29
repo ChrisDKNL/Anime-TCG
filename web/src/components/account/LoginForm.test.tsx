@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { envelope, makeAccount, mockFetch, sentBody } from "../../test/api";
 import { renderWithProviders } from "../../test/render";
 import { LoginForm } from "./LoginForm";
+import { fill } from "../../test/user";
 
 const account = makeAccount({ login: "Chris" });
 
@@ -16,8 +17,8 @@ function setup(routes: Parameters<typeof mockFetch>[0]) {
 }
 
 async function fillAndSubmit(user: ReturnType<typeof userEvent.setup>, login = "chris", password = "pw") {
-  await user.type(screen.getByLabelText("Login"), login);
-  await user.type(screen.getByLabelText("Password"), password);
+  await fill(user, screen.getByLabelText("Login"), login);
+  await fill(user, screen.getByLabelText("Password"), password);
   await user.click(screen.getByRole("button", { name: "Log in" }));
 }
 
@@ -131,8 +132,8 @@ describe("LoginForm", () => {
           answer = resolve;
         }),
     );
-    await user.type(screen.getByLabelText("Login"), "chris");
-    await user.type(screen.getByLabelText("Password"), "pw");
+    await fill(user, screen.getByLabelText("Login"), "chris");
+    await fill(user, screen.getByLabelText("Password"), "pw");
     const button = screen.getByRole("button", { name: "Log in" });
     button.focus();
     await user.keyboard("{Enter}");
@@ -159,8 +160,8 @@ describe("LoginForm", () => {
 
   it("two activations in one task send one request", async () => {
     const { user, fetchMock } = setup({ "POST /api/session/login": envelope(401, "bad_credentials") });
-    await user.type(screen.getByLabelText("Login"), "chris");
-    await user.type(screen.getByLabelText("Password"), "pw");
+    await fill(user, screen.getByLabelText("Login"), "chris");
+    await fill(user, screen.getByLabelText("Password"), "pw");
     const button = screen.getByRole("button", { name: "Log in" });
     act(() => {
       button.click();

@@ -5,6 +5,7 @@ import { SESSION_QUERY_KEY } from "../../hooks/useAccountSession";
 import { envelope, makeAccount, mockFetch, noContent, sentBody } from "../../test/api";
 import { renderWithProviders } from "../../test/render";
 import { RegisterForm } from "./RegisterForm";
+import { fill } from "../../test/user";
 
 const account = makeAccount({ login: "Chris" });
 
@@ -17,7 +18,7 @@ function setup(routes: Parameters<typeof mockFetch>[0]) {
 }
 
 async function toStep2(user: ReturnType<typeof userEvent.setup>) {
-  await user.type(screen.getByLabelText("Invite code"), " local-dev-invite ");
+  await fill(user, screen.getByLabelText("Invite code"), " local-dev-invite ");
   await user.click(screen.getByRole("button", { name: "Continue" }));
   await screen.findByText("Step 2 of 2");
 }
@@ -25,9 +26,9 @@ async function toStep2(user: ReturnType<typeof userEvent.setup>) {
 const UNREACHABLE_FORM = "Couldn't reach the game server. Nothing was changed. Try again.";
 
 async function fillStep2AndSubmit(user: ReturnType<typeof userEvent.setup>) {
-  await user.type(screen.getByLabelText("Login"), "Chris");
-  await user.type(screen.getByLabelText("Password"), "a strong one");
-  await user.type(screen.getByLabelText("Confirm password"), "a strong one");
+  await fill(user, screen.getByLabelText("Login"), "Chris");
+  await fill(user, screen.getByLabelText("Password"), "a strong one");
+  await fill(user, screen.getByLabelText("Confirm password"), "a strong one");
   await user.click(screen.getByRole("button", { name: "Register" }));
 }
 
@@ -66,7 +67,7 @@ describe("RegisterForm step 1", () => {
 
   it("shows the server's invalid-code answer on the field", async () => {
     const { user } = setup({ "POST /api/accounts/check-invite": envelope(403, "invite_invalid") });
-    await user.type(screen.getByLabelText("Invite code"), "nope");
+    await fill(user, screen.getByLabelText("Invite code"), "nope");
     await user.click(screen.getByRole("button", { name: "Continue" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("That invite code isn't valid.");
     expect(screen.getByLabelText("Invite code")).toHaveFocus();
@@ -75,7 +76,7 @@ describe("RegisterForm step 1", () => {
 
   it("replaces the body with the cap message and Back", async () => {
     const { user, onBack } = setup({ "POST /api/accounts/check-invite": envelope(403, "cap_reached") });
-    await user.type(screen.getByLabelText("Invite code"), "code");
+    await fill(user, screen.getByLabelText("Invite code"), "code");
     await user.click(screen.getByRole("button", { name: "Continue" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "All 10 places are taken for now. Ask the owner to make room.",
@@ -87,7 +88,7 @@ describe("RegisterForm step 1", () => {
 
   it("shows the in-form banner when the server is unreachable and keeps the value", async () => {
     const { user } = setup({ "POST /api/accounts/check-invite": { status: 502, raw: "bad gateway" } });
-    await user.type(screen.getByLabelText("Invite code"), "code");
+    await fill(user, screen.getByLabelText("Invite code"), "code");
     await user.click(screen.getByRole("button", { name: "Continue" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "Couldn't reach the game server. Nothing was changed. Try again.",
@@ -108,8 +109,8 @@ describe("RegisterForm step 2", () => {
   it("marks every invalid field and focuses the first in DOM order", async () => {
     const { user, fetchMock } = setup({ "POST /api/accounts/check-invite": noContent });
     await toStep2(user);
-    await user.type(screen.getByLabelText("Password"), "short");
-    await user.type(screen.getByLabelText("Confirm password"), "different");
+    await fill(user, screen.getByLabelText("Password"), "short");
+    await fill(user, screen.getByLabelText("Confirm password"), "different");
     await user.click(screen.getByRole("button", { name: "Register" }));
 
     const alerts = screen.getAllByRole("alert").map((a) => a.textContent);
@@ -140,9 +141,9 @@ describe("RegisterForm step 2", () => {
       "POST /api/accounts/register": { status: 201, body: { signedIn: true, account } },
     });
     await toStep2(user);
-    await user.type(screen.getByLabelText("Login"), "  Chris ");
-    await user.type(screen.getByLabelText("Password"), "a strong one");
-    await user.type(screen.getByLabelText("Confirm password"), "a strong one");
+    await fill(user, screen.getByLabelText("Login"), "  Chris ");
+    await fill(user, screen.getByLabelText("Password"), "a strong one");
+    await fill(user, screen.getByLabelText("Confirm password"), "a strong one");
     await user.click(screen.getByRole("button", { name: "Register" }));
 
     await waitFor(() => expect(onRegistered).toHaveBeenCalledWith(account));
@@ -160,9 +161,9 @@ describe("RegisterForm step 2", () => {
       "POST /api/accounts/register": envelope(409, "login_taken"),
     });
     await toStep2(user);
-    await user.type(screen.getByLabelText("Login"), "Chris");
-    await user.type(screen.getByLabelText("Password"), "a strong one");
-    await user.type(screen.getByLabelText("Confirm password"), "a strong one");
+    await fill(user, screen.getByLabelText("Login"), "Chris");
+    await fill(user, screen.getByLabelText("Password"), "a strong one");
+    await fill(user, screen.getByLabelText("Confirm password"), "a strong one");
     await user.click(screen.getByRole("button", { name: "Register" }));
     expect(await screen.findByRole("alert")).toHaveTextContent('The login "Chris" is already taken.');
     expect(screen.getByLabelText("Login")).toHaveFocus();
@@ -174,9 +175,9 @@ describe("RegisterForm step 2", () => {
       "POST /api/accounts/register": envelope(403, "invite_invalid"),
     });
     await toStep2(user);
-    await user.type(screen.getByLabelText("Login"), "Chris");
-    await user.type(screen.getByLabelText("Password"), "a strong one");
-    await user.type(screen.getByLabelText("Confirm password"), "a strong one");
+    await fill(user, screen.getByLabelText("Login"), "Chris");
+    await fill(user, screen.getByLabelText("Password"), "a strong one");
+    await fill(user, screen.getByLabelText("Confirm password"), "a strong one");
     await user.click(screen.getByRole("button", { name: "Register" }));
 
     expect(await screen.findByText("Step 1 of 2")).toBeInTheDocument();
@@ -251,7 +252,7 @@ describe("RegisterForm step 2", () => {
     const { user } = setup({ "POST /api/accounts/check-invite": noContent });
     await toStep2(user);
     const password = screen.getByLabelText("Password");
-    await user.type(password, "secret-ish");
+    await fill(user, password, "secret-ish");
     const toggle = screen.getByRole("button", { name: "Show password" });
     expect(toggle).toHaveAttribute("aria-pressed", "false");
     await user.click(toggle);

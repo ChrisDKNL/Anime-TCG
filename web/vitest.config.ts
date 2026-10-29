@@ -9,6 +9,9 @@ export default defineConfig({
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
     include: ["src/**/*.test.{ts,tsx}"],
+    // jsdom form tests take 1-2 s each on an idle machine and several times that when CI or a
+    // parallel run is busy; the 5 s default turned load into flaky timeouts. A hang still fails.
+    testTimeout: 15_000,
     coverage: {
       provider: "v8",
       include: ["src/**/*.{ts,tsx}"],

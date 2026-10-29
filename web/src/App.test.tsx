@@ -7,13 +7,13 @@ import { SESSION_QUERY_KEY } from "./hooks/useAccountSession";
 import { createQueryClient } from "./lib/queryClient";
 import { envelope, makeAccount, noContent } from "./test/api";
 import { ANILIST, liveRegion, renderApp, signedOutSession } from "./test/app";
+import { fill } from "./test/user";
 
 /**
  * Budget for async queries that race real timers (the 350 ms pack-reveal delay
  * in Game.tsx) or React's passive-effect flush under parallel-file load.
  */
 const ASYNC_TIMEOUT = 5_000;
-const TEST_TIMEOUT = 20_000;
 
 const account = makeAccount({ login: "Chris" });
 
@@ -95,76 +95,68 @@ describe("App boot", () => {
 describe("App account flows", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it(
-    "logging in lands on the Booster tab, shows the login, announces and focuses the pack button",
-    async () => {
-      renderApp({
-        "GET /api/session": signedOutSession,
-        "POST /api/session/login": { status: 200, body: { signedIn: true, account } },
-      });
-      const user = userEvent.setup();
-      await user.click(await screen.findByRole("button", { name: "Log in" }));
-      await user.type(screen.getByLabelText("Login"), "chris");
-      await user.type(screen.getByLabelText("Password"), "a password");
-      await user.click(screen.getByRole("button", { name: "Log in" }));
+  it("logging in lands on the Booster tab, shows the login, announces and focuses the pack button", async () => {
+    renderApp({
+      "GET /api/session": signedOutSession,
+      "POST /api/session/login": { status: 200, body: { signedIn: true, account } },
+    });
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Log in" }));
+    await fill(user, screen.getByLabelText("Login"), "chris");
+    await fill(user, screen.getByLabelText("Password"), "a password");
+    await user.click(screen.getByRole("button", { name: "Log in" }));
 
-      expect(
-        await screen.findByRole(
-          "button",
-          { name: "Account menu. Signed in as \u2068Chris\u2069" },
-          { timeout: ASYNC_TIMEOUT },
-        ),
-      ).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Booster" })).toHaveAttribute("aria-pressed", "true");
-      expect(liveRegion()).toHaveTextContent("Logged in. You're now on Chris.");
-      const pack = screen.getByRole("button", { name: /open booster pack/i });
-      await waitFor(() => expect(pack).toBeEnabled(), { timeout: ASYNC_TIMEOUT });
-      expect(pack).toHaveFocus();
-      expect(document.title).toBe("\u2068Chris\u2069 · Anime TCG");
-    },
-    TEST_TIMEOUT,
-  );
-
-  it(
-    "the live region is one node for the app's lifetime; log in and log out write into it",
-    async () => {
-      renderApp({
-        "GET /api/session": signedOutSession,
-        "POST /api/session/login": { status: 200, body: { signedIn: true, account } },
-        "POST /api/session/logout": noContent,
-      });
-      const user = userEvent.setup();
-      await user.click(await screen.findByRole("button", { name: "Log in" }));
-      const region = liveRegion();
-      expect(region).toBeEmptyDOMElement();
-      const written: Node[] = [];
-      const observer = new MutationObserver((records) => {
-        for (const record of records) if (record.target === region) written.push(...record.addedNodes);
-      });
-      observer.observe(region, { childList: true });
-
-      await user.type(screen.getByLabelText("Login"), "chris");
-      await user.type(screen.getByLabelText("Password"), "a password");
-      await user.click(screen.getByRole("button", { name: "Log in" }));
+    expect(
       await screen.findByRole(
         "button",
         { name: "Account menu. Signed in as \u2068Chris\u2069" },
         { timeout: ASYNC_TIMEOUT },
-      );
-      expect(liveRegion()).toBe(region);
-      expect(region).toHaveTextContent("Logged in. You're now on Chris.");
-      expect(written.length).toBeGreaterThan(0);
+      ),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Booster" })).toHaveAttribute("aria-pressed", "true");
+    expect(liveRegion()).toHaveTextContent("Logged in. You're now on Chris.");
+    const pack = screen.getByRole("button", { name: /open booster pack/i });
+    await waitFor(() => expect(pack).toBeEnabled(), { timeout: ASYNC_TIMEOUT });
+    expect(pack).toHaveFocus();
+    expect(document.title).toBe("\u2068Chris\u2069 · Anime TCG");
+  });
 
-      await user.click(screen.getByRole("button", { name: "Account menu. Signed in as \u2068Chris\u2069" }));
-      await user.click(screen.getByRole("menuitem", { name: "Log out" }));
-      await screen.findByRole("heading", { name: "Your account" });
-      expect(liveRegion()).toBe(region);
-      expect(region).toHaveTextContent("Logged out.");
-      expect(region.isConnected).toBe(true);
-      observer.disconnect();
-    },
-    TEST_TIMEOUT,
-  );
+  it("the live region is one node for the app's lifetime; log in and log out write into it", async () => {
+    renderApp({
+      "GET /api/session": signedOutSession,
+      "POST /api/session/login": { status: 200, body: { signedIn: true, account } },
+      "POST /api/session/logout": noContent,
+    });
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Log in" }));
+    const region = liveRegion();
+    expect(region).toBeEmptyDOMElement();
+    const written: Node[] = [];
+    const observer = new MutationObserver((records) => {
+      for (const record of records) if (record.target === region) written.push(...record.addedNodes);
+    });
+    observer.observe(region, { childList: true });
+
+    await fill(user, screen.getByLabelText("Login"), "chris");
+    await fill(user, screen.getByLabelText("Password"), "a password");
+    await user.click(screen.getByRole("button", { name: "Log in" }));
+    await screen.findByRole(
+      "button",
+      { name: "Account menu. Signed in as \u2068Chris\u2069" },
+      { timeout: ASYNC_TIMEOUT },
+    );
+    expect(liveRegion()).toBe(region);
+    expect(region).toHaveTextContent("Logged in. You're now on Chris.");
+    expect(written.length).toBeGreaterThan(0);
+
+    await user.click(screen.getByRole("button", { name: "Account menu. Signed in as \u2068Chris\u2069" }));
+    await user.click(screen.getByRole("menuitem", { name: "Log out" }));
+    await screen.findByRole("heading", { name: "Your account" });
+    expect(liveRegion()).toBe(region);
+    expect(region).toHaveTextContent("Logged out.");
+    expect(region.isConnected).toBe(true);
+    observer.disconnect();
+  });
 
   it("the Account button brings the choice back and focuses its heading", async () => {
     renderApp({ "GET /api/session": signedOutSession });
@@ -274,30 +266,26 @@ describe("App account switch", () => {
 describe("App game", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it(
-    "opens a pack of 5, adds it to the collection and keeps nothing in localStorage",
-    async () => {
-      renderApp({}, account);
-      const user = userEvent.setup();
-      const button = await screen.findByRole("button", { name: /open booster pack/i });
-      await waitFor(() => expect(button).toBeEnabled(), { timeout: ASYNC_TIMEOUT });
+  it("opens a pack of 5, adds it to the collection and keeps nothing in localStorage", async () => {
+    renderApp({}, account);
+    const user = userEvent.setup();
+    const button = await screen.findByRole("button", { name: /open booster pack/i });
+    await waitFor(() => expect(button).toBeEnabled(), { timeout: ASYNC_TIMEOUT });
 
-      await user.click(button);
-      expect(
-        screen.getByRole("button", { name: "Account menu. Signed in as \u2068Chris\u2069" }),
-      ).toBeDisabled();
+    await user.click(button);
+    expect(
+      screen.getByRole("button", { name: "Account menu. Signed in as \u2068Chris\u2069" }),
+    ).toBeDisabled();
 
-      const cards = await screen.findAllByRole("article", {}, { timeout: ASYNC_TIMEOUT });
-      expect(cards).toHaveLength(5);
-      expect(screen.getAllByText("New")).toHaveLength(5);
-      expect(screen.getByRole("button", { name: /collection \(5\)/i })).toBeInTheDocument();
-      expect(
-        screen.getByRole("button", { name: "Account menu. Signed in as \u2068Chris\u2069" }),
-      ).toBeEnabled();
-      expect(localStorage.getItem("anime-tcg:inventory:v1")).toBeNull();
-    },
-    TEST_TIMEOUT,
-  );
+    const cards = await screen.findAllByRole("article", {}, { timeout: ASYNC_TIMEOUT });
+    expect(cards).toHaveLength(5);
+    expect(screen.getAllByText("New")).toHaveLength(5);
+    expect(screen.getByRole("button", { name: /collection \(5\)/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Account menu. Signed in as \u2068Chris\u2069" }),
+    ).toBeEnabled();
+    expect(localStorage.getItem("anime-tcg:inventory:v1")).toBeNull();
+  });
 
   it("shows the AniList error with a retry button when signed in", async () => {
     renderApp({ [ANILIST]: { status: 429, body: { errors: [{ message: "Too Many Requests" }] } } }, account);

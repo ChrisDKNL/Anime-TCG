@@ -5,6 +5,7 @@ import { SESSION_QUERY_KEY } from "../../hooks/useAccountSession";
 import { envelope, makeAccount, mockFetch, noContent, sentBody } from "../../test/api";
 import { renderWithProviders } from "../../test/render";
 import { ManageAccountDialog } from "./ManageAccountDialog";
+import { fill } from "../../test/user";
 
 const account = makeAccount({ login: "Chris", cards: 0, createdAt: "2026-10-28T09:30:00.000Z" });
 
@@ -32,15 +33,15 @@ function liveRegion() {
 const UNREACHABLE_FORM = "Couldn't reach the game server. Nothing was changed. Try again.";
 
 async function fillPasswords(user: ReturnType<typeof userEvent.setup>) {
-  await user.type(screen.getByLabelText("Current password"), "old one");
-  await user.type(screen.getByLabelText("New password"), "a new long one");
-  await user.type(screen.getByLabelText("Confirm new password"), "a new long one");
+  await fill(user, screen.getByLabelText("Current password"), "old one");
+  await fill(user, screen.getByLabelText("New password"), "a new long one");
+  await fill(user, screen.getByLabelText("Confirm new password"), "a new long one");
   await user.click(screen.getByRole("button", { name: "Change password" }));
 }
 
 async function submitDelete(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole("button", { name: "Delete account…" }));
-  await user.type(screen.getByLabelText("Password"), "a password");
+  await fill(user, screen.getByLabelText("Password"), "a password");
   await user.click(screen.getByRole("button", { name: "Delete Chris" }));
 }
 
@@ -178,7 +179,7 @@ describe("ManageAccountDialog", () => {
 
     it("validates on submit and focuses the first invalid field", async () => {
       const { user, fetchMock } = setup({});
-      await user.type(screen.getByLabelText("New password"), "short");
+      await fill(user, screen.getByLabelText("New password"), "short");
       await user.click(screen.getByRole("button", { name: "Change password" }));
       expect(screen.getAllByRole("alert").map((a) => a.textContent)).toEqual([
         "Enter your password.",
@@ -191,9 +192,9 @@ describe("ManageAccountDialog", () => {
 
     it("changes the password, clears the fields and announces", async () => {
       const { user, fetchMock } = setup({ "POST /api/account/change-password": noContent });
-      await user.type(screen.getByLabelText("Current password"), "old one");
-      await user.type(screen.getByLabelText("New password"), "a new long one");
-      await user.type(screen.getByLabelText("Confirm new password"), "a new long one");
+      await fill(user, screen.getByLabelText("Current password"), "old one");
+      await fill(user, screen.getByLabelText("New password"), "a new long one");
+      await fill(user, screen.getByLabelText("Confirm new password"), "a new long one");
       await user.click(screen.getByRole("button", { name: "Change password" }));
 
       expect(await screen.findAllByText("Password changed.")).toHaveLength(2);
@@ -206,9 +207,9 @@ describe("ManageAccountDialog", () => {
 
     it("a wrong current password is inline on that field and clears it", async () => {
       const { user } = setup({ "POST /api/account/change-password": envelope(403, "wrong_password") });
-      await user.type(screen.getByLabelText("Current password"), "wrong");
-      await user.type(screen.getByLabelText("New password"), "a new long one");
-      await user.type(screen.getByLabelText("Confirm new password"), "a new long one");
+      await fill(user, screen.getByLabelText("Current password"), "wrong");
+      await fill(user, screen.getByLabelText("New password"), "a new long one");
+      await fill(user, screen.getByLabelText("Confirm new password"), "a new long one");
       await user.click(screen.getByRole("button", { name: "Change password" }));
       expect(await screen.findByRole("alert")).toHaveTextContent("That password is incorrect.");
       expect(screen.getByLabelText("Current password")).toHaveValue("");
@@ -219,9 +220,9 @@ describe("ManageAccountDialog", () => {
     it("the server's wait counts down on the Change button", async () => {
       vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
       const { user } = setup({ "POST /api/account/change-password": envelope(429, "too_many_failures", 3) });
-      await user.type(screen.getByLabelText("Current password"), "wrong");
-      await user.type(screen.getByLabelText("New password"), "a new long one");
-      await user.type(screen.getByLabelText("Confirm new password"), "a new long one");
+      await fill(user, screen.getByLabelText("Current password"), "wrong");
+      await fill(user, screen.getByLabelText("New password"), "a new long one");
+      await fill(user, screen.getByLabelText("Confirm new password"), "a new long one");
       await user.click(screen.getByRole("button", { name: "Change password" }));
       const button = await screen.findByRole("button", { name: "Try again in 3 s" });
       expect(button).toHaveAttribute("aria-disabled", "true");
@@ -327,14 +328,14 @@ describe("ManageAccountDialog", () => {
       });
       queryClient.setQueryData(SESSION_QUERY_KEY, { signedIn: true, account });
       await user.click(screen.getByRole("button", { name: "Delete account…" }));
-      await user.type(screen.getByLabelText("Password"), "wrong");
+      await fill(user, screen.getByLabelText("Password"), "wrong");
       await user.click(screen.getByRole("button", { name: "Delete Chris" }));
       expect(await screen.findByRole("alert")).toHaveTextContent("That password is incorrect.");
       expect(screen.getByLabelText("Password")).toHaveValue("");
       expect(screen.getByLabelText("Password")).toHaveFocus();
 
       fetchMock.mockImplementation(() => Promise.resolve(new Response(null, { status: 204 })));
-      await user.type(screen.getByLabelText("Password"), "right");
+      await fill(user, screen.getByLabelText("Password"), "right");
       await user.click(screen.getByRole("button", { name: "Delete Chris" }));
       await waitFor(() => expect(onDeleted).toHaveBeenCalledWith("Chris"));
       expect(queryClient.getQueryData(SESSION_QUERY_KEY)).toEqual({ signedIn: false });
@@ -343,7 +344,7 @@ describe("ManageAccountDialog", () => {
     it("unreachable keeps the confirm panel with the in-form banner", async () => {
       const { user } = setup({ "POST /api/account/delete": { status: 502, raw: "" } });
       await user.click(screen.getByRole("button", { name: "Delete account…" }));
-      await user.type(screen.getByLabelText("Password"), "pw");
+      await fill(user, screen.getByLabelText("Password"), "pw");
       await user.click(screen.getByRole("button", { name: "Delete Chris" }));
       expect(await screen.findByRole("alert")).toHaveTextContent(
         "Couldn't reach the game server. Nothing was changed. Try again.",

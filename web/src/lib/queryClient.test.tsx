@@ -7,6 +7,7 @@ import { ManageAccountDialog } from "../components/account/ManageAccountDialog";
 import { makeAccount } from "../test/api";
 import { renderWithProviders } from "../test/render";
 import { banners } from "./copy";
+import { fill } from "../test/user";
 
 /** What `fetch` does with the network gone. */
 function stubOfflineFetch() {
@@ -39,8 +40,8 @@ describe("query client after the browser reports offline", () => {
     expect(onlineManager.isOnline()).toBe(false);
 
     const user = userEvent.setup();
-    await user.type(screen.getByLabelText("Login"), "chris");
-    await user.type(screen.getByLabelText("Password"), "a password");
+    await fill(user, screen.getByLabelText("Login"), "chris");
+    await fill(user, screen.getByLabelText("Password"), "a password");
     await user.click(screen.getByRole("button", { name: "Log in" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(banners.unreachableForm);
@@ -67,7 +68,7 @@ describe("query client after the browser reports offline", () => {
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Delete account…" }));
-    await user.type(screen.getByLabelText("Password"), "a password");
+    await fill(user, screen.getByLabelText("Password"), "a password");
     await user.click(screen.getByRole("button", { name: "Delete Chris" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(banners.unreachableForm);
@@ -88,8 +89,8 @@ describe("query client mutation cache", () => {
     stubOfflineFetch();
     const { queryClient, unmount } = renderWithProviders(<LoginForm onBack={vi.fn()} onLoggedIn={vi.fn()} />);
     const user = userEvent.setup();
-    await user.type(screen.getByLabelText("Login"), "chris");
-    await user.type(screen.getByLabelText("Password"), "a password");
+    await fill(user, screen.getByLabelText("Login"), "chris");
+    await fill(user, screen.getByLabelText("Password"), "a password");
     await user.click(screen.getByRole("button", { name: "Log in" }));
     await screen.findByRole("alert");
     expect(
