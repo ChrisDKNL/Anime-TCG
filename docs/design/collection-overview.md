@@ -2,7 +2,7 @@
 
 Roadmap item 3 · builds on 1c (server-side collection, `docs/design/collection-packs.md`) and item 2 (economy, `docs/design/economy.md`) · shows [ADR 0004](../adr/0004-economy-ground-rules.md) §4 as amended by [ADR 0011](../adr/0011-economy-revised-karma-market-snapshot.md) §3 (market, recycle) under [ADR 0008](../adr/0008-server-authoritative.md) · written 2026-10-29, revised the same day for the owner's decisions
 
-> **Revised 2026-10-29** to the owner's decisions (ADR 0011 and the owner's later answers the same day) and the server specs as revised for them (`collection-packs.md` at 0ce69bd, `economy.md` at 9a3e059): five rarity tiers (Common, Rare, Epic, Legendary, Mythic), fixed per character; one entry per character; completion per series, where a series is an AniList **franchise**, and for the whole pool; "Sell" becomes "List on the market", for every card including the last copy; **Recycle for Karma** turns duplicates into Karma at a set value per tier, and there is no recycling into a higher tier; the currency is Karma. The Karma balance in the header, the Shop tab and the Market tab are a companion spec, `docs/design/market-and-shop.md`, which says why it is separate. `economy.md` is being recomputed for the owner's final answers while this is written, so its amounts appear as placeholders (`<ref Epic>`, `<recycle Epic>`, `<min Epic>`, `<max Epic>`), and §3.9 lists the mismatches with it as it stands.
+> **Revised 2026-10-29** to the owner's decisions (ADR 0011 and the owner's later answers the same day) and the server specs as revised for them (`collection-packs.md` at 0ce69bd, `economy.md` at 9a3e059): six rarity tiers (Common, Uncommon, Rare, Epic, Legendary, Mythic), fixed per character by popularity rank and drawn as the owner's frames with one to six stars (`docs/design/card-and-rarity.md`); one entry per character; completion per series, where a series is an AniList **franchise**, and for the whole pool; "Sell" becomes "List on the market", for every card including the last copy; **Recycle for Karma** turns duplicates into Karma at a set value per tier, and there is no recycling into a higher tier; the currency is Karma. The Karma balance in the header, the Shop tab and the Market tab are a companion spec, `docs/design/market-and-shop.md`, which says why it is separate. `economy.md` is being recomputed for the owner's final answers while this is written, so its amounts appear as placeholders (`<ref Epic>`, `<recycle Epic>`, `<min Epic>`, `<max Epic>`), and §3.9 lists the mismatches with it as it stands.
 
 ## 1. Goal
 
@@ -23,8 +23,8 @@ A signed-in player sees their whole collection on one screen and can find any ca
 - Arrow-key navigation inside the grid (§7 says why Tab is enough at 60 per page).
 - Previous/next navigation between cards inside the dialog.
 - **Collection reset.** It is an owner-only command (`collection-packs.md` §5.6, `reset-collection`), with no route and no player button anywhere. The proof of concept's `Reset` button and its copy go in the 1c web PR (`collection-packs.md` §8).
-- **The pack reveal's glowing frames.** They are replaced in the 1c web PR together with the rarity token values of §6.1 (`collection-packs.md` §8, decision 9), not by this feature.
-- **Masterwork cards and Relics** (owner, 2026-10-29: reserved for later). A Masterwork is a variant of a card with increased rarity; a Relic is a separate kind of collectible. Neither is designed here and nothing in this view renders them. Room is left so that adding them later changes no layout: the tile's meta row keeps one slot after the rarity word for a short variant marker (§6.2); the dialog's facts list can take a further row; the Collection tab's view switch is a group that can take a further button, such as a Relics view (§5.2); and an entry, keyed today by character and granted rarity, can take a variant as a third key.
+- **The pack reveal's glowing frames.** They are replaced in the 1c web PR together with the card and rarity tokens of `card-and-rarity.md` §10 (`collection-packs.md` §8), not by this feature.
+- **Masterwork cards and Relics** (owner, 2026-10-29: reserved for later). A Masterwork is a variant of a card with increased rarity; a Relic is a separate kind of collectible. Neither is designed here and nothing in this view renders them. Room is left so that adding them later changes no layout: the card's stars line keeps room after the stars for a short variant marker (`card-and-rarity.md` §3.1); the dialog's facts list can take a further row; the Collection tab's view switch is a group that can take a further button, such as a Relics view (§5.2); and an entry, keyed today by character and granted rarity, can take a variant as a third key.
 - Replacing the app's visual system. This view is drawn in the target style; what the rest of the app must change is listed in §10, not done here.
 
 ## 3. Flow
@@ -33,7 +33,7 @@ Terms used below and in the copy.
 
 - A **card** is one owned copy.
 - An **entry** is every copy of one character at one **granted rarity** (the rarity the card was dealt with, which never changes); the grid shows one tile per entry. Each character has one **tier** per snapshot, so a collection normally holds **one entry per character**. A second entry for the same character appears only after a snapshot update moved that character's tier and the player then obtained it at the new tier (`collection-packs.md` §5.1.7). The entry's `rarity` is its granted rarity; `character.tier` is what packs deal the character as now (`null` when the character is not in the current snapshot). After a snapshot update, owned cards keep their granted rarity, while names and images follow the new snapshot.
-- The **tiers**, lowest to highest: Common, Rare, Epic, Legendary, Mythic (`RARITIES`, `collection-packs.md` §6.2).
+- The **tiers**, lowest to highest: Common, Uncommon, Rare, Epic, Legendary, Mythic, shown as one to six stars ("Owner, 2026-10-29"; `card-and-rarity.md` §5).
 - A **duplicate** is any copy beyond the first in an entry. Only duplicates can be recycled, never an entry's last copy; how many an entry offers is `recyclable` (§3.6, §3.9 E3).
 - A card is **listed** while it is on the market and **available** otherwise. A listed card is still owned: it counts in the copies, the totals and completion until it sells (`economy.md` §7). The server sends `listed` and `available` per entry.
 - The **pool** is the current snapshot's characters, the MAIN and SUPPORTING characters of the top 100 anime on AniList.
@@ -60,7 +60,7 @@ Terms used below and in the copy.
 1. **Pool completion**: `completion.pool`, the distinct characters of the current snapshot the player owns at least one card of, at any rarity, over the snapshot's character count: `412 of 2,143 characters`. A percentage, rounded down so `100%` appears only when it is true, and a bar sit beside it. Both figures are the server's.
 2. **Series completion**: `completion.franchises`, one row for **every** franchise of the current snapshot, owned or not, in the server's order (most popular first). Each row is the franchise's characters the player owns at any rarity, each counted once, over the franchise's character count. A series with no card yet is `0 of 12`, shown like any other row, not hidden and not dimmed below the contrast floor. It appears in three places: the **Series view** (step 5), the series filter's option labels (§3.3), and, with a series filter active, a second stats line: `Cowboy Bebop: 3 of 4 characters`.
 3. **Dropped characters** (`inCurrentSnapshot: false`, `tier: null`) stay in the collection with their granted rarity, show the out-of-pool line in the dialog, count in the card totals and in no completion figure (`collection-packs.md` §5.1.7). A franchise that is no longer in the current snapshot has no completion row: it appears in the series filter while an owned entry names it, without a figure, and not in the Series view.
-4. **Totals**: `totals.cards`, `totals.duplicates` and `totals.byRarity` (cards per granted rarity, five tiers). No search, filter or view changes a stat; the stats always describe the whole collection.
+4. **Totals**: `totals.cards`, `totals.duplicates` and `totals.byRarity` (cards per granted rarity, six tiers). No search, filter or view changes a stat; the stats always describe the whole collection.
 5. **Series view.** Under the stats, a view switch, `Cards` (default) and `Series`. The Series view lists every row of step 2: the series title, `<owned> of <total>`, and a bar. Sort: `Most popular first` (the server's order, default) or `Title, A to Z`. A row with at least one owned character has `Show cards`, which switches to the Cards view with that series as the series filter, clears the search, the rarity filter and Duplicates only, keeps the sort, and goes to page 1. A `0 of N` row has no button: there is nothing to show. Under the list, one line names the source: `<S> series from the 100 most popular anime on AniList, as of <D Mon YYYY>.` (S = the number of rows, the date `snapshot.takenAt`). The Series view has no paging (fewer than 100 rows: 100 anime grouped into franchises).
 6. With `snapshot: null` (a fresh install before the owner's first snapshot) there are no cards, so the empty state shows; nothing in this section renders.
 7. Nothing happens at a threshold. At 100% the line reads `2,143 of 2,143 characters` and `100%`, like any other number; a completed series reads `12 of 12`.
@@ -90,19 +90,19 @@ All four run in the browser over the entries the server returned. They are displ
 
 **Filters**
 
-- **Rarity**: a row of chips, `All` and one per tier (`Common`, `Rare`, `Epic`, `Legendary`, `Mythic`). Several tiers can be pressed at once; an entry matches when its granted rarity is one of them. `All` is pressed exactly when no tier is; pressing it releases every tier. Pressing the last pressed tier again releases it, which presses `All`.
+- **Rarity**: a row of chips, `All` and one per tier (`Common`, `Uncommon`, `Rare`, `Epic`, `Legendary`, `Mythic`). Several tiers can be pressed at once; an entry matches when its granted rarity is one of them. `All` is pressed exactly when no tier is; pressing it releases every tier. Pressing the last pressed tier again releases it, which presses `All`.
 - **Series**: `All series` (default), then every franchise that at least one held entry names in its `franchiseIds`, sorted by title (`Intl.Collator`, §3.3 Sort). Each option with a completion row is labelled with it (`Cowboy Bebop · 3/4`); a franchise no longer in the current snapshot has no figure (`Cowboy Bebop`). Options are keyed by franchise id; two franchises with the same title are told apart by start year (`Hunter x Hunter, 2011 · 5/9`) when the server gives one. An entry matches when **any** of its `franchiseIds` is the selected one. A selected series stays in the list while selected, even after its last card goes (`· 0/4`). Series the player owns nothing of are not options; they are in the Series view.
 - **Duplicates only**: off by default; on shows entries with 2 or more copies.
 - `Clear filters` appears when the search or any filter differs from its default, and resets all of them. It does not touch the sort.
 
 **Sort**. Default `Rarity, rarest first`. Name and title comparisons use `Intl.Collator("en", { sensitivity: "base", numeric: true })`. "Series" in a tie-break is the primary franchise's title (`franchiseIds[0]`). The last tie-break everywhere is the character id, then the granted rarity rarest first, so every order is stable even for a character held at two rarities.
 
-| Option                 | Order                                                 | Then                          |
-| ---------------------- | ----------------------------------------------------- | ----------------------------- |
-| `Rarity, rarest first` | granted rarity: Mythic, Legendary, Epic, Rare, Common | name A–Z, then series A–Z     |
-| `Name, A to Z`         | name A–Z                                              | rarest first, then series A–Z |
-| `Newest first`         | last obtained, newest first                           | rarest first, then name A–Z   |
-| `Most copies`          | count, highest first                                  | rarest first, then name A–Z   |
+| Option                 | Order                                                           | Then                          |
+| ---------------------- | --------------------------------------------------------------- | ----------------------------- |
+| `Rarity, rarest first` | granted rarity: Mythic, Legendary, Epic, Rare, Uncommon, Common | name A–Z, then series A–Z     |
+| `Name, A to Z`         | name A–Z                                                        | rarest first, then series A–Z |
+| `Newest first`         | last obtained, newest first                                     | rarest first, then name A–Z   |
+| `Most copies`          | count, highest first                                            | rarest first, then name A–Z   |
 
 "Last obtained" (`lastObtainedAt`) moves an entry up when a new copy arrives from a pack, a recycle or a purchase, so the cards from the latest pack lead `Newest first`.
 
@@ -172,20 +172,20 @@ Per screen, with the field that supplies it. ✓ means the server specs supply i
 
 **Cards view** (`GET /api/collection`, `CollectionResponse`, `collection-packs.md` §6.2 with `economy.md` §11.2's additions)
 
-| Need                                                         | Field                                                              | Status |
-| ------------------------------------------------------------ | ------------------------------------------------------------------ | ------ |
-| One tile per entry, keyed by character and rarity            | `entries[].character.id`, `entries[].rarity` (five tiers)          | ✓      |
-| Reserved kind and variant (ignored while each has one value) | `entries[].kind` (`"card"`), `entries[].variant` (`"standard"`)    | ✓      |
-| Name, native name, art                                       | `character.name`, `character.nameNative`, `character.imageUrl`     | ✓      |
-| Franchises per character, primary first                      | `character.franchiseIds`                                           | ✓      |
-| Franchise titles for tile, search, filter, disambiguation    | `franchises[]`: `id`, `title`, `titleNative`, `startYear`          | ✓      |
-| Copies, listed, available                                    | `count`, `listed`, `available`                                     | ✓      |
-| Recyclable duplicates                                        | —                                                                  | E3     |
-| Sort and facts dates                                         | `firstObtainedAt`, `lastObtainedAt`                                | ✓      |
-| Current tier and snapshot membership                         | `character.tier`, `character.inCurrentSnapshot`                    | ✓      |
-| Totals line, tab label                                       | `totals.cards`, `totals.duplicates`, `totals.byRarity` (five keys) | ✓      |
-| Pool completion                                              | `completion.pool.owned`, `.total`                                  | ✓      |
-| Series option labels and the filtered series line            | `completion.franchises[]` by `franchiseId`                         | ✓      |
+| Need                                                         | Field                                                             | Status |
+| ------------------------------------------------------------ | ----------------------------------------------------------------- | ------ |
+| One tile per entry, keyed by character and rarity            | `entries[].character.id`, `entries[].rarity` (six tiers)          | ✓      |
+| Reserved kind and variant (ignored while each has one value) | `entries[].kind` (`"card"`), `entries[].variant` (`"standard"`)   | ✓      |
+| Name, native name, art                                       | `character.name`, `character.nameNative`, `character.imageUrl`    | ✓      |
+| Franchises per character, primary first                      | `character.franchiseIds`                                          | ✓      |
+| Franchise titles for tile, search, filter, disambiguation    | `franchises[]`: `id`, `title`, `titleNative`, `startYear`         | ✓      |
+| Copies, listed, available                                    | `count`, `listed`, `available`                                    | ✓      |
+| Recyclable duplicates                                        | —                                                                 | E3     |
+| Sort and facts dates                                         | `firstObtainedAt`, `lastObtainedAt`                               | ✓      |
+| Current tier and snapshot membership                         | `character.tier`, `character.inCurrentSnapshot`                   | ✓      |
+| Totals line, tab label                                       | `totals.cards`, `totals.duplicates`, `totals.byRarity` (six keys) | ✓      |
+| Pool completion                                              | `completion.pool.owned`, `.total`                                 | ✓      |
+| Series option labels and the filtered series line            | `completion.franchises[]` by `franchiseId`                        | ✓      |
 
 **Series view**: `completion.franchises[]` in the server's popularity order, every franchise of the current snapshot including 0-owned rows; titles through `franchises[]`; `snapshot.takenAt` for the source line (all ✓).
 
@@ -213,7 +213,7 @@ Per screen, with the field that supplies it. ✓ means the server specs supply i
 
 Against `collection-packs.md` at 0ce69bd (`origin/feat/collection-packs`) and `economy.md` at 9a3e059 (`origin/feat/economy`). Each is for the manager to settle; this spec designs around none of them silently, and says what it does meanwhile.
 
-**Resolved since this spec's first revision.** `collection-packs.md` now carries five tiers (`Rarity`, `PerRarity`, `RARITY_LABEL`), franchises (`franchiseIds`, `FranchiseRef`, `completion.franchises`), the reserved `kind` and `variant`, and all four token lines in its web PR. `economy.md` now carries `feeMin`, the balance on `insufficient_funds`, native names and titles in the market's search, and `Wallet.activeListings`; and, for `market-and-shop.md`, `closedAt`, the `limit` on `market_limit`, `ThemeOffer.cards`, `ThemeOffer.franchiseIds` for both kinds, `filterFranchiseIds`, and an `active` list without expired listings. The owner's decided build order (§9.1) settles the delivery-order mismatch. Two notes stand with no change asked: the listing time arrives in seconds and is shown in days (whole days when divisible by 86 400, else hours), and listing and recycle answers carry no updated entry, so the view refetches.
+**Resolved since this spec's first revision.** `collection-packs.md` now carries tiers in the contract (five there; the owner's six tiers are pending, `card-and-rarity.md` §12), franchises (`franchiseIds`, `FranchiseRef`, `completion.franchises`), the reserved `kind` and `variant`, and all four token lines in its web PR. `economy.md` now carries `feeMin`, the balance on `insufficient_funds`, native names and titles in the market's search, and `Wallet.activeListings`; and, for `market-and-shop.md`, `closedAt`, the `limit` on `market_limit`, `ThemeOffer.cards`, `ThemeOffer.franchiseIds` for both kinds, `filterFranchiseIds`, and an `active` list without expired listings. The owner's decided build order (§9.1) settles the delivery-order mismatch. Two notes stand with no change asked: the listing time arrives in seconds and is shown in days (whole days when divisible by 86 400, else hours), and listing and recycle answers carry no updated entry, so the view refetches.
 
 **Mismatches with `economy.md` as it stands** (written before the owner's final answers of 2026-10-29)
 
@@ -231,12 +231,12 @@ The shop's mismatches (genre packs automatic, the pack price) are in `market-and
 
 | Placeholder          | Meaning                                                                               | Used in    |
 | -------------------- | ------------------------------------------------------------------------------------- | ---------- |
-| `<ref T>`            | reference value of tier T (being recomputed with the new Rare odds)                   | §3.5, §3.6 |
+| `<ref T>`            | reference value of tier T, six tiers with Uncommon (being recomputed)                 | §3.5, §3.6 |
 | `<recycle T>`        | Karma per recycled duplicate of tier T: a quarter of `<ref T>`, rounded as E1 settles | §3.6, §8   |
 | `<min T>`, `<max T>` | market bounds of tier T: half and two and a half times `<ref T>`                      | §3.5, §8   |
 | `<feePct>`           | the market fee, 5 % once E4 lands                                                     | §3.5, §8   |
 
-The UI reads every one of them from `GET /api/wallet`; none is written into a string or a constant.
+The UI reads every one of them from `GET /api/wallet`; none is written into a string or a constant. The card itself depends on `collection-packs.md` gaining six tiers, the popularity rank on every character and the pool size (`card-and-rarity.md` §12, R1 and R2).
 
 ## 4. States
 
@@ -278,14 +278,14 @@ The UI reads every one of them from `GET /api/wallet`; none is written into a st
 
 ### 4.4 Tile
 
-| State         | User sees                                                          | User can do       |
-| ------------- | ------------------------------------------------------------------ | ----------------- |
-| default       | Art, name, primary series, rarity word, `×<N>` when N is 2 or more | Open              |
-| listed        | As default, plus the line `<L> listed`                             | Open              |
-| hover         | The border goes from 40% to 80% of the tier colour; nothing moves  | Open              |
-| focus         | The violet focus ring with an offset                               | Enter/Space opens |
-| image loading | The 3:4 box in `bg-zinc-800`                                       | Open              |
-| image failed  | The same box with `No image` centred                               | Open              |
+| State         | User sees                                                                                 | User can do       |
+| ------------- | ----------------------------------------------------------------------------------------- | ----------------- |
+| default       | The card (name, stars, art, rank, series); under it `×<N>` when N is 2 or more            | Open              |
+| listed        | As default, plus the line `<L> listed`                                                    | Open              |
+| hover         | Epic and up: the glint or drift plays (`card-and-rarity.md` §5.3); nothing moves or lifts | Open              |
+| focus         | The violet focus ring with an offset                                                      | Enter/Space opens |
+| image loading | The art placeholder (`card-and-rarity.md` §3.3)                                           | Open              |
+| image failed  | The placeholder with `No image` centred                                                   | Open              |
 
 ### 4.5 Card dialog
 
@@ -356,7 +356,7 @@ The grid is set by the tile's minimum width, not by the device:
 | 936–1115 px    | 5       | 4 below 1024 (`lg`), 5 from 1024 |
 | 1116 px and up | 6       | 5 below 1280 (`xl`), 6 from 1280 |
 
-- Below 348 px of content the 2-column floor makes tiles narrower than the minimum (138 px at a 320 px viewport). The art keeps 3:4 and the text truncates.
+- Below 348 px of content the 2-column floor makes tiles narrower than the minimum (138 px at a 320 px viewport). The card keeps 5:7 and its text truncates.
 - A page of 60 entries fills whole rows at 2, 3, 4, 5 and 6 columns (60 is their least common multiple), so only the last page can end on a short row.
 - Tiles in a row stretch to the tallest (a listed tile has one more line); the art stays at the top, the text block grows downward.
 - Two characters can share a name; the series line tells them apart, and the tile's accessible name includes it.
@@ -370,18 +370,18 @@ Top to bottom inside `<main>`: stats, view switch, then the Cards view (toolbar,
 - Line 1: `412 of 2,143 characters` and `19%`, one row, wrapping on a phone.
 - Series line, only with a series filter in the Cards view: under line 1, truncated to the line.
 - Bar under them: full width up to `max-w-md`.
-- Totals line: `214 cards · 153 duplicates`, then the five tiers lowest first, `Common 160`, `Rare 38`, `Epic 11`, `Legendary 4`, `Mythic 1`, each shown even at 0, wrapping as needed (a phone wraps after the duplicates).
+- Totals line: `214 cards · 153 duplicates`, then the six tiers lowest first, `Common 120`, `Uncommon 58`, `Rare 27`, `Epic 7`, `Legendary 2`, `Mythic 0`, each shown even at 0, wrapping as needed (a phone wraps after the duplicates).
 - The stale note, when shown, under the totals line.
 
 **View switch** (`mt-6`): `Cards` and `Series`, side by side, left-aligned, at every width. The group can take a further button later (§2, Relics) without changing this row.
 
-**Toolbar** (Cards view, `mt-4`), a visible label above each control; the rarity chips have their own row because five tiers do not fit a select's width:
+**Toolbar** (Cards view, `mt-4`), a visible label above each control; the rarity chips have their own row because six tiers do not fit a select's width:
 
-| Width          | Arrangement                                                                                                                                                       |
-| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| below 640 px   | Row 1: Search, full width. Row 2: Series and Sort, half each. Row 3: the rarity chips, wrapping (two lines at 320 px). Row 4: Duplicates only, then Clear filters |
-| 640–1023 px    | Row 1: Search, full width. Row 2: Series and Sort, half each. Row 3: the rarity chips, then Duplicates only and Clear filters, wrapping as one row                |
-| 1024 px and up | Row 1, bottom-aligned: Search (grows, at least 14rem), Series (14rem), Sort (12rem). Row 2: the rarity chips, Duplicates only, Clear filters                      |
+| Width          | Arrangement                                                                                                                                                         |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| below 640 px   | Row 1: Search, full width. Row 2: Series and Sort, half each. Row 3: the rarity chips, wrapping (three lines at 320 px). Row 4: Duplicates only, then Clear filters |
+| 640–1023 px    | Row 1: Search, full width. Row 2: Series and Sort, half each. Row 3: the rarity chips, then Duplicates only and Clear filters, wrapping as one row                  |
+| 1024 px and up | Row 1, bottom-aligned: Search (grows, at least 14rem), Series (14rem), Sort (12rem). Row 2: the rarity chips, Duplicates only, Clear filters                        |
 
 Select widths are fixed so the row does not shift when a long series title is chosen; the chosen title truncates inside the select. The chips keep their order (`All`, then lowest tier first) at every width; `gap-2`.
 
@@ -398,8 +398,8 @@ Select widths are fixed so the row does not shift when a long series title is ch
 ### 5.4 Card dialog
 
 - The Manage account dialog's shell with `max-w-2xl` instead of `max-w-lg`; `max-h-[85vh]`, the body scrolls, the backdrop is unchanged. The close button sits top right, as there.
-- `sm` and up: two columns, `grid grid-cols-[12rem_1fr] gap-6`: the art on the left (12rem wide, 3:4), and on the right the heading block (name, native name, series, native title, `Also in`), facts, note and sections.
-- Phone: the art at `w-28` (7rem) beside the heading block in a `flex gap-4` row; `Also in`, facts, note and sections full width below.
+- `sm` and up: two columns, `grid grid-cols-[15rem_1fr] gap-6`: the card at dialog size on the left (240 × 336 px, `card-and-rarity.md` §3.2), and on the right the heading block (name, native name, series, native title, `Also in`), facts, note and sections.
+- Phone: the card at 200 × 280 px, centred, above the heading block; `Also in`, facts, note and sections full width below.
 - `Also in`: a label and a comma-separated run of titles, wrapping; more than five show the first five and `and <N> more` as a text button that reveals the rest in place.
 - List on the market and Recycle for Karma sit under the facts, separated by `border-t border-zinc-800 pt-5 mt-5`, each with an `h3`.
 - The price row, at every width: `flex items-end gap-2`: the `Price` field (`w-24`, label above), the word `Karma` (aligned with the field's text baseline), then `List…` with `ml-1`. At a 320 px viewport the row needs 226 px of the dialog's 240. The hint, the fee line, an error and the market link stack under the row.
@@ -432,61 +432,40 @@ Names, native names, franchise titles, native titles and image URLs come from An
 8. Normalisation (§3.3) is for matching only. Everything on screen is the original string.
 9. The price field accepts digits only after trimming; the value sent is the parsed integer, never the raw text.
 
-The T1 test for this feature uses a name, a native name, a franchise title, a native title and a search query of each of: `<img src=x onerror=alert(1)>`, an RTL override (U+202E … U+202C), 200 characters without a space, and a stack of 50 combining marks. It checks that each appears as text in the tile, the dialog heading, `Also in`, a confirmation heading, the series option, a Series view row and the no-match message; that no `[onerror]` attribute and no `img` other than the card art exists; and that the count, the rarity word and amounts are siblings of the name's element, not inside it.
+The T1 test for this feature uses a name, a native name, a franchise title, a native title and a search query of each of: `<img src=x onerror=alert(1)>`, an RTL override (U+202E … U+202C), 200 characters without a space, and a stack of 50 combining marks. It checks that each appears as text in the tile, the dialog heading, `Also in`, a confirmation heading, the series option, a Series view row and the no-match message; that no `[onerror]` attribute and no `img` other than the card art exists; and that the count, the stars, the rank and amounts are siblings of the name's element, not inside it.
 
 ## 6. Visual treatment
 
-**Tokens.** This feature adds and changes none itself. Five tiers need two new tokens, which this spec defines in §6.1 (the only change from the earlier revision, made because nothing existing fits); they land in the 1c web PR, the first to render five tiers (`collection-packs.md` §8).
+**Tokens.** This feature adds and changes none. The card, the tiers, their colours, frames, effects and tokens are `docs/design/card-and-rarity.md`; the tokens land in the 1c web PR, the first to render a card.
 
 ### 6.1 Rarity as a system
 
-Five tiers, carried by hue at one lightness step for every tier, and always also by the word. No glow, no shadow, no animation. Common is the neutral floor; the four coloured tiers walk the hue wheel in one direction, cool to warm, as rarity rises: blue, green, yellow, red (about 200°, 160°, 45°, 350°). Violet is left out because it is the accent (primary actions and focus); fuchsia and pink are left out because they sit next to violet and read as the old gradient.
+The six tiers, their frames, stars, rank line, colours, contrast and motion are **`docs/design/card-and-rarity.md`**, which supersedes the five-tier hue ladder this section held. This view uses:
 
-| Tier      | Hue            | Mark colour (token, step 400)        | Text (step 300)    | Tile border                  | Tile border on hover |
-| --------- | -------------- | ------------------------------------ | ------------------ | ---------------------------- | -------------------- |
-| Common    | neutral (zinc) | `--color-rarity-common` `#a1a1aa`    | `text-zinc-300`    | `border-rarity-common/40`    | `/80`                |
-| Rare      | sky            | `--color-rarity-rare` `#38bdf8`      | `text-sky-300`     | `border-rarity-rare/40`      | `/80`                |
-| Epic      | emerald        | `--color-rarity-epic` `#34d399`      | `text-emerald-300` | `border-rarity-epic/40`      | `/80`                |
-| Legendary | amber          | `--color-rarity-legendary` `#fbbf24` | `text-amber-300`   | `border-rarity-legendary/40` | `/80`                |
-| Mythic    | rose           | `--color-rarity-mythic` `#fb7185`    | `text-rose-300`    | `border-rarity-mythic/40`    | `/80`                |
+- the card at tile size (§6.2) and at dialog size (§5.4);
+- the tier text colours `--color-rarity-<tier>-text` for every tier word and number outside a card (chips, totals, facts, odds), all at least 4.5:1 on `zinc-900` and `zinc-950` (`card-and-rarity.md` §4.2);
+- the mark colours `--color-rarity-<tier>` for chip borders and fills.
 
-- **Rose and the error red.** Errors keep red (`red-300` text, `red-800` field borders, red banners) and only ever appear as sentences, banners or field borders, never as a tile border or a single word in a meta row; Mythic is always the word `Mythic` beside its colour. The two never mean the same thing in the same place.
-- **Colour vision.** Emerald and amber, and sky and zinc, can look alike to some players; rarity is always also the word (WCAG 1.4.1), and the chips' pressed state is a fill, not a hue.
-- Every step-300 text colour reaches at least 4.5:1 on `zinc-900` and `zinc-950`.
-
-Token values in `web/src/index.css` `@theme`:
-
-- `--color-rarity-common`: `#94a3b8` (slate-400) → `#a1a1aa` (zinc-400). Slate is a blue-grey that sat next to Rare's blue; zinc is the app's one neutral scale.
-- `--color-rarity-legendary`: `#f59e0b` (amber-500) → `#fbbf24` (amber-400), the same step as the others.
-- `--color-rarity-rare` stays `#38bdf8`.
-- **New**: `--color-rarity-epic: #34d399` (emerald-400) and `--color-rarity-mythic: #fb7185` (rose-400).
-- The comment above the block changes from "Rarity glow colours …" to "Rarity colours, step 400 of each hue, lowest tier first."
-
-The two changed values land in the 1c web PR with the reveal's frames (`collection-packs.md` §8, decision 9), so the reveal and the collection share one treatment from the day the collection moves to the server. The two new tokens land in the same PR, which is the first to render five tiers. If this feature is built before either, it does not change the tokens itself; it waits.
+Rarity is never colour alone: on a card the stars carry it, elsewhere the tier word.
 
 ### 6.2 Tile
 
-A new tile for the collection, also used by the market's browse grid (`market-and-shop.md` §6). It is a button (it opens the dialog) where the reveal card is an article, and it is drawn in the target style. It reuses `RARITY_LABEL` and the rarity tokens, not `CharacterCard`'s frame, overlay or badges.
+The tile is the card (`card-and-rarity.md` §3) at tile size, inside a button, with a caption under it. The market's browse grid uses the same tile with its own caption (`market-and-shop.md` §6).
 
-- Box: `<button type="button">`, `flex flex-col overflow-hidden rounded-lg border bg-zinc-900 text-left`, the border per §6.1 (by granted rarity), `transition-colors duration-150`. Focus: `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950`. No shadow, no translate, no scale.
-- Art: an `aspect-[3/4] w-full bg-zinc-800` box holding `<img alt="" loading="lazy" decoding="async">` at `h-full w-full object-cover`. No gradient overlay; nothing is drawn on the art.
-- Text block `flex flex-col gap-0.5 p-2.5`:
-  - name: `truncate text-sm leading-tight font-semibold text-zinc-100`
-  - primary series: `truncate text-xs leading-tight text-zinc-400`
-  - meta row `mt-1 flex items-baseline justify-between gap-2`: on the left, the rarity word in `text-[11px] font-semibold tracking-wider uppercase` and the tier's text colour (`LEGENDARY`, the longest word, takes about 75 px of a 148 px row); on the right, `×<N>` in `text-xs text-zinc-300 tabular-nums`, only for N of 2 or more. The left group is an inline `flex gap-1.5` so a later variant marker (§2, Masterwork) sits after the rarity word without moving the count.
-  - listed line, only when `listed` ≥ 1: `<L> listed` in `text-xs leading-tight text-zinc-400 tabular-nums`.
+- Box: `<button type="button">`, `flex flex-col gap-1.5 text-left`, no border or background of its own. Focus: `focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950` around the card. No translate, no scale, no shadow beyond the card's own glow.
+- Card: fluid width (the grid's column), 5:7, by the entry's **granted** rarity; effects per `card-and-rarity.md` §5.3 (in the grid: glow always, glint and drift on hover and focus).
+- Caption, `flex items-baseline justify-between gap-2 px-0.5 text-xs leading-tight tabular-nums`, always one line high so rows align: `×<N>` in `text-zinc-300` (only for N of 2 or more) on the left, `<L> listed` in `text-zinc-400` (only when `listed` ≥ 1) on the right; empty but present otherwise.
 - No `NEW` badge in the collection.
-- Image failed: `No image` in `text-xs text-zinc-400`, centred in the art box.
-- Skeleton tile: the same box with `border-zinc-800`, the art box in `bg-zinc-800`, and two `h-3 rounded bg-zinc-800` bars at 75% and 50% width. Static: nothing shimmers or pulses.
+- Skeleton tile: a 5:7 box `rounded-xl bg-zinc-800` and a caption-height gap. Static: nothing shimmers or pulses.
 
 ### 6.3 Stats, view switch, toolbar, results, pages, Series view
 
 - Completion line: the numbers in `text-base font-semibold text-zinc-100 tabular-nums`, the percentage in `text-sm text-zinc-400`. Series line `text-sm text-zinc-400`.
 - Bars (pool and every Series row): track `h-1 rounded-full bg-zinc-800`, fill `bg-zinc-300`. A `0 of N` row shows the track alone. Not the accent and not a rarity colour; violet stays for primary actions and focus. The pool bar is `w-full max-w-md`.
-- Totals line: `text-xs text-zinc-400`, `flex flex-wrap gap-x-4 gap-y-1`; each rarity word in its tier's text colour, its number in `text-zinc-200 tabular-nums`.
+- Totals line: `text-xs text-zinc-400`, `flex flex-wrap gap-x-4 gap-y-1`; each tier word in `text-rarity-<tier>-text`, its number in `text-zinc-200 tabular-nums`.
 - Stale note: `text-xs text-zinc-400`.
 - View switch: `inline-flex gap-1 rounded-lg bg-zinc-900 p-1`; each button `rounded-md px-3 py-1.5 text-sm font-medium`, pressed `bg-zinc-700 text-white`, not pressed `text-zinc-400 hover:text-zinc-200`, the violet focus ring. The header tabs' look at a smaller radius.
-- **Rarity chips**: `rounded-md border px-2.5 py-2.5 sm:py-1.5 text-[11px] font-semibold tracking-wider uppercase`, the violet focus ring. A tier chip not pressed: `border-zinc-800 bg-transparent`, the word in the tier's text colour, hover `border-rarity-<tier>/40`. Pressed: `border-rarity-<tier>/80 bg-rarity-<tier>/15`, the word in the tier's text colour. `All`: not pressed `border-zinc-800 text-zinc-300`, pressed `border-zinc-600 bg-zinc-800 text-zinc-100`. The fill is the pressed cue, so it does not rest on hue alone. No glow, no shadow; nothing moves when pressed.
+- **Rarity chips**: `rounded-md border px-2.5 py-2.5 sm:py-1.5 text-[11px] font-semibold tracking-wider uppercase`, the violet focus ring. A tier chip not pressed: `border-zinc-800 bg-transparent`, the word in `text-rarity-<tier>-text`, hover `border-rarity-<tier>/40`. Pressed: `border-rarity-<tier>/80 bg-rarity-<tier>/15`, the word in `text-rarity-<tier>-text`. Chips sit on `zinc-950` only (`card-and-rarity.md` §4.2). `All`: not pressed `border-zinc-800 text-zinc-300`, pressed `border-zinc-600 bg-zinc-800 text-zinc-100`. The fill is the pressed cue, so it does not rest on hue alone. No glow, no shadow; nothing moves when pressed.
 - Toolbar labels: `text-xs text-zinc-400`, above the control. Not the accounts hint colour (`zinc-500`): these labels are the controls' names and must reach 4.5:1 on `zinc-950`.
 - Search, selects and the price field: the accounts `INPUT` classes (`rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100`, violet focus ring).
 - Duplicates only: a native checkbox `size-4 accent-violet-600` inside its label, `text-sm text-zinc-200`; the whole label is clickable.
@@ -501,9 +480,9 @@ A new tile for the collection, also used by the market's browse grid (`market-an
 ### 6.4 Dialog and confirmations
 
 - Shell, headings, body text and buttons: `web/src/components/account/styles.ts` as it is (`PANEL_HEADING`, `SECTION_HEADING`, `BODY_TEXT`, `BUTTON.*`).
-- Art in the dialog: `rounded-md`, `alt=""`, the same `No image` fallback.
+- The card in the dialog: `card-and-rarity.md` at dialog size, with every effect (subject to reduced motion).
 - Name: `PANEL_HEADING` with `break-words`. Native name: `text-sm text-zinc-400`. Series: `text-sm text-zinc-400`. Native title: `text-xs text-zinc-400`. Native strings carry `lang="ja"` as the current card does, and are shown only when they differ from the name or title. `Also in`: label `text-xs text-zinc-400`, titles `text-xs text-zinc-300`.
-- Facts: `<dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">`, `dt` in `text-zinc-400`, `dd` in `text-zinc-200 tabular-nums`; the rarity value in its tier's text colour.
+- Facts: `<dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">`, `dt` in `text-zinc-400`, `dd` in `text-zinc-200 tabular-nums`; the rarity value in `text-rarity-<tier>-text`, preceded by its stars.
 - Notes (tier moved, out of pool): `text-sm text-zinc-300`.
 - `List…`, `Recycle…`, `List for <P> Karma`, `Recycle for <total> Karma` and `Try again` are `BUTTON.primary`. Listing and recycling are ordinary game actions, not dangers; the confirmation copy carries "There is no undo." or "A sale can't be undone." `Cancel` and `Close` on a panel are `BUTTON.secondary`.
 - Price field: `INPUT` at `w-24`, invalid `border-red-800`, error `ERROR_TEXT` under it; hint and fee line `text-xs text-zinc-400 tabular-nums`; the word `Karma` beside the field `text-sm text-zinc-400`.
@@ -518,44 +497,44 @@ A new tile for the collection, also used by the market's browse grid (`market-an
 
 - Dialog enter: the existing `pop-in` (150 ms).
 - Completion bar fill: `transition-[width] duration-200` when the number changes after an action.
-- Tiles and chips never animate: no `card-reveal` in the collection (the current Inventory re-runs it on every filter change), no hover motion.
+- Cards animate only as `card-and-rarity.md` §5.3 says; chips never animate. No `card-reveal` in the collection (the current Inventory re-runs it on every filter change), no hover lift.
 - All of it is off under `prefers-reduced-motion: reduce`, the width transition included (`motion-reduce:transition-none`, `motion-reduce:animate-none`).
 
 ### 6.6 Not in this view
 
-No gradients, glows, glass (backdrop blur), drop shadows, hover lift or zoom, emoji, sparkles, confetti, coin or store iconography, exclamation marks, or emphasis on Karma numbers (they are the same weight and colour as the text around them). A higher tier gets a different hue, never more effects.
+No gradients, glows, glass (backdrop blur), drop shadows, hover lift or zoom, emoji, sparkles, confetti, coin or store iconography, exclamation marks, or emphasis on Karma numbers (they are the same weight and colour as the text around them). The one exception is the card frames of Epic, Legendary and Mythic, by the owner's decision (`card-and-rarity.md` §5.4); it does not extend to anything else in this view.
 
 ## 7. Accessibility
 
 - **Region**: `<main>` holds `<section aria-labelledby="collection-heading">` with a visually hidden `h2` `Collection`.
 - **View switch**: `<div role="group" aria-label="View">` with `<button aria-pressed>` per view. Switching keeps focus on the pressed button. The Series view is a `<section>` with a visually hidden `h3` `Series completion`.
 - **Toolbar**: a `<search>` element labelled `Collection filters`. Every control has a visible label. Changes apply at once; Enter in the search field does nothing more (no submit, no reload). Escape in a non-empty search field clears it and keeps focus there.
-- **Rarity chips**: `<div role="group" aria-labelledby>` pointing at the visible `Rarity` label, holding six `<button type="button" aria-pressed>`. Each chip is one Tab stop; Space and Enter toggle it. Pressing `All` or releasing the last tier moves `aria-pressed` accordingly; focus stays on the chip pressed.
+- **Rarity chips**: `<div role="group" aria-labelledby>` pointing at the visible `Rarity` label, holding seven `<button type="button" aria-pressed>`. Each chip is one Tab stop; Space and Enter toggle it. Pressing `All` or releasing the last tier moves `aria-pressed` accordingly; focus stays on the chip pressed.
 - **Controls and their names**:
 
-| Control           | Element                                                                               | Accessible name                                                              |
-| ----------------- | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| Search            | `<input type="search" maxlength="100" autocomplete="off" spellcheck="false">`         | `Search`                                                                     |
-| Rarity chips      | `<button aria-pressed>` in a labelled group                                           | `All`, `Common`, `Rare`, `Epic`, `Legendary`, `Mythic` (group: `Rarity`)     |
-| Series            | `<select>`                                                                            | `Series`                                                                     |
-| Duplicates only   | `<input type="checkbox">`                                                             | `Duplicates only`                                                            |
-| Sort (both views) | `<select>`                                                                            | `Sort`                                                                       |
-| Clear filters     | `<button>`                                                                            | `Clear filters`                                                              |
-| Cards, Series     | `<button aria-pressed>`                                                               | `Cards`, `Series`                                                            |
-| Tile              | `<button aria-haspopup="dialog">` in an `<li>`                                        | `<name>, <Rarity>, <series>, <copies>`, then `, <L> listed` when listed      |
-| Show cards        | `<button>`                                                                            | `Show cards from <title>`                                                    |
-| Previous, Next    | `<button>`                                                                            | `Previous page`, `Next page`                                                 |
-| Page select       | `<select>`                                                                            | `Page`, described by `of <pages>`                                            |
-| Open a pack       | `<button>`                                                                            | `Open a pack`                                                                |
-| Try again (view)  | `<button>`                                                                            | `Try again`                                                                  |
-| Card dialog       | `<dialog aria-labelledby>`                                                            | the name heading; on a confirmation or the result, its heading               |
-| Close             | `<button>`                                                                            | `Close`                                                                      |
-| Price             | `<input type="text" inputmode="numeric" autocomplete="off">` in a `<form noValidate>` | `Price`, described by the hint, the fee line and any error                   |
-| Duplicates        | `<input type="text" inputmode="numeric" autocomplete="off">` in a `<form noValidate>` | `Duplicates`, described by the hint, the credit line and any error           |
-| List…, Recycle…   | `<button>`                                                                            | the visible text, described by the fee line or the value line and any reason |
-| See on the market | `<button>`                                                                            | `See <name> on the market`                                                   |
-| Confirm buttons   | `<button>`                                                                            | the visible text, e.g. `List for 120 Karma`, `Recycle for 6 Karma`           |
-| Cancel, Try again | `<button>`                                                                            | the visible text                                                             |
+| Control           | Element                                                                               | Accessible name                                                                      |
+| ----------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| Search            | `<input type="search" maxlength="100" autocomplete="off" spellcheck="false">`         | `Search`                                                                             |
+| Rarity chips      | `<button aria-pressed>` in a labelled group                                           | `All`, `Common`, `Uncommon`, `Rare`, `Epic`, `Legendary`, `Mythic` (group: `Rarity`) |
+| Series            | `<select>`                                                                            | `Series`                                                                             |
+| Duplicates only   | `<input type="checkbox">`                                                             | `Duplicates only`                                                                    |
+| Sort (both views) | `<select>`                                                                            | `Sort`                                                                               |
+| Clear filters     | `<button>`                                                                            | `Clear filters`                                                                      |
+| Cards, Series     | `<button aria-pressed>`                                                               | `Cards`, `Series`                                                                    |
+| Tile              | `<button aria-haspopup="dialog">` in an `<li>`                                        | `<name>, <Rarity>, <series>, <copies>`, then `, <L> listed` when listed              |
+| Show cards        | `<button>`                                                                            | `Show cards from <title>`                                                            |
+| Previous, Next    | `<button>`                                                                            | `Previous page`, `Next page`                                                         |
+| Page select       | `<select>`                                                                            | `Page`, described by `of <pages>`                                                    |
+| Open a pack       | `<button>`                                                                            | `Open a pack`                                                                        |
+| Try again (view)  | `<button>`                                                                            | `Try again`                                                                          |
+| Card dialog       | `<dialog aria-labelledby>`                                                            | the name heading; on a confirmation or the result, its heading                       |
+| Close             | `<button>`                                                                            | `Close`                                                                              |
+| Price             | `<input type="text" inputmode="numeric" autocomplete="off">` in a `<form noValidate>` | `Price`, described by the hint, the fee line and any error                           |
+| Duplicates        | `<input type="text" inputmode="numeric" autocomplete="off">` in a `<form noValidate>` | `Duplicates`, described by the hint, the credit line and any error                   |
+| List…, Recycle…   | `<button>`                                                                            | the visible text, described by the fee line or the value line and any reason         |
+| See on the market | `<button>`                                                                            | `See <name> on the market`                                                           |
+| Confirm buttons   | `<button>`                                                                            | the visible text, e.g. `List for 120 Karma`, `Recycle for 6 Karma`                   |
+| Cancel, Try again | `<button>`                                                                            | the visible text                                                                     |
 
 - **Grid**: `<ul role="list" aria-labelledby="collection-results">`. The explicit role keeps list semantics in Safari, which drops them under `list-style: none`. DOM order is visual order, row by row, so Tab, browse mode and sight agree. Tile art is `alt=""`: the name is already in the button's name.
 - **Series list**: `<ul role="list">` of `<li>` rows; the title, then the figure as text (`3 of 12`); the bars are `aria-hidden="true"` because the figure carries the number. The pool bar is `aria-hidden` for the same reason.
@@ -569,7 +548,7 @@ No gradients, glows, glass (backdrop blur), drop shadows, hover lift or zoom, em
 - **Announcements**: the app-level live region (`role="status"`) receives the results line (debounced) and wait-over. Status lines inside the open dialog are `role="status"`; red banners are `role="alert"`.
 - **Keyboard path, end to end**: Tab to the `Collection` tab, Enter. Tab through the view switch, Search, Series, Sort, the rarity chips, Duplicates only and Clear filters (when shown), then into the tiles. Enter opens the dialog. Tab to `Price`, type, Tab to `List…`, Enter. The confirmation heading has focus; Tab to `List for …`, Enter. The status line is read. Tab to `Duplicates`, then `Recycle…`, Enter, Tab to `Recycle for …`, Enter; the status line is read. Escape closes; focus returns per §3.7. In the Series view, Tab moves through the sort and the `Show cards` buttons only. No step needs a pointer.
 - **No arrow-key grid**: a page holds at most 60 tiles, one Tab stop each. A roving-tabindex grid would need the column count measured from the layout and adds a pattern screen-reader users must learn, for little gain at this size.
-- **Contrast**: everything that must be read is `zinc-400` or lighter, or a rarity text colour at step 300, on `zinc-900` or `zinc-950` (and on a pressed chip's `/15` fill over them): all at least 4.5:1. This view uses no `zinc-500` text. Tile borders are decorative; rarity is always also the word (WCAG 1.4.1).
+- **Contrast**: everything that must be read is `zinc-400` or lighter, or a tier text colour (`--color-rarity-<tier>-text`), on `zinc-900` or `zinc-950` (and on a pressed chip's `/15` fill over `zinc-950`): all at least 4.5:1, as `card-and-rarity.md` §4.2 computes; the card's own text pairs are checked there too. This view uses no `zinc-500` text. Frames are decorative; rarity is always also the stars or the word (WCAG 1.4.1).
 - **Touch targets**: every control is at least 40 px tall on a phone, the chips and the `BUTTON.text` links included (`py-2.5` and `py-2` on a phone); tiles are far larger.
 - **Reduced motion**: §6.5.
 
@@ -590,18 +569,18 @@ Exact strings. Placeholders: `<name>` the character name; `<series>` and `<title
 
 **Stats and view switch**
 
-| Element                                  | Copy                                                                    |
-| ---------------------------------------- | ----------------------------------------------------------------------- |
-| Completion                               | `<owned> of <total> characters`                                         |
-| Completion percentage                    | `<pct>%` (rounded down)                                                 |
-| Series completion (Cards view, filtered) | `<series>: <owned> of <total> characters`                               |
-| Cards                                    | the existing `cardCount`: `No cards yet` / `1 card` / `<N> cards`       |
-| Duplicates                               | `No duplicates` / `1 duplicate` / `<N> duplicates`                      |
-| Separator between cards and duplicates   | `·`                                                                     |
-| Per rarity                               | `Common <N>` · `Rare <N>` · `Epic <N>` · `Legendary <N>` · `Mythic <N>` |
-| Stale note                               | `Showing your collection as of <HH:MM>.`                                |
-| View group label (`aria-label`)          | `View`                                                                  |
-| View buttons                             | `Cards` · `Series`                                                      |
+| Element                                  | Copy                                                                                     |
+| ---------------------------------------- | ---------------------------------------------------------------------------------------- |
+| Completion                               | `<owned> of <total> characters`                                                          |
+| Completion percentage                    | `<pct>%` (rounded down)                                                                  |
+| Series completion (Cards view, filtered) | `<series>: <owned> of <total> characters`                                                |
+| Cards                                    | the existing `cardCount`: `No cards yet` / `1 card` / `<N> cards`                        |
+| Duplicates                               | `No duplicates` / `1 duplicate` / `<N> duplicates`                                       |
+| Separator between cards and duplicates   | `·`                                                                                      |
+| Per rarity                               | `Common <N>` · `Uncommon <N>` · `Rare <N>` · `Epic <N>` · `Legendary <N>` · `Mythic <N>` |
+| Stale note                               | `Showing your collection as of <HH:MM>.`                                                 |
+| View group label (`aria-label`)          | `View`                                                                                   |
+| View buttons                             | `Cards` · `Series`                                                                       |
 
 **Series view**
 
@@ -622,7 +601,7 @@ Exact strings. Placeholders: `<name>` the character name; `<series>` and `<title
 | Search label       | `Search`                                                                                                                                                      |
 | Search placeholder | `Name or series`                                                                                                                                              |
 | Rarity label       | `Rarity`                                                                                                                                                      |
-| Rarity chips       | `All` · `Common` · `Rare` · `Epic` · `Legendary` · `Mythic`                                                                                                   |
+| Rarity chips       | `All` · `Common` · `Uncommon` · `Rare` · `Epic` · `Legendary` · `Mythic`                                                                                      |
 | Series label       | `Series`                                                                                                                                                      |
 | Series options     | `All series` · `<title> · <owned>/<total>` · with a shared title `<title>, <startYear> · <owned>/<total>` · not in the current snapshot `<title>` (no figure) |
 | Duplicates         | `Duplicates only`                                                                                                                                             |
@@ -780,9 +759,9 @@ For the owner; each is a choice of three, and this spec is drawn for the recomme
 
 ## 10. Visual system follow-up
 
-The collection overview can be built well within the current tokens plus the values in §6.1. The rest of the app still carries the known debt of `docs/06-engineering-standards.md` §2, and this view sits next to it. What must change, and why; none of it blocks this feature:
+The collection overview can be built within the current tokens plus `card-and-rarity.md` §10. The rest of the app still carries the known debt of `docs/06-engineering-standards.md` §2, and this view sits next to it. What must change, and why; none of it blocks this feature:
 
-1. **`CharacterCard` frame glow**: box-shadow glows per tier and a looping `legendary-pulse` animation. Replaced by the §6.1 border in the 1c web PR, which deletes the keyframes and the class (`collection-packs.md` §8, decision 9). Not this feature's work; with five tiers that PR needs §6.1's five borders.
+1. **`CharacterCard` frame glow, `RarityBadge` and scrim**: replaced in the 1c web PR by the card of `card-and-rarity.md` (frames, stars, rank chip, no overlay badges, no gradient scrim); `legendary-pulse` and `.glow-legendary` go. Not this feature's work.
 2. **`CharacterCard` hover lift and image zoom** (`hover:-translate-y-1`, `group-hover:scale-105`): hover-lift on everything. Remove.
 3. **`RarityBadge` and the `×N` and `NEW` chips over the art**: drop shadow plus backdrop blur, which reads as glass. Move rarity and count under the art as in §6.2, or make them flat chips without blur or shadow; `NEW` as §6.4's flat marker.
 4. **The gradient over the bottom of the art**: only there so overlaid text stays legible; it goes with item 3.

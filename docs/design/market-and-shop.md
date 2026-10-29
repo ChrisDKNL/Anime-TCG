@@ -39,7 +39,7 @@ A signed-in player sees their Karma in the header, buys themed packs in a Shop t
 ### 3.3 Shop
 
 1. Showing the tab fetches `GET /api/shop` and the wallet. First load: the 300 ms rule and skeleton of `collection-overview.md` §3.1; held data shows at once and refetches silently.
-2. The themes are listed in the server's order: genre packs, which the shop offers for every eligible genre on its own, and the franchise packs the owner picks (owner, 2026-10-29; §3.8 E6). Each theme shows: its title; its kind (`Genre` for `"genre"`, `Series` for `"franchise"`); its series (`franchiseIds` through `ShopResponse.franchises`; the first three, then `and <N> more` revealing the rest in place); the headline odds, the chance of at least one card of each tier per pack, from `odds.perPack` over `odds.scale` (`At least one per pack: Common <x>% · Rare <x>% · Epic <x>% · Legendary <x>% · Mythic <x>%`); a disclosure `Odds per card` (a native `<details>`) that shows the odds per slot from `odds.perSlot` (`Each card: Common <x>% · …`) and the characters per tier from `odds.tierSizes` (`Drawn from <n> Common, <n> Rare, <n> Epic, <n> Legendary and <n> Mythic characters.`); the price, `<pack price> Karma` (about 2.3 times the expected value of a pack's cards, §3.8 E7); and `Buy…`. Percentages use `Intl.NumberFormat("en-GB", { style: "percent", maximumSignificantDigits: 3 })`, so `0.0661%` keeps its digits.
+2. The themes are listed in the server's order: genre packs, which the shop offers for every eligible genre on its own, and the franchise packs the owner picks (owner, 2026-10-29; §3.8 E6). Each theme shows: its title; its kind (`Genre` for `"genre"`, `Series` for `"franchise"`); its series (`franchiseIds` through `ShopResponse.franchises`; the first three, then `and <N> more` revealing the rest in place); the headline odds, the chance of at least one card of each tier per pack, from `odds.perPack` over `odds.scale` (`At least one per pack: Common <x>% · Uncommon <x>% · Rare <x>% · Epic <x>% · Legendary <x>% · Mythic <x>%`); a disclosure `Odds per card` (a native `<details>`) that shows the odds per slot from `odds.perSlot` (`Each card: Common <x>% · …`) and the characters per tier from `odds.tierSizes` (`Drawn from <n> Common, <n> Uncommon, <n> Rare, <n> Epic, <n> Legendary and <n> Mythic characters.`); when the server publishes them for the theme, the special-pack lines of `card-and-rarity.md` §7 (Enchanted, Radiant, the guarantee); the price, `<pack price> Karma` (about 2.3 times the expected value of a pack's cards, §3.8 E7); and `Buy…`. Percentages use `Intl.NumberFormat("en-GB", { style: "percent", maximumSignificantDigits: 3 })`, so `0.0661%` keeps its digits.
 3. `Buy…` is disabled, with the reason under it, when the balance is below the price. Not authoritative; the server checks again.
 4. `Buy…` opens the **pack confirmation**: a native `<dialog>` in the Manage account shell. Heading `Buy the <title> pack?`; body naming the price, the number of cards (`ThemeOffer.cards`), that they come from this pack's characters at the odds shown, the balance, and that there is no undo. `Buy for <price> Karma` and `Cancel`.
 5. The confirm button sends `POST /api/shop/buy` with `requestId` and `themeId`, nothing else. The request id follows `collection-overview.md` §3.8. In flight: `Buying…`, with the button, `Cancel` and Escape disabled.
@@ -57,15 +57,15 @@ A signed-in player sees their Karma in the header, buys themed packs in a Shop t
 2. Browse asks `GET /api/market/listings` with the toolbar's parameters and shows the first page; `Show more` asks for the next page with `nextCursor` and appends it. There is no total count, so the results line counts what is shown.
 3. Toolbar:
    - **Search** → `q`: the trimmed text, sent 300 ms after the last keystroke; empty means no `q`; at most 100 characters. The server normalises as `collection-overview.md` §3.3 does (but see `collection-overview.md` §3.9 M4).
-   - **Rarity** → `rarity`: a select, `All rarities` then the five tiers. The server takes one tier per request, so this is not the collection's multi-select chip row.
+   - **Rarity** → `rarity`: a select, `All rarities` then the six tiers. The server takes one tier per request, so this is not the collection's multi-select chip row.
    - **Series** → `franchiseId`: `All series`, then the franchises in the first page's `filterFranchiseIds` (every franchise with an active listing, in popularity order), titles through the page's `franchises`. A selected series stays in the list while selected, even after its last listing goes.
    - **Sort** → `sort`: `Lowest price first` (`price_asc`, default), `Highest price first` (`price_desc`), `Newest first` (`newest`).
    - **Character** → `characterId`: set only by `See <name> on the market` in the card dialog. It shows as the line `Showing <name> only.` with `Show all`, which clears it.
    - `Clear filters` resets search, rarity, series and character, not the sort.
 4. Every change asks for the first page again and replaces the list; an answer to an older set of parameters is discarded (the request is aborted). A listing already shown is not shown twice if a later page repeats it.
-5. Each listing is the collection tile (`collection-overview.md` §6.2) with the meta row's right side showing `<price> Karma` instead of a count, and a line `Until <D Mon>, <HH:MM>` from `expiresAt` in place of the listed line. The player's own listings (`mine: true`) carry the line `Yours` instead.
+5. Each listing is the collection tile (`collection-overview.md` §6.2): the card (`card-and-rarity.md`, by the listing's rarity) with a caption under it showing `<price> Karma` on the left and `Until <D Mon>, <HH:MM>` on the right, or `Yours` for the player's own listings (`mine: true`).
 6. The list is bounded: at most `ACCOUNT_CAP` × `MARKET_MAX_LISTINGS` listings exist (10 × 50 = 500), so at most ten pages. `Show more` disappears when `nextCursor` is null.
-7. Activating a tile opens the **listing dialog**: the card dialog's shell and layout with the art, name, native name, series and `Also in`; facts `Rarity`, `Price`, `Until`; a line `In your collection: <Rarity> ×<N>` for each of the player's entries of this character, or `Not in your collection.`, from the held collection answer; then `Buy…`, or for the player's own listing `This is your listing.` and `Cancel listing` (§3.6 step 3).
+7. Activating a tile opens the **listing dialog**: the card dialog's shell and layout with the card at dialog size (`card-and-rarity.md` §3.2), name, native name, series and `Also in`; facts `Rarity`, `Price`, `Until`; a line `In your collection: <Rarity> ×<N>` for each of the player's entries of this character, or `Not in your collection.`, from the held collection answer; then `Buy…`, or for the player's own listing `This is your listing.` and `Cancel listing` (§3.6 step 3).
 
 ### 3.5 Market: buy
 
@@ -73,7 +73,7 @@ A signed-in player sees their Karma in the header, buys themed packs in a Shop t
 2. `Buy…` replaces the dialog body with the **buy confirmation**: heading `Buy <name> for <price> Karma?`; body naming the rarity, the balance and that there is no undo. `Buy for <price> Karma` and `Cancel`.
 3. The confirm button sends `POST /api/market/listings/{listingId}/buy` with `requestId` only. **The request carries no price**: the server holds the listing's price (`economy.md` §8.5), and the number on the button is display. In flight: `Buying…`, with the usual disabling.
 4. Answers:
-   - **201, or 200 on a replay**: the dialog body becomes the result: heading `<name> is in your collection`, the rarity word, `New` when `card.isNew`, and `Bought for <price> Karma. You have <B> Karma.` (from the receipt), then `Close`. The header takes `receipt.balance`; the listing leaves the browse list; the collection is marked stale.
+   - **201, or 200 on a replay**: the dialog body becomes the result: the bought card at dialog size (`card-and-rarity.md` §3.2), heading `<name> is in your collection`, the tier word with its stars, `New` when `card.isNew`, and `Bought for <price> Karma. You have <B> Karma.` (from the receipt), then `Close`. The header takes `receipt.balance`; the listing leaves the browse list; the collection is marked stale.
    - **`listing_unavailable`** or **`listing_not_found`**: `This card is no longer on the market.` and `Close`; the listing leaves the browse list.
    - **`market_limit`**: a red line chosen by the error's `limit`, with the time from now + `retryAfterSeconds` (which can be days away, so the line names the date): `buyer_purchases` and `buyer_spend`, `Your market limit for the last <window> is used up. It frees up on <D Mon> at <HH:MM>.`; `seller_proceeds`, `This seller can't take more sales right now. Try again on <D Mon> at <HH:MM>.`; `pair`, `You've bought as much from this seller as the market allows for now. Try again on <D Mon> at <HH:MM>.` The confirm button stays disabled until then. `<window>` is `rules.window.seconds` in days (`7 days`).
    - **`insufficient_funds`**: the red line `This card costs <price> Karma. You have <B> Karma.`, B from the error's `balance`, which also replaces the header's.
@@ -183,14 +183,14 @@ One column, `max-w-3xl`. Each theme is a block with `border-b border-zinc-800 py
 - The view switch, then (Browse) the toolbar: below 640 px, Search full width, then Rarity and Series half each, then Sort half; from 640 px, Search full width, then Rarity, Series and Sort a third each; from 1024 px one row, Search growing (at least 14rem), Rarity (10rem), Series (14rem), Sort (12rem), Clear filters. The character line, when set, sits under the toolbar.
 - Results line `mt-4`, then the collection grid (`collection-overview.md` §5.1); `Show more` centred `mt-6`.
 - Listing dialog: the card dialog's layout (`collection-overview.md` §5.4), confirmations and result as there.
-- My listings: one column, `max-w-3xl`, each part an `h3` with its rows. A row is `flex gap-3 border-b border-zinc-800 py-3`: thumbnail `w-12` (3:4), then the text lines, then `Cancel listing` on the right (under the text below 640 px).
+- My listings: one column, `max-w-3xl`, each part an `h3` with its rows. A row is `flex gap-3 border-b border-zinc-800 py-3`: the card thumbnail (48 × 67 px, `card-and-rarity.md` §3.2), then the text lines, then `Cancel listing` on the right (under the text below 640 px).
 
 ## 6. Visual treatment
 
-No new tokens. Everything reuses `collection-overview.md` §6: the rarity system (§6.1), the tile (§6.2) with the price in `text-xs text-zinc-200 tabular-nums` in place of the count and the `Until` or `Yours` line in `text-xs text-zinc-400`, the controls (§6.3), the dialog and banners (§6.4), the motion rules (§6.5).
+No new tokens. Everything reuses `collection-overview.md` §6: the card and rarity system (`card-and-rarity.md`, which supersedes the overview's old §6.1 hue ladder), the tile (§6.2) with the price in `text-xs text-zinc-200 tabular-nums` in place of the count and the `Until` or `Yours` line in `text-xs text-zinc-400`, the controls (§6.3), the dialog and banners (§6.4), the motion rules (§6.5).
 
 - Balance in the header: `text-sm`; the number `font-medium text-zinc-100 tabular-nums`, the word `Karma` `text-zinc-400`. No icon (decided by the owner, 2026-10-29), no box, no colour of its own.
-- Theme title `text-base font-semibold text-zinc-100`; kind `text-xs text-zinc-400`; the series, odds and tier lines `text-sm text-zinc-400`, the `Odds per card` summary `BUTTON.text`, rarity words in their tier's text colour, numbers `tabular-nums`; the price `text-sm text-zinc-200 tabular-nums`. `Buy…` is `BUTTON.primary`, as every primary action; no larger or louder button for a paid pack.
+- Theme title `text-base font-semibold text-zinc-100`; kind `text-xs text-zinc-400`; the series, odds and tier lines `text-sm text-zinc-400`, the `Odds per card` summary `BUTTON.text`, tier words in `text-rarity-<tier>-text`, numbers `tabular-nums`; the price `text-sm text-zinc-200 tabular-nums`. `Buy…` is `BUTTON.primary`, as every primary action; no larger or louder button for a paid pack.
 - My listings: names `text-sm text-zinc-100`, the other lines `text-xs text-zinc-400`, `Cancel listing` `BUTTON.secondary`. Statuses are words in `text-zinc-300`; no green for sold, no red for expired.
 - Nothing marks a price as low, high, popular or new on the market.
 
@@ -224,10 +224,10 @@ The word rules, placeholders and number formats of `collection-overview.md` §8 
 | Region (visually hidden)  | `Shop`                                                                                                                  |
 | Kind                      | `Genre` · `Series`                                                                                                      |
 | Series line               | `<title>, <title>, <title> and <N> more`                                                                                |
-| Odds headline             | `At least one per pack: Common <x>% · Rare <x>% · Epic <x>% · Legendary <x>% · Mythic <x>%`                             |
+| Odds headline             | `At least one per pack: Common <x>% · Uncommon <x>% · Rare <x>% · Epic <x>% · Legendary <x>% · Mythic <x>%`             |
 | Odds disclosure           | `Odds per card`                                                                                                         |
-| Odds per card line        | `Each card: Common <x>% · Rare <x>% · Epic <x>% · Legendary <x>% · Mythic <x>%`                                         |
-| Tier sizes line           | `Drawn from <n> Common, <n> Rare, <n> Epic, <n> Legendary and <n> Mythic characters.`                                   |
+| Odds per card line        | `Each card: Common <x>% · Uncommon <x>% · Rare <x>% · Epic <x>% · Legendary <x>% · Mythic <x>%`                         |
+| Tier sizes line           | `Drawn from <n> Common, <n> Uncommon, <n> Rare, <n> Epic, <n> Legendary and <n> Mythic characters.`                     |
 | Price                     | `<pack price> Karma`                                                                                                    |
 | Button                    | `Buy…`                                                                                                                  |
 | Reason                    | `Costs <price> Karma. You have <B>.`                                                                                    |
@@ -246,26 +246,26 @@ The word rules, placeholders and number formats of `collection-overview.md` §8 
 
 **Market, browse**
 
-| Element                   | Copy                                                                            |
-| ------------------------- | ------------------------------------------------------------------------------- |
-| Region (visually hidden)  | `Market`                                                                        |
-| View buttons              | `Browse` · `My listings`                                                        |
-| Toolbar landmark          | `Market filters`                                                                |
-| Search label, placeholder | `Search` · `Name or series`                                                     |
-| Rarity                    | `Rarity` · `All rarities` · `Common` · `Rare` · `Epic` · `Legendary` · `Mythic` |
-| Series                    | `Series` · `All series` · `<title>`                                             |
-| Sort                      | `Sort` · `Lowest price first` · `Highest price first` · `Newest first`          |
-| Character line            | `Showing <name> only.` · `Show all`                                             |
-| Clear                     | `Clear filters`                                                                 |
-| Results line              | `<N> listings shown` / `1 listing shown`                                        |
-| Tile price                | `<price> Karma`                                                                 |
-| Tile line                 | `Until <D Mon>, <HH:MM>` · own listing `Yours`                                  |
-| More                      | `Show more` / in flight `Loading…`                                              |
-| More failed               | `Couldn't load more.` · `Try again`                                             |
-| Empty                     | `No cards on the market.`                                                       |
-| No matches                | `No listings match "<q>".` · `No listings match these filters.`                 |
-| Loading (visually hidden) | `Loading the market…`                                                           |
-| Error                     | `Couldn't load the market.` · `Try again`                                       |
+| Element                   | Copy                                                                                         |
+| ------------------------- | -------------------------------------------------------------------------------------------- |
+| Region (visually hidden)  | `Market`                                                                                     |
+| View buttons              | `Browse` · `My listings`                                                                     |
+| Toolbar landmark          | `Market filters`                                                                             |
+| Search label, placeholder | `Search` · `Name or series`                                                                  |
+| Rarity                    | `Rarity` · `All rarities` · `Common` · `Uncommon` · `Rare` · `Epic` · `Legendary` · `Mythic` |
+| Series                    | `Series` · `All series` · `<title>`                                                          |
+| Sort                      | `Sort` · `Lowest price first` · `Highest price first` · `Newest first`                       |
+| Character line            | `Showing <name> only.` · `Show all`                                                          |
+| Clear                     | `Clear filters`                                                                              |
+| Results line              | `<N> listings shown` / `1 listing shown`                                                     |
+| Tile price                | `<price> Karma`                                                                              |
+| Tile line                 | `Until <D Mon>, <HH:MM>` · own listing `Yours`                                               |
+| More                      | `Show more` / in flight `Loading…`                                                           |
+| More failed               | `Couldn't load more.` · `Try again`                                                          |
+| Empty                     | `No cards on the market.`                                                                    |
+| No matches                | `No listings match "<q>".` · `No listings match these filters.`                              |
+| Loading (visually hidden) | `Loading the market…`                                                                        |
+| Error                     | `Couldn't load the market.` · `Try again`                                                    |
 
 **Listing dialog and buy**
 
