@@ -1,6 +1,6 @@
 import { useState, type ComponentPropsWithoutRef, type Ref } from "react";
 import type { FieldState } from "../../lib/fieldState";
-import { common } from "../../lib/copy";
+import { common, manageCopy } from "../../lib/copy";
 import { LoginText } from "./LoginText";
 import { BUTTON, ERROR_TEXT, HINT_TEXT, INPUT, INPUT_BORDER } from "./styles";
 
@@ -114,11 +114,14 @@ export function TextField({
   );
 }
 
-type ToggleKind = "password" | "confirmation";
+/** `current` and `new` tell the Manage dialog's two password toggles apart; Register and Log in use `password`. */
+type ToggleKind = "password" | "confirmation" | "current" | "new";
 
 const TOGGLE_NAME: Record<ToggleKind, Record<"show" | "hide", string>> = {
   password: { show: common.showPassword, hide: common.hidePassword },
   confirmation: { show: common.showConfirmation, hide: common.hideConfirmation },
+  current: { show: manageCopy.showCurrentPassword, hide: manageCopy.hideCurrentPassword },
+  new: { show: manageCopy.showNewPassword, hide: manageCopy.hideNewPassword },
 };
 
 interface PasswordFieldProps extends Omit<TextFieldProps, "inputClassName"> {

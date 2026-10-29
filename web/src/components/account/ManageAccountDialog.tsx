@@ -211,6 +211,7 @@ function PasswordSection() {
         <PasswordField
           id="manage-current"
           label={manageCopy.currentLabel}
+          toggle="current"
           value={form.values.current}
           onChange={(value) => form.setValue("current", value)}
           state={form.fields.current}
@@ -221,6 +222,7 @@ function PasswordSection() {
         <PasswordField
           id="manage-next"
           label={manageCopy.newLabel}
+          toggle="new"
           hint={common.passwordRules}
           value={form.values.next}
           onChange={(value) => form.setValue("next", value)}

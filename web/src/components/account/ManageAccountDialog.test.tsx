@@ -100,6 +100,28 @@ describe("ManageAccountDialog", () => {
   });
 
   describe("Password section", () => {
+    it("names each Show/Hide toggle after its field", async () => {
+      const { user } = setup({});
+      const toggles = screen.getAllByRole("button", { name: /^(Show|Hide) / });
+      expect(toggles.map((toggle) => toggle.getAttribute("aria-label"))).toEqual([
+        "Show current password",
+        "Show new password",
+        "Show password confirmation",
+      ]);
+      await user.click(screen.getByRole("button", { name: "Show current password" }));
+      expect(screen.getByLabelText("Current password")).toHaveAttribute("type", "text");
+      expect(screen.getByRole("button", { name: "Hide current password" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      await user.click(screen.getByRole("button", { name: "Show new password" }));
+      expect(screen.getByRole("button", { name: "Hide new password" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      );
+      expect(screen.getByLabelText("Confirm new password")).toHaveAttribute("type", "password");
+    });
+
     it("validates on submit and focuses the first invalid field", async () => {
       const { user, fetchMock } = setup({});
       await user.type(screen.getByLabelText("New password"), "short");
