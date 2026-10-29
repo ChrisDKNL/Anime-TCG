@@ -142,7 +142,7 @@ the new password
 PASSWORD
 ```
 
-It prints `Password reset for <login>; N sessions ended.`: the Argon2id hash is rewritten and every session of the account is ended, so the player signs in again with the new password on every device. The login is matched case-insensitively (the stored spelling is printed back); the password must be 8 to 128 characters and is taken exactly as given except for the here-document's own trailing newline. An unknown login or a bad password is one line on stderr and exit code 1. The command needs `DATABASE_URL` only (the app role has every statement it uses), which compose already sets on the container. `api-acceptance` and `.env.acceptance.local` for the acceptance stack; outside compose, `node api/dist/cli/reset-password.js <login>` with `DATABASE_URL` exported.
+It prints `Password reset for "<login>"; N sessions ended.` (the login JSON-quoted, so a control character in it is printed escaped): the Argon2id hash is rewritten and every session of the account is ended, so the player signs in again with the new password on every device. The login is matched case-insensitively (the stored spelling is printed back); the password must be 8 to 128 characters and is taken exactly as given except for the here-document's own trailing newline. An unknown login or a bad password is one line on stderr and exit code 1. The command needs `DATABASE_URL` only (the app role has every statement it uses), which compose already sets on the container. `api-acceptance` and `.env.acceptance.local` for the acceptance stack; outside compose, `node api/dist/cli/reset-password.js <login>` with `DATABASE_URL` exported.
 
 The two commands below (`docs/design/collection-packs.md` §7) work the same way: run inside the api container, `DATABASE_URL` only, one line on stderr and exit code 1 on a refusal. 1c adds no variable.
 
@@ -181,9 +181,9 @@ There is no player-facing reset; the owner resets one account's collection:
 
 ```bash
 docker compose --env-file .env.production.local --profile production exec -T api-production \
-  node api/dist/cli/reset-collection.js <login>             # Would reset <login>: 214 cards, 43 openings; pity and Enchanted counters to zero.
+  node api/dist/cli/reset-collection.js <login>             # Would reset "<login>": 214 cards, 43 openings; pity and Enchanted counters to zero.
 docker compose --env-file .env.production.local --profile production exec -T api-production \
-  node api/dist/cli/reset-collection.js <login> --confirm   # Collection reset for <login>: 214 cards and 43 openings removed; packs full; counters reset.
+  node api/dist/cli/reset-collection.js <login> --confirm   # Collection reset for "<login>": 214 cards and 43 openings removed; packs full; counters reset.
 ```
 
 Without `--confirm` it only counts. With it, the account's pack openings and their cards are deleted, its allowance is full again and both pack counters are 0 as on registration (the guarantee reads 300 free packs again and the next Enchanted pack is the 10th), in one transaction under the same account lock an opening takes, so an opening running at that moment is either removed whole or kept whole. The login, password, sessions and account id stay; a signed-in player sees the empty collection on the next fetch. The login is matched case-insensitively; an unknown one is exit code 1.

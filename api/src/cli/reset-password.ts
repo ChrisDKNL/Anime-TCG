@@ -53,6 +53,11 @@ export async function resetPassword(db: Db, login: string, newPassword: string):
   return { login: account.login, sessionsEnded };
 }
 
+/** The login is printed JSON-quoted: a control sequence in one cannot reach the terminal. */
+export function describePasswordReset(result: ResetResult): string {
+  return `Password reset for ${JSON.stringify(result.login)}; ${result.sessionsEnded} sessions ended.`;
+}
+
 async function readStdin(): Promise<string> {
   let text = "";
   for await (const chunk of process.stdin) text += String(chunk);
@@ -80,7 +85,7 @@ export async function main(argv: readonly string[], databaseUrl: string | undefi
   const db = createDb(databaseUrl);
   try {
     const result = await resetPassword(db, login, withoutTrailingLineBreak(await readStdin()));
-    process.stdout.write(`Password reset for ${result.login}; ${result.sessionsEnded} sessions ended.\n`);
+    process.stdout.write(`${describePasswordReset(result)}\n`);
     return 0;
   } catch (err) {
     if (!(err instanceof ResetPasswordError)) throw err;

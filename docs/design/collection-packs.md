@@ -616,7 +616,7 @@ docker compose --env-file .env.production.local --profile production exec -T api
 docker compose --env-file .env.production.local --profile production exec -T api-production node api/dist/cli/reset-collection.js <login> --confirm
 ```
 
-Without `--confirm` it only prints what a reset would remove (`Would reset <login>: 214 cards, 43 openings; pity and Enchanted counters to zero.`). With it, §5.6 runs and it prints `Collection reset for <login>: 214 cards and 43 openings removed; packs full; counters reset.` Exit 1 with a one-line reason on an unknown login. Sessions are not touched; a signed-in player sees the empty collection and `packsUntilGuarantee` 300 on the next fetch.
+Without `--confirm` it only prints what a reset would remove (`Would reset "<login>": 214 cards, 43 openings; pity and Enchanted counters to zero.`). With it, §5.6 runs and it prints `Collection reset for "<login>": 214 cards and 43 openings removed; packs full; counters reset.` (the login JSON-quoted, as §7.1 prints titles) Exit 1 with a one-line reason on an unknown login. Sessions are not touched; a signed-in player sees the empty collection and `packsUntilGuarantee` 300 on the next fetch.
 
 ## 8. The web change (second PR)
 

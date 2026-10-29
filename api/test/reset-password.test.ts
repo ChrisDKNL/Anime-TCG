@@ -5,7 +5,7 @@ import { promisify } from "node:util";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../src/app.js";
-import { ResetPasswordError, resetPassword } from "../src/cli/reset-password.js";
+import { describePasswordReset, ResetPasswordError, resetPassword } from "../src/cli/reset-password.js";
 import { accounts, sessions } from "../src/db/schema.js";
 import {
   clearAccountData,
@@ -155,12 +155,18 @@ describe("reset-password as a command", () => {
     });
   }
 
+  it("prints the stored login JSON-quoted, so a control sequence in it never reaches the terminal", () => {
+    expect(describePasswordReset({ login: "a\u001b]0;owned\u0007b", sessionsEnded: 1 })).toBe(
+      'Password reset for "a\\u001b]0;owned\\u0007b"; 1 sessions ended.',
+    );
+  });
+
   it("prints exactly one line and exits 0, with the shell's trailing newline stripped from the password", async () => {
     await registerAccount(app, { login: "Chris", password: PASSWORD });
     await loginAccount(app, { login: "Chris", password: PASSWORD });
     const result = await run(["chris"], `${NEW_PASSWORD}\n`);
     expect(result.stderr).toBe("");
-    expect(result.stdout).toBe("Password reset for Chris; 2 sessions ended.\n");
+    expect(result.stdout).toBe('Password reset for "Chris"; 2 sessions ended.\n');
     expect(result.code).toBe(0);
     const login = await send(app, {
       method: "POST",

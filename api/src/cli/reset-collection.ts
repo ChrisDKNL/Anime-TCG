@@ -22,10 +22,12 @@ import { createLogger } from "../plugins/logging.js";
 
 const USAGE = "Usage: node api/dist/cli/reset-collection.js <login> [--confirm]";
 
+/** The login is printed JSON-quoted, as the snapshot command prints titles: a control sequence in one cannot reach the terminal. */
 export function describeReset(result: CollectionResetResult): string {
+  const login = JSON.stringify(result.login);
   return result.applied
-    ? `Collection reset for ${result.login}: ${result.cards} cards and ${result.openings} openings removed; packs full; counters reset.`
-    : `Would reset ${result.login}: ${result.cards} cards, ${result.openings} openings; pity and Enchanted counters to zero.`;
+    ? `Collection reset for ${login}: ${result.cards} cards and ${result.openings} openings removed; packs full; counters reset.`
+    : `Would reset ${login}: ${result.cards} cards, ${result.openings} openings; pity and Enchanted counters to zero.`;
 }
 
 export interface ResetIo {
