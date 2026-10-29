@@ -23,6 +23,11 @@ export const ERROR_CODES = [
   "unauthenticated",
   "no_pack_available",
   "pool_unavailable",
+  "not_enough_copies",
+  "balance_limit",
+  "insufficient_funds",
+  "request_id_reused",
+  "theme_unavailable",
 ] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];
 
@@ -37,6 +42,8 @@ export const ErrorEnvelope = Type.Object(
          * `no_pack_available` (seconds until the next pack); matches the `Retry-After` header.
          */
         retryAfterSeconds: Type.Optional(Type.Integer({ minimum: 1 })),
+        /** Only on `insufficient_funds`: the acting account's balance under the lock, so the UI needs no second request. */
+        balance: Type.Optional(Type.Integer({ minimum: 0 })),
       },
       { additionalProperties: false },
     ),

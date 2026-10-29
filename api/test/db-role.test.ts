@@ -8,12 +8,14 @@ import {
   authThrottle,
   cards,
   characters,
+  ledgerEntries,
   packOpenings,
   poolFetches,
   poolFetchPages,
   poolSnapshotCharacters,
   poolSnapshotSeries,
   poolSnapshots,
+  recycles,
   series,
   sessions,
 } from "../src/db/schema.js";
@@ -169,7 +171,7 @@ describe("app database role", () => {
     ).toEqual([{ variant: "standard" }]);
   });
 
-  it("holds exactly the rights 0001 granted less 0004's revokes, table by table", async () => {
+  it("holds exactly the rights 0001 granted less 0004's and 0005's revokes, table by table", async () => {
     const grants = await app.db.execute<{ table_name: string; rights: string }>(sql`
       select table_name, string_agg(privilege_type, ',' order by privilege_type) as rights
       from information_schema.role_table_grants
@@ -182,6 +184,7 @@ describe("app database role", () => {
       { table_name: "auth_throttle", rights: all },
       { table_name: "cards", rights: "INSERT,SELECT" },
       { table_name: "characters", rights: "INSERT,SELECT,UPDATE" },
+      { table_name: "ledger_entries", rights: "INSERT,SELECT" },
       { table_name: "pack_openings", rights: "DELETE,INSERT,SELECT" },
       { table_name: "pool_fetch_pages", rights: "INSERT,SELECT" },
       { table_name: "pool_fetches", rights: "DELETE,INSERT,SELECT" },
@@ -191,9 +194,133 @@ describe("app database role", () => {
       { table_name: "pool_snapshot_relations", rights: "INSERT,SELECT" },
       { table_name: "pool_snapshot_series", rights: "INSERT,SELECT" },
       { table_name: "pool_snapshots", rights: "INSERT,SELECT,UPDATE" },
+      { table_name: "recycles", rights: "INSERT,SELECT" },
       { table_name: "series", rights: "INSERT,SELECT,UPDATE" },
       { table_name: "sessions", rights: all },
     ]);
+  });
+
+  it("may update exactly the two card columns a recycle writes, and no other column of a table without UPDATE (0005)", async () => {
+    const columns = await app.db.execute<{ table_name: string; column_name: string }>(sql`
+      select c.table_name, c.column_name from information_schema.column_privileges c
+      where c.grantee = 'anime_app' and c.table_schema = 'public' and c.privilege_type = 'UPDATE'
+        and not exists (
+          select 1 from information_schema.role_table_grants t
+          where t.grantee = 'anime_app' and t.table_schema = 'public' and t.table_name = c.table_name
+            and t.privilege_type = 'UPDATE'
+        )
+      order by c.table_name, c.column_name
+    `);
+    expect(columns.rows).toEqual([
+      { table_name: "cards", column_name: "removed_at" },
+      { table_name: "cards", column_name: "removed_by_recycle" },
+    ]);
+  });
+
+  /** A ledger row and a recycle that removes `cardId`, written as the app role writes them. */
+  async function seedRecycle(
+    accountId: string,
+    cardId: string,
+  ): Promise<{ entryId: string; recycleId: string }> {
+    const now = new Date();
+    const [entry] = await app.db
+      .insert(ledgerEntries)
+      .values({
+        accountId,
+        seq: 1,
+        kind: "recycle_credit",
+        amount: 2_750,
+        balanceAfter: 2_750,
+        createdAt: now,
+      })
+      .returning({ id: ledgerEntries.id });
+    if (entry === undefined) throw new Error("ledger insert returned no row");
+    await app.db.update(accounts).set({ balance: 2_750 }).where(eq(accounts.id, accountId));
+    const [recycle] = await app.db
+      .insert(recycles)
+      .values({
+        accountId,
+        requestId: randomUUID(),
+        requestHash: "probe",
+        characterId: PROBE_CHARACTER,
+        rarity: "mythic",
+        count: 1,
+        ledgerEntryId: entry.id,
+        createdAt: now,
+      })
+      .returning({ id: recycles.id });
+    if (recycle === undefined) throw new Error("recycle insert returned no row");
+    await app.db
+      .update(cards)
+      .set({ removedAt: now, removedByRecycle: recycle.id })
+      .where(eq(cards.id, cardId));
+    return { entryId: entry.id, recycleId: recycle.id };
+  }
+
+  async function heldCard(accountId: string): Promise<string> {
+    const [row] = await app.db
+      .insert(cards)
+      .values(card(accountId, await seedOpening(accountId), 0))
+      .returning({ id: cards.id });
+    if (row === undefined) throw new Error("card insert returned no row");
+    return row.id;
+  }
+
+  it("cannot update or delete a ledger row or a recycle, nor touch a card's escrow or rarity (0005)", async () => {
+    const accountId = await insertAccount(app.db, "LedgerProbe");
+    await seedRecycle(accountId, await heldCard(accountId));
+    await expect(app.db.update(ledgerEntries).set({ amount: 1_000_000 })).rejects.toMatchObject({
+      cause: { code: PERMISSION_DENIED },
+    });
+    await expect(app.db.delete(ledgerEntries)).rejects.toMatchObject({ cause: { code: PERMISSION_DENIED } });
+    await expect(app.db.update(recycles).set({ count: 100 })).rejects.toMatchObject({
+      cause: { code: PERMISSION_DENIED },
+    });
+    await expect(app.db.delete(recycles)).rejects.toMatchObject({ cause: { code: PERMISSION_DENIED } });
+    await expect(app.db.update(cards).set({ escrowId: randomUUID() })).rejects.toMatchObject({
+      cause: { code: PERMISSION_DENIED },
+    });
+    await expect(app.db.update(cards).set({ removedAt: null, rarity: "common" })).rejects.toMatchObject({
+      cause: { code: PERMISSION_DENIED },
+    });
+  });
+
+  it("still deletes an account with its ledger, its recycles and its recycled cards, by cascade (0005)", async () => {
+    const accountId = await insertAccount(app.db, "EconomyCascade");
+    await seedRecycle(accountId, await heldCard(accountId));
+    await app.db.delete(accounts).where(eq(accounts.id, accountId));
+    expect(await app.db.select().from(ledgerEntries).where(eq(ledgerEntries.accountId, accountId))).toEqual(
+      [],
+    );
+    expect(await app.db.select().from(recycles).where(eq(recycles.accountId, accountId))).toEqual([]);
+    expect(await app.db.select().from(cards).where(eq(cards.accountId, accountId))).toEqual([]);
+  });
+
+  it("refuses a negative balance, a zero or oversized ledger amount, and a removal without its time (0005)", async () => {
+    const accountId = await insertAccount(app.db, "CheckProbe");
+    await expect(
+      app.db.update(accounts).set({ balance: -1 }).where(eq(accounts.id, accountId)),
+    ).rejects.toMatchObject({ cause: { code: CHECK_VIOLATION, constraint: "accounts_balance_check" } });
+    const entry = (amount: number, kind: "recycle_credit" | "owner_reset" = "recycle_credit") => ({
+      accountId,
+      seq: 1,
+      kind,
+      amount,
+      balanceAfter: 0,
+      createdAt: new Date(),
+    });
+    for (const amount of [0, 1_000_001, -1_000_001]) {
+      await expect(app.db.insert(ledgerEntries).values(entry(amount))).rejects.toMatchObject({
+        cause: { code: CHECK_VIOLATION, constraint: "ledger_entries_amount_check" },
+      });
+    }
+    await app.db.insert(ledgerEntries).values(entry(-1_000_001, "owner_reset"));
+    const cardId = await heldCard(accountId);
+    const other = await insertAccount(app.db, "CheckProbe2");
+    const recycle = await seedRecycle(other, await heldCard(other));
+    await expect(
+      app.db.update(cards).set({ removedByRecycle: recycle.recycleId }).where(eq(cards.id, cardId)),
+    ).rejects.toMatchObject({ cause: { code: CHECK_VIOLATION, constraint: "cards_removed_check" } });
   });
 
   it("cannot rewrite a granted card's rarity, delete a card on its own or change an opening (0004)", async () => {

@@ -1,5 +1,5 @@
 import { type Static, Type } from "@sinclair/typebox";
-import { PACK_CAP, PACK_SIZE } from "./economy.js";
+import { MAX_RECYCLE_COUNT, PACK_CAP, PACK_SIZE } from "./economy.js";
 import { PITY_PACKS } from "./rarity.js";
 
 /**
@@ -291,7 +291,13 @@ export const PackOpened = Type.Object(
 );
 export type PackOpened = Static<typeof PackOpened>;
 
-/** The cards an account holds of one character at one rarity and variant; cards are named this way, never by id. */
+/**
+ * The cards an account holds of one character at one rarity and variant;
+ * cards are named this way, never by id. `count` is every held copy, listed
+ * and escrowed ones included (economy.md §7); `available` is `count − listed
+ * − escrowed`, and `recyclable` is `min(count − 1, available)`, so the last
+ * copy and a listed or escrowed one are never offered for recycling.
+ */
 export const CollectionEntry = Type.Object(
   {
     kind: Type.Literal("card"),
@@ -299,6 +305,9 @@ export const CollectionEntry = Type.Object(
     rarity: Rarity,
     variant: CardVariant,
     count: Type.Integer({ minimum: 1 }),
+    listed: Count,
+    available: Count,
+    recyclable: Count,
     firstObtainedAt: DateTime,
     lastObtainedAt: DateTime,
   },
@@ -344,3 +353,131 @@ export const CollectionResponse = Type.Object(
   { additionalProperties: false },
 );
 export type CollectionResponse = Static<typeof CollectionResponse>;
+
+/** The largest id a request may name: a Postgres `integer`, so no id reaches the database out of range. */
+const MAX_ID = 2_147_483_647;
+const RequestId = Type.String({ format: "uuid", maxLength: 36 });
+
+/**
+ * The Karma rules the server applies (economy.md §5, §11.2), published so
+ * the UI never holds a number of its own. `fee(price) = max(feeMin,
+ * ceil(price × feeBps / 10 000))`: rounded up, at least `feeMin`.
+ */
+export const KarmaRules = Type.Object(
+  {
+    referenceValues: PerRarity,
+    recycleValues: PerRarity,
+    priceMin: PerRarity,
+    priceMax: PerRarity,
+    feeBps: Count,
+    feeMin: Count,
+    listingTtlSeconds: Type.Integer({ minimum: 1 }),
+    maxListings: Type.Integer({ minimum: 1 }),
+    maxRecycleCount: Type.Integer({ minimum: 1 }),
+    themedPackPrice: Type.Integer({ minimum: 1 }),
+    window: Type.Object(
+      {
+        seconds: Type.Integer({ minimum: 1 }),
+        purchases: Type.Integer({ minimum: 1 }),
+        spend: Type.Integer({ minimum: 1 }),
+        proceeds: Type.Integer({ minimum: 1 }),
+        pair: Type.Integer({ minimum: 1 }),
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false },
+);
+export type KarmaRules = Static<typeof KarmaRules>;
+
+/** `GET /api/wallet`; `activeListings` is the caller's active, unexpired listings, 0 until the market exists. */
+export const Wallet = Type.Object(
+  { balance: Count, activeListings: Count, rules: KarmaRules },
+  { additionalProperties: false },
+);
+export type Wallet = Static<typeof Wallet>;
+
+/**
+ * A themed pack on offer (economy.md §8.6): `id` is `genre-<slug>`, `title`
+ * the genre as AniList names it (rendered as text), `franchiseIds` every
+ * franchise with a character in the theme's set, in popularity order. The
+ * odds are the free pack's tables and the Radiant rule; a shop pack is never
+ * Enchanted or pity-due. `tierSizes` are the theme's characters per tier.
+ */
+export const ThemeOffer = Type.Object(
+  {
+    id: Type.String(),
+    title: Type.String(),
+    cards: Type.Integer({ minimum: 1 }),
+    franchiseIds: Type.Array(AniListId),
+    price: Type.Integer({ minimum: 1 }),
+    odds: Type.Object(
+      {
+        scale: Type.Integer({ minimum: 1 }),
+        perSlot: Type.Array(SlotOdds, { minItems: PACK_SIZE, maxItems: PACK_SIZE }),
+        perPack: PerRarity,
+        tierSizes: PerRarity,
+        radiant: Type.Object(
+          { chance: Count, odds: PerRarity, lastSlot: Rarity },
+          { additionalProperties: false },
+        ),
+      },
+      { additionalProperties: false },
+    ),
+  },
+  { additionalProperties: false },
+);
+export type ThemeOffer = Static<typeof ThemeOffer>;
+
+/** `GET /api/shop`: no themes and `snapshot: null` while there is no snapshot; `franchises` covers every theme's ids. */
+export const ShopResponse = Type.Object(
+  {
+    themes: Type.Array(ThemeOffer),
+    franchises: Type.Array(FranchiseRef),
+    snapshot: Type.Union([SnapshotInfo, Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+export type ShopResponse = Static<typeof ShopResponse>;
+
+/** `POST /api/shop/buy`: the idempotency key and the theme; the price is the server's. */
+export const ShopBuyBody = Type.Object(
+  { requestId: RequestId, themeId: Type.String({ minLength: 1, maxLength: 64 }) },
+  { additionalProperties: false },
+);
+export type ShopBuyBody = Static<typeof ShopBuyBody>;
+
+/** 201 for a purchase, 200 with the same pack and price and the current balance on a replay. */
+export const ShopReceipt = Type.Object(
+  { pack: PackOpened, themeId: Type.String(), price: Type.Integer({ minimum: 1 }), balance: Count },
+  { additionalProperties: false },
+);
+export type ShopReceipt = Static<typeof ShopReceipt>;
+
+/** `POST /api/collection/recycle`: which entry and how many duplicates; never an amount, which is the server's. */
+export const RecycleBody = Type.Object(
+  {
+    requestId: RequestId,
+    characterId: Type.Integer({ minimum: 1, maximum: MAX_ID }),
+    rarity: Rarity,
+    count: Type.Integer({ minimum: 1, maximum: MAX_RECYCLE_COUNT }),
+  },
+  { additionalProperties: false },
+);
+export type RecycleBody = Static<typeof RecycleBody>;
+
+/** 201 for a recycle, 200 with the same receipt and the current balance on a replay; nothing is produced, so no card. */
+export const RecycleReceipt = Type.Object(
+  {
+    recycleId: Type.String({ format: "uuid" }),
+    recycledAt: DateTime,
+    recycled: Type.Object(
+      { characterId: AniListId, rarity: Rarity, count: Type.Integer({ minimum: 1 }) },
+      { additionalProperties: false },
+    ),
+    credited: Type.Integer({ minimum: 1 }),
+    balance: Count,
+  },
+  { additionalProperties: false },
+);
+export type RecycleReceipt = Static<typeof RecycleReceipt>;

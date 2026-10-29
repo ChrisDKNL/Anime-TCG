@@ -36,6 +36,13 @@
       "when": 1793296711999,
       "tag": "0004_packs_hardening",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1793315346513,
+      "tag": "0005_economy_ledger",
+      "breakpoints": true
     }
   ]
 }

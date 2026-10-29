@@ -188,6 +188,9 @@ const DECLARED_KEYS = new Set<string>([
   "franchiseId",
   "entries",
   "count",
+  // economy.md §11.2: the collection answer's additions ("available" is the allowance's key too).
+  "listed",
+  "recyclable",
   "firstObtainedAt",
   "lastObtainedAt",
   "error",

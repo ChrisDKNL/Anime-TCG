@@ -1,4 +1,4 @@
-import { PACK_SIZE } from "@anime-tcg/shared/economy";
+import { MAX_BALANCE, MAX_ENTRY_AMOUNT, MAX_RECYCLE_COUNT, PACK_SIZE } from "@anime-tcg/shared/economy";
 import { PITY_PACKS, RARITIES } from "@anime-tcg/shared/rarity";
 import { sql } from "drizzle-orm";
 import {
@@ -51,6 +51,11 @@ export const accounts = pgTable(
     packsSinceMythic: integer("packs_since_mythic").notNull().default(0),
     /** Free packs opened since registration or the last reset; every `ENCHANTED_INTERVAL`th is Enchanted. */
     freePacksOpened: integer("free_packs_opened").notNull().default(0),
+    /**
+     * Karma (economy.md §7): written only by the ledger function, under this
+     * row's lock, in the transaction of the ledger row that proves it.
+     */
+    balance: integer("balance").notNull().default(0),
   },
   (table) => [
     check(
@@ -58,6 +63,51 @@ export const accounts = pgTable(
       sql`${table.packsSinceMythic} between 0 and ${sql.raw(String(PITY_PACKS - 1))}`,
     ),
     check("accounts_free_packs_opened_check", sql`${table.freePacksOpened} >= 0`),
+    check("accounts_balance_check", sql`${table.balance} between 0 and ${sql.raw(String(MAX_BALANCE))}`),
+  ],
+);
+
+/** Why a balance changed (economy.md §7); items 5 and 6 add `wager` and `payout`. Nothing else may change one. */
+export const ledgerKind = pgEnum("ledger_kind", [
+  "recycle_credit",
+  "shop_purchase",
+  "market_purchase",
+  "market_sale",
+  "market_fee",
+  "owner_reset",
+]);
+
+/**
+ * One row per balance change, never updated or deleted (the app role holds
+ * neither right). `seq` runs 1, 2, 3 ... per account under the account lock
+ * and `balance_after` chains the rows, so `audit-ledger` sees a missing,
+ * extra or altered one. A credit is positive, a debit negative.
+ */
+export const ledgerEntries = pgTable(
+  "ledger_entries",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    seq: integer("seq").notNull(),
+    kind: ledgerKind("kind").notNull(),
+    amount: integer("amount").notNull(),
+    balanceAfter: integer("balance_after").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    unique("ledger_entries_account_seq_unique").on(table.accountId, table.seq),
+    index("ledger_entries_account_kind_created_idx").on(table.accountId, table.kind, table.createdAt),
+    check("ledger_entries_seq_check", sql`${table.seq} >= 1`),
+    check(
+      "ledger_entries_amount_check",
+      sql`${table.amount} <> 0 and (abs(${table.amount}) <= ${sql.raw(String(MAX_ENTRY_AMOUNT))} or ${table.kind} = 'owner_reset')`,
+    ),
+    check(
+      "ledger_entries_balance_after_check",
+      sql`${table.balanceAfter} between 0 and ${sql.raw(String(MAX_BALANCE))}`,
+    ),
   ],
 );
 
@@ -103,6 +153,8 @@ export const itemKind = pgEnum("item_kind", ["card"]);
 export const characterRole = pgEnum("character_role", ["main", "supporting"]);
 /** Which rules an opening was dealt under (spec §5.4.3); a replay answers it as stored. */
 export const packKind = pgEnum("pack_kind", ["standard", "enchanted", "radiant"]);
+/** What paid for an opening (economy.md §7): the allowance or the shop; items 5 and 6 add `prize`. */
+export const openingSource = pgEnum("opening_source", ["timer", "shop"]);
 
 /**
  * One row per snapshot of the AniList pool (collection-packs.md §4.1), never
@@ -311,10 +363,52 @@ export const packOpenings = pgTable(
     /** The last card's Mythic was forced by pity; a Radiant pack already holds one, so it is never both. */
     pity: boolean("pity").notNull(),
     openedAt: timestamp("opened_at", { withTimezone: true }).notNull(),
+    source: openingSource("source").notNull().default("timer"),
+    /** `genre-<slug>`; set exactly when the shop sold the pack. */
+    themeId: text("theme_id"),
+    /** The shop price's debit; null for a timer pack. */
+    ledgerEntryId: uuid("ledger_entry_id")
+      .unique("pack_openings_ledger_entry_unique")
+      .references(() => ledgerEntries.id),
   },
   (table) => [
     unique("pack_openings_account_request_unique").on(table.accountId, table.requestId),
     check("pack_openings_pity_check", sql`not ${table.pity} or ${table.kind} <> 'radiant'`),
+    check(
+      "pack_openings_source_check",
+      sql`(${table.source} = 'shop') = (${table.themeId} is not null) and (${table.source} = 'shop') = (${table.ledgerEntryId} is not null)`,
+    ),
+  ],
+);
+
+/**
+ * One row per recycle of duplicates for Karma (economy.md §8.2): the
+ * idempotency record and the receipt. `request_hash` is the SHA-256 of the
+ * canonical body, so a reused key with another request is told apart.
+ */
+export const recycles = pgTable(
+  "recycles",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    accountId: uuid("account_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    requestId: uuid("request_id").notNull(),
+    requestHash: text("request_hash").notNull(),
+    characterId: integer("character_id")
+      .notNull()
+      .references(() => characters.id),
+    rarity: rarity("rarity").notNull(),
+    count: integer("count").notNull(),
+    ledgerEntryId: uuid("ledger_entry_id")
+      .notNull()
+      .unique("recycles_ledger_entry_unique")
+      .references(() => ledgerEntries.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    unique("recycles_account_request_unique").on(table.accountId, table.requestId),
+    check("recycles_count_check", sql`${table.count} between 1 and ${sql.raw(String(MAX_RECYCLE_COUNT))}`),
   ],
 );
 
@@ -343,10 +437,19 @@ export const cards = pgTable(
       .references(() => poolSnapshots.id),
     isNew: boolean("is_new").notNull(),
     pulledAt: timestamp("pulled_at", { withTimezone: true }).notNull(),
+    /** Null while held; set when the card is recycled (economy.md §7). The row stays, so the recycle can be audited. */
+    removedAt: timestamp("removed_at", { withTimezone: true }),
+    removedByRecycle: uuid("removed_by_recycle").references(() => recycles.id),
+    /** Reserved for a game ante (items 5 and 6): always null in item 2, and nothing writes it. */
+    escrowId: uuid("escrow_id"),
   },
   (table) => [
     unique("cards_opening_slot_unique").on(table.openingId, table.slot),
     check("cards_slot_check", sql`${table.slot} between 0 and ${sql.raw(String(PACK_SIZE - 1))}`),
-    index("cards_account_entry_idx").on(table.accountId, table.characterId, table.rarity, table.variant),
+    check("cards_removed_check", sql`${table.removedAt} is not null or ${table.removedByRecycle} is null`),
+    check("cards_escrow_check", sql`${table.removedAt} is null or ${table.escrowId} is null`),
+    index("cards_held_entry_idx")
+      .on(table.accountId, table.characterId, table.rarity, table.variant)
+      .where(sql`${table.removedAt} is null`),
   ],
 );

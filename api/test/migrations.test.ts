@@ -17,8 +17,16 @@ const MIGRATION_FILES = [
   "0002_accounts_and_throttle.sql",
   "0003_collection_packs.sql",
   "0004_packs_hardening.sql",
+  "0005_economy_ledger.sql",
 ];
-const MIGRATION_WHEN = ["1793207773838", "1793217582152", "1793220843481", "1793285235582", "1793296711999"];
+const MIGRATION_WHEN = [
+  "1793207773838",
+  "1793217582152",
+  "1793220843481",
+  "1793285235582",
+  "1793296711999",
+  "1793315346513",
+];
 
 /**
  * Spec §5: migrations run at every start-up, so running them against an
@@ -94,7 +102,7 @@ describe("migrations", () => {
     ]);
   });
 
-  it("produced every table of 1b and 1c, and nothing else", async () => {
+  it("produced every table of 1b, 1c and the economy's first PR, and nothing else", async () => {
     const tables = await db.execute<{ table_name: string }>(sql`
       select table_name from information_schema.tables
       where table_schema = 'public' order by table_name
@@ -104,6 +112,7 @@ describe("migrations", () => {
       "auth_throttle",
       "cards",
       "characters",
+      "ledger_entries",
       "pack_openings",
       "pool_fetch_pages",
       "pool_fetches",
@@ -113,6 +122,7 @@ describe("migrations", () => {
       "pool_snapshot_relations",
       "pool_snapshot_series",
       "pool_snapshots",
+      "recycles",
       "series",
       "sessions",
     ]);
@@ -169,6 +179,10 @@ describe("migrations", () => {
       order by conname
     `);
     expect(checks.rows).toEqual([
+      {
+        conname: "accounts_balance_check",
+        definition: "CHECK (((balance >= 0) AND (balance <= 1000000000)))",
+      },
       { conname: "accounts_free_packs_opened_check", definition: "CHECK ((free_packs_opened >= 0))" },
       {
         conname: "accounts_packs_since_mythic_check",
@@ -177,6 +191,11 @@ describe("migrations", () => {
       {
         conname: "pack_openings_pity_check",
         definition: "CHECK (((NOT pity) OR (kind <> 'radiant'::pack_kind)))",
+      },
+      {
+        conname: "pack_openings_source_check",
+        definition:
+          "CHECK ((((source = 'shop'::opening_source) = (theme_id IS NOT NULL)) AND ((source = 'shop'::opening_source) = (ledger_entry_id IS NOT NULL))))",
       },
       { conname: "pool_snapshots_tier_counts_check", definition: "CHECK ((cardinality(tier_counts) = 6))" },
     ]);
@@ -278,6 +297,104 @@ describe("migrations", () => {
     );
   });
 
+  it("applies 0005 over a database that ran 0004: every account at 0 Karma, every opening a timer one, every card held", async () => {
+    await migratedOver(
+      5,
+      async (probe) => {
+        await insertOldAccount(probe);
+        await probe.query(`
+          with snapshot as (
+            insert into pool_snapshots (source, taken_at, activated_at, is_current, series_count,
+              franchise_count, character_count, tier_counts)
+            values ('file', now(), now(), true, 0, 0, 1, '{0,0,0,0,0,1}') returning id
+          ), character as (
+            insert into characters (id, name, image_url)
+            values (1, 'Old', 'https://s4.anilist.co/file/anilistcdn/character/large/b1.png') returning id
+          ), opening as (
+            insert into pack_openings (account_id, request_id, snapshot_id, kind, pity, opened_at)
+            select a.id, gen_random_uuid(), s.id, 'standard', false, now()
+            from accounts a, snapshot s where a.login = 'old' returning id, account_id, snapshot_id
+          )
+          insert into cards (account_id, opening_id, slot, character_id, rarity, snapshot_id, is_new, pulled_at)
+          select o.account_id, o.id, 4, c.id, 'mythic', o.snapshot_id, true, now() from opening o, character c
+        `);
+      },
+      async (probe) => {
+        expect((await probe.query("select balance from accounts")).rows).toEqual([{ balance: 0 }]);
+        expect(
+          (await probe.query("select source, theme_id, ledger_entry_id from pack_openings")).rows,
+        ).toEqual([{ source: "timer", theme_id: null, ledger_entry_id: null }]);
+        expect(
+          (await probe.query("select rarity, removed_at, removed_by_recycle, escrow_id from cards")).rows,
+        ).toEqual([{ rarity: "mythic", removed_at: null, removed_by_recycle: null, escrow_id: null }]);
+        expect((await probe.query("select count(*)::int as n from ledger_entries")).rows).toEqual([{ n: 0 }]);
+      },
+    );
+  });
+
+  it("bounds every ledger amount and balance and every recycle's count, and keys each idempotency record (0005)", async () => {
+    const checks = await db.execute<{ conname: string; definition: string }>(sql`
+      select conname, pg_get_constraintdef(oid) as definition from pg_constraint
+      where conrelid in ('ledger_entries'::regclass, 'recycles'::regclass) and contype = 'c'
+      order by conname
+    `);
+    expect(checks.rows).toEqual([
+      {
+        conname: "ledger_entries_amount_check",
+        definition:
+          "CHECK (((amount <> 0) AND ((abs(amount) <= 1000000) OR (kind = 'owner_reset'::ledger_kind))))",
+      },
+      {
+        conname: "ledger_entries_balance_after_check",
+        definition: "CHECK (((balance_after >= 0) AND (balance_after <= 1000000000)))",
+      },
+      { conname: "ledger_entries_seq_check", definition: "CHECK ((seq >= 1))" },
+      { conname: "recycles_count_check", definition: "CHECK (((count >= 1) AND (count <= 100)))" },
+    ]);
+    const uniques = await db.execute<{ conname: string; definition: string }>(sql`
+      select conname, pg_get_constraintdef(oid) as definition from pg_constraint
+      where conrelid in ('ledger_entries'::regclass, 'recycles'::regclass, 'pack_openings'::regclass)
+        and contype = 'u'
+      order by conname
+    `);
+    expect(uniques.rows).toEqual([
+      { conname: "ledger_entries_account_seq_unique", definition: "UNIQUE (account_id, seq)" },
+      { conname: "pack_openings_account_request_unique", definition: "UNIQUE (account_id, request_id)" },
+      { conname: "pack_openings_ledger_entry_unique", definition: "UNIQUE (ledger_entry_id)" },
+      { conname: "recycles_account_request_unique", definition: "UNIQUE (account_id, request_id)" },
+      { conname: "recycles_ledger_entry_unique", definition: "UNIQUE (ledger_entry_id)" },
+    ]);
+  });
+
+  it("cascades an account's ledger and recycles, and indexes held cards and the ledger's windows (0005)", async () => {
+    const rules = await db.execute<{ constraint_name: string; delete_rule: string }>(sql`
+      select tc.constraint_name, rc.delete_rule from information_schema.referential_constraints rc
+      join information_schema.table_constraints tc on tc.constraint_name = rc.constraint_name
+      where tc.table_schema = 'public' and tc.table_name in ('ledger_entries', 'recycles')
+      order by tc.constraint_name
+    `);
+    expect(rules.rows).toEqual([
+      { constraint_name: "ledger_entries_account_id_accounts_id_fk", delete_rule: "CASCADE" },
+      { constraint_name: "recycles_account_id_accounts_id_fk", delete_rule: "CASCADE" },
+      { constraint_name: "recycles_character_id_characters_id_fk", delete_rule: "NO ACTION" },
+      { constraint_name: "recycles_ledger_entry_id_ledger_entries_id_fk", delete_rule: "NO ACTION" },
+    ]);
+    const indexes = await db.execute<{ indexname: string; indexdef: string }>(sql`
+      select indexname, indexdef from pg_indexes
+      where schemaname = 'public' and indexname in ('cards_held_entry_idx', 'cards_account_entry_idx',
+        'ledger_entries_account_kind_created_idx')
+      order by indexname
+    `);
+    expect(indexes.rows.map((row) => row.indexname)).toEqual([
+      "cards_held_entry_idx",
+      "ledger_entries_account_kind_created_idx",
+    ]);
+    expect(indexes.rows[0]?.indexdef).toMatch(
+      /\(account_id, character_id, rarity, variant\) WHERE \(removed_at IS NULL\)$/,
+    );
+    expect(indexes.rows[1]?.indexdef).toMatch(/\(account_id, kind, created_at\)$/);
+  });
+
   it("checks a card's slot against the pack size and a character's image against IMAGE_HOST (0004)", async () => {
     const checks = await db.execute<{ conname: string; definition: string }>(sql`
       select conname, pg_get_constraintdef(oid) as definition from pg_constraint
@@ -285,6 +402,14 @@ describe("migrations", () => {
       order by conname
     `);
     expect(checks.rows).toEqual([
+      {
+        conname: "cards_escrow_check",
+        definition: "CHECK (((removed_at IS NULL) OR (escrow_id IS NULL)))",
+      },
+      {
+        conname: "cards_removed_check",
+        definition: "CHECK (((removed_at IS NOT NULL) OR (removed_by_recycle IS NULL)))",
+      },
       { conname: "cards_slot_check", definition: "CHECK (((slot >= 0) AND (slot <= 4)))" },
       {
         conname: "characters_image_url_check",
@@ -303,6 +428,11 @@ describe("migrations", () => {
       { name: "card_variant", labels: "standard" },
       { name: "character_role", labels: "main,supporting" },
       { name: "item_kind", labels: "card" },
+      {
+        name: "ledger_kind",
+        labels: "recycle_credit,shop_purchase,market_purchase,market_sale,market_fee,owner_reset",
+      },
+      { name: "opening_source", labels: "timer,shop" },
       { name: "pack_kind", labels: "standard,enchanted,radiant" },
       { name: "rarity", labels: "common,uncommon,rare,epic,legendary,mythic" },
     ]);
@@ -329,6 +459,11 @@ describe("migrations", () => {
       },
       {
         table_name: "cards",
+        constraint_name: "cards_removed_by_recycle_recycles_id_fk",
+        delete_rule: "NO ACTION",
+      },
+      {
+        table_name: "cards",
         constraint_name: "cards_snapshot_id_pool_snapshots_id_fk",
         delete_rule: "NO ACTION",
       },
@@ -336,6 +471,11 @@ describe("migrations", () => {
         table_name: "pack_openings",
         constraint_name: "pack_openings_account_id_accounts_id_fk",
         delete_rule: "CASCADE",
+      },
+      {
+        table_name: "pack_openings",
+        constraint_name: "pack_openings_ledger_entry_id_ledger_entries_id_fk",
+        delete_rule: "NO ACTION",
       },
       {
         table_name: "pack_openings",

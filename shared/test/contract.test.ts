@@ -1,3 +1,4 @@
+import { FormatRegistry } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 import { describe, expect, it } from "vitest";
 import {
@@ -11,10 +12,12 @@ import {
   PacksResponse,
   PerRarity,
   Rarity,
+  RecycleBody,
+  ShopBuyBody,
   SnapshotInfo,
 } from "../src/api.js";
 import { PACK_CAP, PACK_INTERVAL_MINUTES, PACK_SIZE } from "../src/economy.js";
-import { ERROR_CODES } from "../src/errors.js";
+import { ERROR_CODES, ErrorEnvelope } from "../src/errors.js";
 import {
   ENCHANTED_INTERVAL,
   ENCHANTED_SLOT_ODDS,
@@ -165,5 +168,66 @@ describe("1c contract", () => {
     expect(Object.keys(SnapshotInfo.properties)).toEqual(["version", "takenAt", "characterCount"]);
     expect(Value.Check(SnapshotInfo.properties.characterCount, 2_983)).toBe(true);
     expect(Value.Check(SnapshotInfo.properties.characterCount, 0)).toBe(false);
+  });
+});
+
+describe("economy contract (economy.md §11)", () => {
+  const requestId = "6f1c0b8e-3c1a-4d2e-9f00-0123456789ab";
+  // TypeBox's Value checks no format until one is registered; Ajv in the api checks it for real.
+  if (!FormatRegistry.Has("uuid")) FormatRegistry.Set("uuid", (value) => /^[0-9a-f-]{36}$/i.test(value));
+
+  it("names the economy's error codes of PR 1", () => {
+    expect(ERROR_CODES).toEqual(
+      expect.arrayContaining([
+        "not_enough_copies",
+        "balance_limit",
+        "insufficient_funds",
+        "request_id_reused",
+        "theme_unavailable",
+      ]),
+    );
+  });
+
+  it("carries a balance of 0 or more on an error, and nothing else new", () => {
+    const envelope = (extra: object) =>
+      Value.Check(ErrorEnvelope, { error: { code: "insufficient_funds", message: "m", ...extra } });
+    expect([envelope({ balance: 0 }), envelope({ balance: 12 })]).toEqual([true, true]);
+    expect([envelope({ balance: -1 }), envelope({ balance: 1.5 }), envelope({ amount: 1 })]).toEqual([
+      false,
+      false,
+      false,
+    ]);
+  });
+
+  it("bounds a recycle to an entry and a count of 1 to 100, and nothing else", () => {
+    const recycle = (change: object) =>
+      Value.Check(RecycleBody, { requestId, characterId: 1, rarity: "common", count: 1, ...change });
+    expect([recycle({}), recycle({ count: 100 }), recycle({ characterId: 2_147_483_647 })]).toEqual([
+      true,
+      true,
+      true,
+    ]);
+    expect(
+      [
+        { count: 0 },
+        { count: 101 },
+        { count: 1.5 },
+        { characterId: 0 },
+        { characterId: 2_147_483_648 },
+        { amount: 1 },
+        { cardId: requestId },
+      ].map(recycle),
+    ).toEqual([false, false, false, false, false, false, false]);
+  });
+
+  it("takes a theme id of 1 to 64 characters and a uuid, and no price", () => {
+    const buy = (change: object) =>
+      Value.Check(ShopBuyBody, { requestId, themeId: "genre-action", ...change });
+    expect([buy({}), buy({ themeId: "x".repeat(64) })]).toEqual([true, true]);
+    expect([buy({ themeId: "" }), buy({ themeId: "x".repeat(65) }), buy({ price: 400 })]).toEqual([
+      false,
+      false,
+      false,
+    ]);
   });
 });
