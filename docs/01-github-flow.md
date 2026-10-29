@@ -87,7 +87,7 @@ Then **Settings → General → Default branch** → switch to `main`.
 
 What it enforces on `main`: pull request required, all review threads resolved, required checks `quality` / `e2e` / `security` / `docker` / `api-tests` green on the branch head (not required to be up to date with `main`, see _Keeping branches current_), linear history, no force-push, no deletion, no bypass actors.
 
-The ruleset was imported before the `docker` and `api-tests` jobs existed; `docker` was added to the required checks by hand on 2026-10-28 (**Settings → Rules → Rulesets → Protect main → Require status checks to pass**). `api-tests` (Sprint 1a) was found missing from the live ruleset in the security review of #21 and must be added the same way: until it is, an API security-test failure does not block a merge. If you ever re-import the JSON, it includes both.
+The ruleset was imported before the `docker` and `api-tests` jobs existed; `docker` was added to the required checks by hand on 2026-10-28 (**Settings → Rules → Rulesets → Protect main → Require status checks to pass**). `api-tests` (Sprint 1a) was found missing from the live ruleset in the security review of #21 and was added the same way on 2026-10-28. If you ever re-import the JSON, it includes both.
 
 ### 3. Decide on the approval count
 
