@@ -90,6 +90,15 @@ describe("planPack: §5.4.3's precedence, every row", () => {
     expect(tablesOf(plan)).toEqual([...SLOT_ODDS.slice(0, 4), "mythic"]);
   });
 
+  it.each([PITY_PACKS, PITY_PACKS + 1, 10_000])(
+    "packs_since_mythic %i, past the database's bound: still pity-due, never skipped",
+    (packsSinceMythic) => {
+      const plan = planPack({ packsSinceMythic, freePacksOpened: 0 }, "free", scripted([NOT_RADIANT]));
+      expect(plan).toMatchObject({ kind: "standard", pity: true });
+      expect(tablesOf(plan)).toEqual([...SLOT_ODDS.slice(0, 4), "mythic"]);
+    },
+  );
+
   it("Enchanted and pity both due: an enchanted pack whose fifth card is the pity Mythic", () => {
     const plan = planPack({ packsSinceMythic: 299, freePacksOpened: 9 }, "free", scripted([NOT_RADIANT]));
     expect(plan).toMatchObject({ kind: "enchanted", pity: true });

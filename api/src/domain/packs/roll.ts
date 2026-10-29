@@ -72,7 +72,8 @@ export function planPack(counters: PackCounters, source: PackSource, rng: Rng): 
   const radiant = rng(0, ODDS_SCALE) < RADIANT_ODDS;
   const free = source === "free";
   const enchanted = free && (counters.freePacksOpened + 1) % ENCHANTED_INTERVAL === 0;
-  const pityDue = free && counters.packsSinceMythic === PITY_PACKS - 1;
+  // `>=`: the database holds the counter in 0..PITY_PACKS - 1, and a counter past that bound is still owed its Mythic.
+  const pityDue = free && counters.packsSinceMythic >= PITY_PACKS - 1;
   if (radiant) {
     return {
       kind: "radiant",
