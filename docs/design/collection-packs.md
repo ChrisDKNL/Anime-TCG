@@ -62,7 +62,8 @@ characters                                     -- latest display data of every c
   id                  integer pk               -- AniList character id
   name                text not null            -- name.full, trimmed; rendered as text
   name_native         text null
-  image_url           text not null            -- a canonical https URL on IMAGE_HOST (§5.1.6, §5.1.9)
+  image_url           text not null            -- a canonical https URL on IMAGE_HOST (§5.1.6, §5.1.9);
+                                               -- check like 'https://IMAGE_HOST/%'
 
 pool_snapshot_franchises                       -- the franchises of a snapshot (§5.1.2)
   snapshot_id         integer not null references pool_snapshots(id)
@@ -133,7 +134,8 @@ cards                                          -- one row per character card; du
   id                  uuid pk default gen_random_uuid()   -- internal: never in a request or a response
   account_id          uuid not null references accounts(id) on delete cascade
   opening_id          uuid not null references pack_openings(id) on delete cascade
-  slot                smallint not null        -- 0 .. PACK_SIZE - 1, the reveal order (slot 0 is the owner's "slot 1")
+  slot                smallint not null        -- 0 .. PACK_SIZE - 1, the reveal order (slot 0 is the owner's "slot 1");
+                                               -- check between 0 and PACK_SIZE - 1
   character_id        integer not null references characters(id)
   rarity              rarity not null          -- the card's rarity as granted; never changes
   variant             card_variant not null default 'standard'   -- reserved for Masterwork (§2)
@@ -161,7 +163,7 @@ Rules:
 - **Card ids stay inside the server.** No request or response carries one; the API names a collection entry by character, rarity and variant (§5.5).
 - Deleting an account removes its openings and cards (`on delete cascade`, as `accounts.md` promises: the account "and every card in it"). Snapshot, character and series rows are shared reference data and stay.
 - The staging tables hold only what the schema parse of §5.1.6 kept, never a whole AniList body, and are emptied when a snapshot is built from them or a fetch is restarted.
-- Migration: `0003_collection_packs.sql` has not reached `main`, so the build rewrites it in place for this model (six-value `rarity`, `pack_kind`, the opening's `kind` and `pity`, `tier_counts` of six, the two account counters) instead of adding a `0004`. A development or acceptance database that ran the five-tier `0003` is recreated (`down --volumes`); none holds data worth keeping. The app role gets its grants on the new tables from 0001's default privileges; `db-role.test.ts` gains an insert into `cards`.
+- Migration: `0003_collection_packs.sql` has not reached `main`, so the build rewrites it in place for this model (six-value `rarity`, `pack_kind`, the opening's `kind` and `pity`, `tier_counts` of six, the two account counters) instead of adding a `0004`. A development or acceptance database that ran the five-tier `0003` is recreated (`down --volumes`); none holds data worth keeping. The app role gets its grants on the new tables from 0001's default privileges; `db-role.test.ts` gains an insert into `cards`. 0003 reached `main` with PR #28; the hardening after its security review is the forward migration `0004_packs_hardening.sql`: the checks on `cards.slot` and `characters.image_url` above.
 
 ### 4.2 Parameters
 

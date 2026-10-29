@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { PACK_SIZE } from "@anime-tcg/shared/economy";
+import { eq, inArray, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../src/app.js";
 import {
@@ -85,8 +86,14 @@ describe("app database role", () => {
     expect(await app.db.select().from(accounts)).toEqual([]);
   });
 
-  it("can write the 1c tables down to a card, which 0001's default privileges granted as well", async () => {
-    const accountId = await insertAccount(app.db, "CardProbe");
+  /** Postgres `check_violation`. */
+  const CHECK_VIOLATION = "23514";
+  const PROBE_CHARACTER = 999_000_001;
+  const PROBE_IMAGE = "https://s4.anilist.co/file/anilistcdn/character/large/b999000001.png";
+  const probeSnapshots: number[] = [];
+
+  /** A snapshot, a character and an opening for `accountId`, written as the app role, ready for a card. */
+  async function seedOpening(accountId: string): Promise<{ snapshotId: number; openingId: string }> {
     const now = new Date();
     const [snapshot] = await app.db
       .insert(poolSnapshots)
@@ -102,10 +109,11 @@ describe("app database role", () => {
       })
       .returning({ id: poolSnapshots.id });
     if (snapshot === undefined) throw new Error("snapshot insert returned no row");
-    const characterId = 999_000_001;
+    probeSnapshots.push(snapshot.id);
     await app.db
       .insert(characters)
-      .values({ id: characterId, name: "Probe", imageUrl: "https://s4.anilist.co/probe.png" });
+      .values({ id: PROBE_CHARACTER, name: "Probe", imageUrl: PROBE_IMAGE })
+      .onConflictDoNothing();
     const [opening] = await app.db
       .insert(packOpenings)
       .values({
@@ -118,24 +126,58 @@ describe("app database role", () => {
       })
       .returning({ id: packOpenings.id });
     if (opening === undefined) throw new Error("opening insert returned no row");
-    await app.db.insert(cards).values({
-      accountId,
-      openingId: opening.id,
-      slot: 0,
-      characterId,
-      rarity: "mythic",
-      snapshotId: snapshot.id,
-      isNew: true,
-      pulledAt: now,
-    });
+    return { snapshotId: snapshot.id, openingId: opening.id };
+  }
+
+  const card = (accountId: string, seeded: { snapshotId: number; openingId: string }, slot: number) => ({
+    accountId,
+    openingId: seeded.openingId,
+    slot,
+    characterId: PROBE_CHARACTER,
+    rarity: "mythic" as const,
+    snapshotId: seeded.snapshotId,
+    isNew: true,
+    pulledAt: new Date(),
+  });
+
+  afterAll(async () => {
+    await app.db.delete(accounts);
+    await app.db.delete(characters).where(eq(characters.id, PROBE_CHARACTER));
+    if (probeSnapshots.length > 0)
+      await app.db.delete(poolSnapshots).where(inArray(poolSnapshots.id, probeSnapshots));
+  });
+
+  it("can write the 1c tables down to a card, which 0001's default privileges granted as well", async () => {
+    const accountId = await insertAccount(app.db, "CardProbe");
+    const seeded = await seedOpening(accountId);
+    await app.db.insert(cards).values(card(accountId, seeded, 0));
     expect(
       await app.db.select({ variant: cards.variant }).from(cards).where(eq(cards.accountId, accountId)),
     ).toEqual([{ variant: "standard" }]);
+  });
 
-    await app.db.delete(accounts).where(eq(accounts.id, accountId));
-    expect(await app.db.select().from(cards).where(eq(cards.accountId, accountId))).toEqual([]);
-    await app.db.delete(characters).where(eq(characters.id, characterId));
-    await app.db.delete(poolSnapshots).where(eq(poolSnapshots.id, snapshot.id));
+  it("refuses a card slot outside the pack's five (0004)", async () => {
+    const accountId = await insertAccount(app.db, "SlotProbe");
+    const seeded = await seedOpening(accountId);
+    await app.db.insert(cards).values(card(accountId, seeded, PACK_SIZE - 1));
+    for (const slot of [-1, PACK_SIZE]) {
+      await expect(app.db.insert(cards).values(card(accountId, seeded, slot))).rejects.toMatchObject({
+        cause: { code: CHECK_VIOLATION, constraint: "cards_slot_check" },
+      });
+    }
+  });
+
+  it("refuses a character image off https://IMAGE_HOST/ (0004)", async () => {
+    for (const imageUrl of [
+      "http://s4.anilist.co/file/b1.png",
+      "https://s4.anilist.co.evil.example/b1.png",
+      "https://evil.example/https://s4.anilist.co/b1.png",
+      "javascript:alert(1)",
+    ]) {
+      await expect(
+        app.db.insert(characters).values({ id: PROBE_CHARACTER + 1, name: "Probe", imageUrl }),
+      ).rejects.toMatchObject({ cause: { code: CHECK_VIOLATION, constraint: "characters_image_url_check" } });
+    }
   });
 
   it("cannot truncate or alter the new tables either", async () => {

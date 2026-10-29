@@ -1,3 +1,4 @@
+import { PACK_SIZE } from "@anime-tcg/shared/economy";
 import { PITY_PACKS, RARITIES } from "@anime-tcg/shared/rarity";
 import { sql } from "drizzle-orm";
 import {
@@ -17,6 +18,7 @@ import {
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
+import { IMAGE_HOST } from "../domain/pool/limits.js";
 
 /**
  * Player accounts (docs/design/accounts-api.md §5). `login` is the display
@@ -141,13 +143,23 @@ export const series = pgTable("series", {
   startYear: smallint("start_year"),
 });
 
-/** The latest display data of every character that was ever in a snapshot; never deleted. */
-export const characters = pgTable("characters", {
-  id: integer("id").primaryKey(),
-  name: text("name").notNull(),
-  nameNative: text("name_native"),
-  imageUrl: text("image_url").notNull(),
-});
+/**
+ * The latest display data of every character that was ever in a snapshot;
+ * never deleted. The check repeats the host rule of the snapshot validation
+ * (spec §5.1.6) so no write path can store an image URL off the CSP's host.
+ */
+export const characters = pgTable(
+  "characters",
+  {
+    id: integer("id").primaryKey(),
+    name: text("name").notNull(),
+    nameNative: text("name_native"),
+    imageUrl: text("image_url").notNull(),
+  },
+  (table) => [
+    check("characters_image_url_check", sql`${table.imageUrl} like ${sql.raw(`'https://${IMAGE_HOST}/%'`)}`),
+  ],
+);
 
 /** A snapshot's franchises; `franchise_id` is the smallest AniList id among its entries (spec §5.1.2). */
 export const poolSnapshotFranchises = pgTable(
@@ -334,6 +346,7 @@ export const cards = pgTable(
   },
   (table) => [
     unique("cards_opening_slot_unique").on(table.openingId, table.slot),
+    check("cards_slot_check", sql`${table.slot} between 0 and ${sql.raw(String(PACK_SIZE - 1))}`),
     index("cards_account_entry_idx").on(table.accountId, table.characterId, table.rarity, table.variant),
   ],
 );

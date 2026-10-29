@@ -16,8 +16,9 @@ const MIGRATION_FILES = [
   "0001_app_role_grants.sql",
   "0002_accounts_and_throttle.sql",
   "0003_collection_packs.sql",
+  "0004_packs_hardening.sql",
 ];
-const MIGRATION_WHEN = ["1793207773838", "1793217582152", "1793220843481", "1793285235582"];
+const MIGRATION_WHEN = ["1793207773838", "1793217582152", "1793220843481", "1793285235582", "1793296711999"];
 
 /**
  * Spec §5: migrations run at every start-up, so running them against an
@@ -181,8 +182,15 @@ describe("migrations", () => {
     ]);
   });
 
-  it("leaves every 1b account full and both counters at 0 when 0003 runs over it", async () => {
-    // A scratch database, migrated to 0002 with an account in it, then to the end.
+  /**
+   * A scratch database migrated with the first `applied` migrations only, handed to `before` to plant
+   * rows, then migrated to the end the way a start-up would, and handed to `after`; dropped afterwards.
+   */
+  async function migratedOver(
+    applied: number,
+    before: (probe: pg.Client) => Promise<void>,
+    after: (probe: pg.Client) => Promise<void>,
+  ): Promise<void> {
     const name = `anime_migration_probe_${process.pid}`;
     const url = new URL(migrationsDatabaseUrl());
     url.pathname = `/${name}`;
@@ -191,7 +199,7 @@ describe("migrations", () => {
     await db.execute(sql.raw(`create database ${name}`));
     const probe = new pg.Client({ connectionString: url.href });
     try {
-      for (const file of MIGRATION_FILES.slice(0, 3)) {
+      for (const file of MIGRATION_FILES.slice(0, applied)) {
         await copyFile(new URL(`../src/db/migrations/${file}`, import.meta.url), join(folder, file));
       }
       const journal = JSON.parse(
@@ -200,23 +208,89 @@ describe("migrations", () => {
       await mkdir(join(folder, "meta"));
       await writeFile(
         join(folder, "meta", "_journal.json"),
-        JSON.stringify({ ...journal, entries: journal.entries.slice(0, 3) }),
+        JSON.stringify({ ...journal, entries: journal.entries.slice(0, applied) }),
       );
       await probe.connect();
       await migrate(drizzle(probe), { migrationsFolder: folder });
-      await probe.query(
-        "insert into accounts (login, login_normalized, password_hash, invite_code_hash) values ('old', 'old', 'x', 'y')",
-      );
+      await before(probe);
       await runMigrations(url.href);
-      const rows = await probe.query(
-        "select packs_anchor_at, packs_since_mythic, free_packs_opened from accounts where login = 'old'",
-      );
-      expect(rows.rows).toEqual([{ packs_anchor_at: null, packs_since_mythic: 0, free_packs_opened: 0 }]);
+      await after(probe);
     } finally {
       await probe.end();
       await rm(folder, { recursive: true, force: true });
       await db.execute(sql.raw(`drop database if exists ${name}`));
     }
+  }
+
+  const insertOldAccount = (probe: pg.Client) =>
+    probe.query(
+      "insert into accounts (login, login_normalized, password_hash, invite_code_hash) values ('old', 'old', 'x', 'y')",
+    );
+
+  it("leaves every 1b account full and both counters at 0 when 0003 runs over it", async () => {
+    await migratedOver(
+      3,
+      async (probe) => {
+        await insertOldAccount(probe);
+      },
+      async (probe) => {
+        const rows = await probe.query(
+          "select packs_anchor_at, packs_since_mythic, free_packs_opened from accounts where login = 'old'",
+        );
+        expect(rows.rows).toEqual([{ packs_anchor_at: null, packs_since_mythic: 0, free_packs_opened: 0 }]);
+      },
+    );
+  });
+
+  it("applies 0004 over a database that ran 0003 and holds a card, keeping the card", async () => {
+    await migratedOver(
+      4,
+      async (probe) => {
+        await insertOldAccount(probe);
+        await probe.query(`
+          with snapshot as (
+            insert into pool_snapshots (source, taken_at, activated_at, is_current, series_count,
+              franchise_count, character_count, tier_counts)
+            values ('file', now(), now(), true, 0, 0, 1, '{0,0,0,0,0,1}') returning id
+          ), character as (
+            insert into characters (id, name, image_url)
+            values (1, 'Old', 'https://s4.anilist.co/file/anilistcdn/character/large/b1.png') returning id
+          ), opening as (
+            insert into pack_openings (account_id, request_id, snapshot_id, kind, pity, opened_at)
+            select a.id, gen_random_uuid(), s.id, 'standard', false, now()
+            from accounts a, snapshot s where a.login = 'old' returning id, account_id, snapshot_id
+          )
+          insert into cards (account_id, opening_id, slot, character_id, rarity, snapshot_id, is_new, pulled_at)
+          select o.account_id, o.id, 4, c.id, 'mythic', o.snapshot_id, true, now() from opening o, character c
+        `);
+      },
+      async (probe) => {
+        const cards = await probe.query("select slot, rarity from cards");
+        expect(cards.rows).toEqual([{ slot: 4, rarity: "mythic" }]);
+        const checks = await probe.query(
+          "select conname from pg_constraint where conname in ('cards_slot_check', 'characters_image_url_check') order by conname",
+        );
+        expect(checks.rows).toEqual([
+          { conname: "cards_slot_check" },
+          { conname: "characters_image_url_check" },
+        ]);
+      },
+    );
+  });
+
+  it("checks a card's slot against the pack size and a character's image against IMAGE_HOST (0004)", async () => {
+    const checks = await db.execute<{ conname: string; definition: string }>(sql`
+      select conname, pg_get_constraintdef(oid) as definition from pg_constraint
+      where conrelid in ('cards'::regclass, 'characters'::regclass) and contype = 'c'
+      order by conname
+    `);
+    expect(checks.rows).toEqual([
+      { conname: "cards_slot_check", definition: "CHECK (((slot >= 0) AND (slot <= 4)))" },
+      {
+        conname: "characters_image_url_check",
+        definition: "CHECK ((image_url ~~ 'https://s4.anilist.co/%'::text))",
+      },
+    ]);
   });
 
   it("created the six tiers in rank order, the pack kinds, and the reserved enums with one value each", async () => {
