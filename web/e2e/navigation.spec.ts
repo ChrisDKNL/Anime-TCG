@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 import type { Page } from "@playwright/test";
-import { expect, isolated, makeAccount, signedIn, signedOut, test } from "./support/fake-api";
+import { deferred, expect, isolated, makeAccount, signedIn, signedOut, test } from "./support/fake-api";
 
 /**
  * Test plan: addresses, the guard and page changes in a real browser against a scripted api
@@ -17,6 +17,8 @@ import { expect, isolated, makeAccount, signedIn, signedOut, test } from "./supp
  * - A reload on a deep link stays on that page; the first render moves no focus.
  * - The current page's own link adds no history entry. A query string is dropped on the next
  *   navigation. The skip link is the first stop and changes no address.
+ * - A log in still in flight when the visitor follows a header link to /register signs them in
+ *   when it answers, and lands them on /packs (§4.3).
  */
 
 const CHRIS = makeAccount();
@@ -231,4 +233,30 @@ test("the landing page: heading, How it plays and Join, with Register one step a
   await page.getByRole("main").getByRole("link", { name: "Register" }).click();
   await expect(page).toHaveURL(/\/register$/);
   await expect(h1(page, "Register")).toBeFocused();
+});
+
+test("a log in that answers after the visitor moved on to /register still signs them in", async ({
+  page,
+  api,
+}) => {
+  api.on("GET /api/session", signedOut);
+  const hold = deferred();
+  api.on("POST /api/session/login", async () => {
+    await hold.promise;
+    return signedIn(CHRIS);
+  });
+  await page.goto("/login");
+  await page.getByRole("textbox", { name: "Login", exact: true }).fill("Chris");
+  await page.getByLabel("Password", { exact: true }).fill("correct horse");
+  await page.getByRole("button", { name: "Log in", exact: true }).click();
+  await expect.poll(() => api.count("POST /api/session/login")).toBe(1);
+
+  // The links stay usable while the form waits (§4.3); leaving drops the answer from the screen only.
+  await mainNav(page).getByRole("link", { name: "Register" }).click();
+  await expect(h1(page, "Register")).toBeFocused();
+  hold.release();
+
+  await expect(page).toHaveURL(/\/packs$/);
+  await expect(control(page)).toBeVisible();
+  await expect(h1(page, "Packs")).toBeFocused();
 });
