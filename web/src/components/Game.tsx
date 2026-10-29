@@ -91,8 +91,8 @@ export function Game({ frame, account, pool }: Props) {
     <PageFrame
       frame={frame}
       headerRight={
-        <div className="flex items-center justify-between gap-3 sm:items-end">
-          <nav className="flex gap-1 rounded-xl bg-zinc-900 p-1" aria-label="Views">
+        <div className="flex flex-wrap items-center justify-between gap-3 sm:flex-nowrap sm:items-end">
+          <nav className="flex shrink-0 gap-1 rounded-xl bg-zinc-900 p-1" aria-label="Views">
             {(["pack", "collection"] as const).map((t) => (
               <button
                 key={t}
@@ -107,12 +107,15 @@ export function Game({ frame, account, pool }: Props) {
               </button>
             ))}
           </nav>
-          <AccountControl
-            login={account.login}
-            disabled={opening || logoutMutation.isPending}
-            onManage={() => setManageOpen(true)}
-            onLogout={() => void handleLogout()}
-          />
+          {/* Shrinks the login before anything overflows; below a few visible characters it wraps under the tabs (§5). */}
+          <div className="flex min-w-0 grow basis-24 justify-end sm:shrink-0 sm:grow-0 sm:basis-auto">
+            <AccountControl
+              login={account.login}
+              disabled={opening || logoutMutation.isPending}
+              onManage={() => setManageOpen(true)}
+              onLogout={() => void handleLogout()}
+            />
+          </div>
         </div>
       }
     >

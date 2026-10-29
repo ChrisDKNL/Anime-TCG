@@ -38,7 +38,7 @@ export function AccountControl({ login, disabled, onManage, onLogout }: SignedIn
   };
 
   return (
-    <div ref={rootRef} className="relative">
+    <div ref={rootRef} className="relative min-w-0">
       <button
         ref={buttonRef}
         id="account-menu-button"
