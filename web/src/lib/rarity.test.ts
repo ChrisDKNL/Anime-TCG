@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BASE_WEIGHTS, POPULARITY_INFLUENCE, RARITIES } from "@anime-tcg/shared/rarity";
+import { BASE_WEIGHTS, LEGACY_RARITIES as RARITIES, POPULARITY_INFLUENCE } from "@anime-tcg/shared/rarity";
 import { makeCharacters } from "../test/fixtures";
 import { popularityScore, rarityWeights, rollRarity } from "./rarity";
 

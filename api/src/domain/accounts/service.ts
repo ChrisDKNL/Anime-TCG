@@ -24,21 +24,27 @@ export interface Account {
   id: string;
   login: string;
   createdAt: Date;
+  /** Cards in the collection, duplicates included (collection-packs.md §5.5). */
+  cards: number;
 }
-
-/** The collection is still browser-side until 1c, so every account reports no cards. */
-const CARDS_UNTIL_1C = 0;
 
 export function toPublic(account: Account): AccountPublic {
   return {
     id: account.id,
     login: account.login,
     createdAt: account.createdAt.toISOString(),
-    cards: CARDS_UNTIL_1C,
+    cards: account.cards,
   };
 }
 
-const accountColumns = { id: accounts.id, login: accounts.login, createdAt: accounts.createdAt };
+const accountColumns = {
+  id: accounts.id,
+  login: accounts.login,
+  createdAt: accounts.createdAt,
+  // Correlated, so it also works in the RETURNING of an insert or update of the row. Spelled out:
+  // drizzle drops the table qualifier from interpolated columns here, which would compare cards with themselves.
+  cards: sql<number>`(select count(*)::int from "cards" where "cards"."account_id" = "accounts"."id")`,
+};
 const credentialColumns = { ...accountColumns, passwordHash: accounts.passwordHash };
 
 type Tx = Pick<Db, "select" | "insert" | "update" | "delete" | "execute">;
@@ -123,7 +129,7 @@ export class AccountService {
         .where(eq(accounts.id, row.id));
     }
     log.info({ accountId: row.id, login: row.login, outcome: "success" }, "login succeeded");
-    return { id: row.id, login: row.login, createdAt: row.createdAt };
+    return { id: row.id, login: row.login, createdAt: row.createdAt, cards: row.cards };
   }
 
   /** Renaming to the current login exactly is a no-op; a change of case only is a rename like any other. */
@@ -190,7 +196,7 @@ export class AccountService {
       throw new ApiError(403, "wrong_password", "That is not the current password");
     }
     await this.throttle.clear(key);
-    return { id: row.id, login: row.login, createdAt: row.createdAt };
+    return { id: row.id, login: row.login, createdAt: row.createdAt, cards: row.cards };
   }
 
   private async assertNotBlocked(log: AuditLog, key: string, now: Date, action: string): Promise<void> {

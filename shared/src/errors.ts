@@ -21,6 +21,8 @@ export const ERROR_CODES = [
   "wrong_password",
   "too_many_failures",
   "unauthenticated",
+  "no_pack_available",
+  "pool_unavailable",
 ] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];
 
@@ -30,7 +32,10 @@ export const ErrorEnvelope = Type.Object(
       {
         code: Type.Union(ERROR_CODES.map((code) => Type.Literal(code))),
         message: Type.String(),
-        /** Only on `too_many_failures`: how long the sign-in breather still lasts, matching the `Retry-After` header. */
+        /**
+         * Only on `too_many_failures` (how long the sign-in breather still lasts) and
+         * `no_pack_available` (seconds until the next pack); matches the `Retry-After` header.
+         */
         retryAfterSeconds: Type.Optional(Type.Integer({ minimum: 1 })),
       },
       { additionalProperties: false },

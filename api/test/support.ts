@@ -25,6 +25,15 @@ export function migrationsDatabaseUrl(): string {
   return process.env.MIGRATIONS_DATABASE_URL ?? "postgres://anime:anime@127.0.0.1:5432/anime";
 }
 
+/**
+ * The path of the owner's real snapshot file (collection-packs.md §5.1.10), when the owner sets
+ * `REAL_SNAPSHOT_FILE` to run the test that reproduces its figures. AniList's content is never committed,
+ * and CI never sets it, so that test is skipped there.
+ */
+export function realSnapshotFile(): string | undefined {
+  return process.env.REAL_SNAPSHOT_FILE || undefined;
+}
+
 export function testConfig(overrides: Partial<Record<keyof Config, string>> = {}): Config {
   return parseConfig({
     NODE_ENV: "test",

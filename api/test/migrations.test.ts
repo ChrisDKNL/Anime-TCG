@@ -1,6 +1,11 @@
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { sql } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
+import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, type Db } from "../src/db/client.js";
 import { runMigrations } from "../src/db/migrate.js";
@@ -10,8 +15,9 @@ const MIGRATION_FILES = [
   "0000_create_sessions.sql",
   "0001_app_role_grants.sql",
   "0002_accounts_and_throttle.sql",
+  "0003_collection_packs.sql",
 ];
-const MIGRATION_WHEN = ["1793207773838", "1793217582152", "1793220843481"];
+const MIGRATION_WHEN = ["1793207773838", "1793217582152", "1793220843481", "1793285235582"];
 
 /**
  * Spec §5: migrations run at every start-up, so running them against an
@@ -87,13 +93,31 @@ describe("migrations", () => {
     ]);
   });
 
-  it("produced the accounts and auth_throttle tables, with sessions cascading from accounts", async () => {
+  it("produced every table of 1b and 1c, and nothing else", async () => {
     const tables = await db.execute<{ table_name: string }>(sql`
       select table_name from information_schema.tables
       where table_schema = 'public' order by table_name
     `);
-    expect(tables.rows.map((row) => row.table_name)).toEqual(["accounts", "auth_throttle", "sessions"]);
+    expect(tables.rows.map((row) => row.table_name)).toEqual([
+      "accounts",
+      "auth_throttle",
+      "cards",
+      "characters",
+      "pack_openings",
+      "pool_fetch_pages",
+      "pool_fetches",
+      "pool_snapshot_characters",
+      "pool_snapshot_franchises",
+      "pool_snapshot_memberships",
+      "pool_snapshot_relations",
+      "pool_snapshot_series",
+      "pool_snapshots",
+      "series",
+      "sessions",
+    ]);
+  });
 
+  it("produced the accounts and auth_throttle tables, with sessions cascading from accounts", async () => {
     const unique = await db.execute<{ constraint_name: string }>(sql`
       select constraint_name from information_schema.table_constraints
       where table_schema = 'public' and table_name = 'accounts' and constraint_type = 'UNIQUE'
@@ -106,6 +130,157 @@ describe("migrations", () => {
       where tc.table_schema = 'public' and tc.table_name = 'sessions'
     `);
     expect(cascade.rows).toEqual([{ delete_rule: "CASCADE" }]);
+  });
+
+  it("gave accounts a nullable allowance clock with no default, so every 1b account reads as full", async () => {
+    const column = await db.execute<{
+      is_nullable: string;
+      column_default: string | null;
+      data_type: string;
+    }>(sql`
+      select is_nullable, column_default, data_type from information_schema.columns
+      where table_schema = 'public' and table_name = 'accounts' and column_name = 'packs_anchor_at'
+    `);
+    expect(column.rows).toEqual([
+      { is_nullable: "YES", column_default: null, data_type: "timestamp with time zone" },
+    ]);
+  });
+
+  it("gave accounts both pack counters, not null with a default of 0 and bounded by checks", async () => {
+    const columns = await db.execute<{
+      column_name: string;
+      is_nullable: string;
+      column_default: string;
+    }>(sql`
+      select column_name, is_nullable, column_default from information_schema.columns
+      where table_schema = 'public' and table_name = 'accounts'
+        and column_name in ('packs_since_mythic', 'free_packs_opened')
+      order by column_name
+    `);
+    expect(columns.rows).toEqual([
+      { column_name: "free_packs_opened", is_nullable: "NO", column_default: "0" },
+      { column_name: "packs_since_mythic", is_nullable: "NO", column_default: "0" },
+    ]);
+    const checks = await db.execute<{ conname: string; definition: string }>(sql`
+      select conname, pg_get_constraintdef(oid) as definition from pg_constraint
+      where conrelid in ('accounts'::regclass, 'pack_openings'::regclass, 'pool_snapshots'::regclass)
+        and contype = 'c' and conname <> 'pool_snapshots_source_check'
+      order by conname
+    `);
+    expect(checks.rows).toEqual([
+      { conname: "accounts_free_packs_opened_check", definition: "CHECK ((free_packs_opened >= 0))" },
+      {
+        conname: "accounts_packs_since_mythic_check",
+        definition: "CHECK (((packs_since_mythic >= 0) AND (packs_since_mythic <= 299)))",
+      },
+      {
+        conname: "pack_openings_pity_check",
+        definition: "CHECK (((NOT pity) OR (kind <> 'radiant'::pack_kind)))",
+      },
+      { conname: "pool_snapshots_tier_counts_check", definition: "CHECK ((cardinality(tier_counts) = 6))" },
+    ]);
+  });
+
+  it("leaves every 1b account full and both counters at 0 when 0003 runs over it", async () => {
+    // A scratch database, migrated to 0002 with an account in it, then to the end.
+    const name = `anime_migration_probe_${process.pid}`;
+    const url = new URL(migrationsDatabaseUrl());
+    url.pathname = `/${name}`;
+    const folder = await mkdtemp(join(tmpdir(), "anime-migrations-"));
+    await db.execute(sql.raw(`drop database if exists ${name}`));
+    await db.execute(sql.raw(`create database ${name}`));
+    const probe = new pg.Client({ connectionString: url.href });
+    try {
+      for (const file of MIGRATION_FILES.slice(0, 3)) {
+        await copyFile(new URL(`../src/db/migrations/${file}`, import.meta.url), join(folder, file));
+      }
+      const journal = JSON.parse(
+        await readFile(new URL("../src/db/migrations/meta/_journal.json", import.meta.url), "utf8"),
+      ) as { entries: unknown[] };
+      await mkdir(join(folder, "meta"));
+      await writeFile(
+        join(folder, "meta", "_journal.json"),
+        JSON.stringify({ ...journal, entries: journal.entries.slice(0, 3) }),
+      );
+      await probe.connect();
+      await migrate(drizzle(probe), { migrationsFolder: folder });
+      await probe.query(
+        "insert into accounts (login, login_normalized, password_hash, invite_code_hash) values ('old', 'old', 'x', 'y')",
+      );
+      await runMigrations(url.href);
+      const rows = await probe.query(
+        "select packs_anchor_at, packs_since_mythic, free_packs_opened from accounts where login = 'old'",
+      );
+      expect(rows.rows).toEqual([{ packs_anchor_at: null, packs_since_mythic: 0, free_packs_opened: 0 }]);
+    } finally {
+      await probe.end();
+      await rm(folder, { recursive: true, force: true });
+      await db.execute(sql.raw(`drop database if exists ${name}`));
+    }
+  });
+
+  it("created the six tiers in rank order, the pack kinds, and the reserved enums with one value each", async () => {
+    const enums = await db.execute<{ name: string; labels: string }>(sql`
+      select t.typname as name, string_agg(e.enumlabel, ',' order by e.enumsortorder) as labels
+      from pg_type t join pg_enum e on e.enumtypid = t.oid
+      group by t.typname order by t.typname
+    `);
+    expect(enums.rows).toEqual([
+      { name: "card_variant", labels: "standard" },
+      { name: "character_role", labels: "main,supporting" },
+      { name: "item_kind", labels: "card" },
+      { name: "pack_kind", labels: "standard,enchanted,radiant" },
+      { name: "rarity", labels: "common,uncommon,rare,epic,legendary,mythic" },
+    ]);
+  });
+
+  it("cascades an account's openings and cards and nothing that is shared reference data", async () => {
+    const rules = await db.execute<{ table_name: string; constraint_name: string; delete_rule: string }>(sql`
+      select tc.table_name, tc.constraint_name, rc.delete_rule from information_schema.referential_constraints rc
+      join information_schema.table_constraints tc on tc.constraint_name = rc.constraint_name
+      where tc.table_schema = 'public' and tc.table_name in ('cards', 'pack_openings', 'pool_fetch_pages')
+      order by tc.constraint_name
+    `);
+    expect(rules.rows).toEqual([
+      { table_name: "cards", constraint_name: "cards_account_id_accounts_id_fk", delete_rule: "CASCADE" },
+      {
+        table_name: "cards",
+        constraint_name: "cards_character_id_characters_id_fk",
+        delete_rule: "NO ACTION",
+      },
+      {
+        table_name: "cards",
+        constraint_name: "cards_opening_id_pack_openings_id_fk",
+        delete_rule: "CASCADE",
+      },
+      {
+        table_name: "cards",
+        constraint_name: "cards_snapshot_id_pool_snapshots_id_fk",
+        delete_rule: "NO ACTION",
+      },
+      {
+        table_name: "pack_openings",
+        constraint_name: "pack_openings_account_id_accounts_id_fk",
+        delete_rule: "CASCADE",
+      },
+      {
+        table_name: "pack_openings",
+        constraint_name: "pack_openings_snapshot_id_pool_snapshots_id_fk",
+        delete_rule: "NO ACTION",
+      },
+      {
+        table_name: "pool_fetch_pages",
+        constraint_name: "pool_fetch_pages_fetch_id_pool_fetches_id_fk",
+        delete_rule: "CASCADE",
+      },
+    ]);
+  });
+
+  it("allows at most one current snapshot", async () => {
+    const indexes = await db.execute<{ indexdef: string }>(sql`
+      select indexdef from pg_indexes where schemaname = 'public' and indexname = 'pool_snapshots_current_idx'
+    `);
+    expect(indexes.rows[0]?.indexdef).toMatch(/^CREATE UNIQUE INDEX .* \(is_current\) WHERE is_current$/);
   });
 
   it("the purge query can use the expires_at index rather than scanning every session", async () => {
