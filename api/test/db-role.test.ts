@@ -98,7 +98,7 @@ describe("app database role", () => {
         seriesCount: 0,
         franchiseCount: 0,
         characterCount: 0,
-        tierCounts: [0, 0, 0, 0, 0],
+        tierCounts: [0, 0, 0, 0, 0, 0],
       })
       .returning({ id: poolSnapshots.id });
     if (snapshot === undefined) throw new Error("snapshot insert returned no row");
@@ -108,7 +108,14 @@ describe("app database role", () => {
       .values({ id: characterId, name: "Probe", imageUrl: "https://s4.anilist.co/probe.png" });
     const [opening] = await app.db
       .insert(packOpenings)
-      .values({ accountId, requestId: randomUUID(), snapshotId: snapshot.id, openedAt: now })
+      .values({
+        accountId,
+        requestId: randomUUID(),
+        snapshotId: snapshot.id,
+        kind: "standard",
+        pity: false,
+        openedAt: now,
+      })
       .returning({ id: packOpenings.id });
     if (opening === undefined) throw new Error("opening insert returned no row");
     await app.db.insert(cards).values({

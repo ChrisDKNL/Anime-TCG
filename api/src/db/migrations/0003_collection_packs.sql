@@ -1,11 +1,13 @@
--- Collection and packs (docs/design/collection-packs.md §4.1). The app role
--- gets its row access on the new tables from 0001's default privileges.
--- `accounts.packs_anchor_at` is added as null, which means a full allowance,
--- so every account from 1b starts with all its packs.
+-- Collection and packs (docs/design/collection-packs.md §4.1), six tiers. The
+-- app role gets its row access on the new tables from 0001's default
+-- privileges. `accounts.packs_anchor_at` is added as null, which means a full
+-- allowance, so every account from 1b starts with all its packs; both pack
+-- counters start at 0, as on registration.
 CREATE TYPE "public"."card_variant" AS ENUM('standard');--> statement-breakpoint
 CREATE TYPE "public"."character_role" AS ENUM('main', 'supporting');--> statement-breakpoint
 CREATE TYPE "public"."item_kind" AS ENUM('card');--> statement-breakpoint
-CREATE TYPE "public"."rarity" AS ENUM('common', 'rare', 'epic', 'legendary', 'mythic');--> statement-breakpoint
+CREATE TYPE "public"."pack_kind" AS ENUM('standard', 'enchanted', 'radiant');--> statement-breakpoint
+CREATE TYPE "public"."rarity" AS ENUM('common', 'uncommon', 'rare', 'epic', 'legendary', 'mythic');--> statement-breakpoint
 CREATE TABLE "cards" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"account_id" uuid NOT NULL,
@@ -32,8 +34,11 @@ CREATE TABLE "pack_openings" (
 	"account_id" uuid NOT NULL,
 	"request_id" uuid NOT NULL,
 	"snapshot_id" integer NOT NULL,
+	"kind" "pack_kind" NOT NULL,
+	"pity" boolean NOT NULL,
 	"opened_at" timestamp with time zone NOT NULL,
-	CONSTRAINT "pack_openings_account_request_unique" UNIQUE("account_id","request_id")
+	CONSTRAINT "pack_openings_account_request_unique" UNIQUE("account_id","request_id"),
+	CONSTRAINT "pack_openings_pity_check" CHECK (not "pack_openings"."pity" or "pack_openings"."kind" <> 'radiant')
 );
 --> statement-breakpoint
 CREATE TABLE "pool_fetch_pages" (
@@ -106,7 +111,7 @@ CREATE TABLE "pool_snapshots" (
 	"character_count" integer NOT NULL,
 	"tier_counts" integer[] NOT NULL,
 	CONSTRAINT "pool_snapshots_source_check" CHECK ("pool_snapshots"."source" in ('anilist', 'file')),
-	CONSTRAINT "pool_snapshots_tier_counts_check" CHECK (cardinality("pool_snapshots"."tier_counts") = 5)
+	CONSTRAINT "pool_snapshots_tier_counts_check" CHECK (cardinality("pool_snapshots"."tier_counts") = 6)
 );
 --> statement-breakpoint
 CREATE TABLE "series" (
@@ -117,6 +122,8 @@ CREATE TABLE "series" (
 );
 --> statement-breakpoint
 ALTER TABLE "accounts" ADD COLUMN "packs_anchor_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "accounts" ADD COLUMN "packs_since_mythic" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
+ALTER TABLE "accounts" ADD COLUMN "free_packs_opened" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
 ALTER TABLE "cards" ADD CONSTRAINT "cards_account_id_accounts_id_fk" FOREIGN KEY ("account_id") REFERENCES "public"."accounts"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "cards" ADD CONSTRAINT "cards_opening_id_pack_openings_id_fk" FOREIGN KEY ("opening_id") REFERENCES "public"."pack_openings"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "cards" ADD CONSTRAINT "cards_character_id_characters_id_fk" FOREIGN KEY ("character_id") REFERENCES "public"."characters"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -137,4 +144,6 @@ ALTER TABLE "pool_snapshot_series" ADD CONSTRAINT "pool_snapshot_series_series_i
 ALTER TABLE "pool_snapshot_series" ADD CONSTRAINT "pool_snapshot_series_franchise_fk" FOREIGN KEY ("snapshot_id","franchise_id") REFERENCES "public"."pool_snapshot_franchises"("snapshot_id","franchise_id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "cards_account_entry_idx" ON "cards" USING btree ("account_id","character_id","rarity","variant");--> statement-breakpoint
 CREATE INDEX "pool_snapshot_characters_tier_idx" ON "pool_snapshot_characters" USING btree ("snapshot_id","tier","character_id");--> statement-breakpoint
-CREATE UNIQUE INDEX "pool_snapshots_current_idx" ON "pool_snapshots" USING btree ("is_current") WHERE "pool_snapshots"."is_current";
+CREATE UNIQUE INDEX "pool_snapshots_current_idx" ON "pool_snapshots" USING btree ("is_current") WHERE "pool_snapshots"."is_current";--> statement-breakpoint
+ALTER TABLE "accounts" ADD CONSTRAINT "accounts_packs_since_mythic_check" CHECK ("accounts"."packs_since_mythic" between 0 and 299);--> statement-breakpoint
+ALTER TABLE "accounts" ADD CONSTRAINT "accounts_free_packs_opened_check" CHECK ("accounts"."free_packs_opened" >= 0);

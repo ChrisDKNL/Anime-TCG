@@ -1,3 +1,4 @@
+import { PITY_PACKS, RARITIES } from "@anime-tcg/shared/rarity";
 import { sql } from "drizzle-orm";
 import {
   boolean,
@@ -24,21 +25,39 @@ import {
  * is an Argon2id PHC string; the invite hash is an audit trail of which code
  * admitted the account, never used to verify anything.
  */
-export const accounts = pgTable("accounts", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  login: text("login").notNull(),
-  loginNormalized: text("login_normalized").notNull().unique(),
-  passwordHash: text("password_hash").notNull(),
-  inviteCodeHash: text("invite_code_hash").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
-  /**
-   * The pack allowance clock (docs/design/collection-packs.md §5.2), read and
-   * written only under this row's lock. Null means full, which is how new
-   * accounts and every account from before 1c start.
-   */
-  packsAnchorAt: timestamp("packs_anchor_at", { withTimezone: true }),
-});
+export const accounts = pgTable(
+  "accounts",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    login: text("login").notNull(),
+    loginNormalized: text("login_normalized").notNull().unique(),
+    passwordHash: text("password_hash").notNull(),
+    inviteCodeHash: text("invite_code_hash").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    /**
+     * The pack allowance clock (docs/design/collection-packs.md §5.2), read and
+     * written only under this row's lock. Null means full, which is how new
+     * accounts and every account from before 1c start.
+     */
+    packsAnchorAt: timestamp("packs_anchor_at", { withTimezone: true }),
+    /**
+     * Free packs opened since the account's last Mythic card (§5.4.5); at
+     * `PITY_PACKS - 1` the next free pack is pity-due, so it never reaches
+     * `PITY_PACKS`. Read and written only under this row's lock.
+     */
+    packsSinceMythic: integer("packs_since_mythic").notNull().default(0),
+    /** Free packs opened since registration or the last reset; every `ENCHANTED_INTERVAL`th is Enchanted. */
+    freePacksOpened: integer("free_packs_opened").notNull().default(0),
+  },
+  (table) => [
+    check(
+      "accounts_packs_since_mythic_check",
+      sql`${table.packsSinceMythic} between 0 and ${sql.raw(String(PITY_PACKS - 1))}`,
+    ),
+    check("accounts_free_packs_opened_check", sql`${table.freePacksOpened} >= 0`),
+  ],
+);
 
 /**
  * Server sessions (ADR 0008 §4). `id` is the HMAC of the cookie value, so a
@@ -74,12 +93,14 @@ export const authThrottle = pgTable("auth_throttle", {
 });
 
 /** In rank order: Postgres orders enum values by declaration, so `order by rarity desc` puts Mythic first. */
-export const rarity = pgEnum("rarity", ["common", "rare", "epic", "legendary", "mythic"]);
+export const rarity = pgEnum("rarity", RARITIES);
 /** Reserved (collection-packs.md §2): `masterwork` arrives as `ALTER TYPE ... ADD VALUE`; existing rows keep `standard`. */
 export const cardVariant = pgEnum("card_variant", ["standard"]);
 /** Reserved: a Relic arrives as its own table beside `cards` and the value `relic`; no column uses the type yet. */
 export const itemKind = pgEnum("item_kind", ["card"]);
 export const characterRole = pgEnum("character_role", ["main", "supporting"]);
+/** Which rules an opening was dealt under (spec §5.4.3); a replay answers it as stored. */
+export const packKind = pgEnum("pack_kind", ["standard", "enchanted", "radiant"]);
 
 /**
  * One row per snapshot of the AniList pool (collection-packs.md §4.1), never
@@ -97,7 +118,7 @@ export const poolSnapshots = pgTable(
     seriesCount: integer("series_count").notNull(),
     franchiseCount: integer("franchise_count").notNull(),
     characterCount: integer("character_count").notNull(),
-    /** Characters per tier in rank order: common, rare, epic, legendary, mythic. */
+    /** Characters per tier in rank order: common, uncommon, rare, epic, legendary, mythic. */
     tierCounts: integer("tier_counts").array().notNull(),
   },
   (table) => [
@@ -105,7 +126,10 @@ export const poolSnapshots = pgTable(
       .on(table.isCurrent)
       .where(sql`${table.isCurrent}`),
     check("pool_snapshots_source_check", sql`${table.source} in ('anilist', 'file')`),
-    check("pool_snapshots_tier_counts_check", sql`cardinality(${table.tierCounts}) = 5`),
+    check(
+      "pool_snapshots_tier_counts_check",
+      sql`cardinality(${table.tierCounts}) = ${sql.raw(String(RARITIES.length))}`,
+    ),
   ],
 );
 
@@ -271,9 +295,15 @@ export const packOpenings = pgTable(
     snapshotId: integer("snapshot_id")
       .notNull()
       .references(() => poolSnapshots.id),
+    kind: packKind("kind").notNull(),
+    /** The last card's Mythic was forced by pity; a Radiant pack already holds one, so it is never both. */
+    pity: boolean("pity").notNull(),
     openedAt: timestamp("opened_at", { withTimezone: true }).notNull(),
   },
-  (table) => [unique("pack_openings_account_request_unique").on(table.accountId, table.requestId)],
+  (table) => [
+    unique("pack_openings_account_request_unique").on(table.accountId, table.requestId),
+    check("pack_openings_pity_check", sql`not ${table.pity} or ${table.kind} <> 'radiant'`),
+  ],
 );
 
 /**

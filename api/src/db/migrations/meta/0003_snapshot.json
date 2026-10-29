@@ -1,5 +1,5 @@
 {
-  "id": "5761414a-2c91-4b98-ab4d-6dae63ad6a40",
+  "id": "3c74c902-51b0-4df6-bc0f-fabeaa47f562",
   "prevId": "7c43c2b2-9c09-4c7b-a126-75a67b38f0f3",
   "version": "7",
   "dialect": "postgresql",
@@ -58,6 +58,20 @@
           "type": "timestamp with time zone",
           "primaryKey": false,
           "notNull": false
+        },
+        "packs_since_mythic": {
+          "name": "packs_since_mythic",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
+        },
+        "free_packs_opened": {
+          "name": "free_packs_opened",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
         }
       },
       "indexes": {},
@@ -73,7 +87,16 @@
         }
       },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "accounts_packs_since_mythic_check": {
+          "name": "accounts_packs_since_mythic_check",
+          "value": "\"accounts\".\"packs_since_mythic\" between 0 and 299"
+        },
+        "accounts_free_packs_opened_check": {
+          "name": "accounts_free_packs_opened_check",
+          "value": "\"accounts\".\"free_packs_opened\" >= 0"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.auth_throttle": {
@@ -354,6 +377,19 @@
           "primaryKey": false,
           "notNull": true
         },
+        "kind": {
+          "name": "kind",
+          "type": "pack_kind",
+          "typeSchema": "public",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "pity": {
+          "name": "pity",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true
+        },
         "opened_at": {
           "name": "opened_at",
           "type": "timestamp with time zone",
@@ -402,7 +438,12 @@
         }
       },
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "pack_openings_pity_check": {
+          "name": "pack_openings_pity_check",
+          "value": "not \"pack_openings\".\"pity\" or \"pack_openings\".\"kind\" <> 'radiant'"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.pool_fetch_pages": {
@@ -1048,7 +1089,7 @@
         },
         "pool_snapshots_tier_counts_check": {
           "name": "pool_snapshots_tier_counts_check",
-          "value": "cardinality(\"pool_snapshots\".\"tier_counts\") = 5"
+          "value": "cardinality(\"pool_snapshots\".\"tier_counts\") = 6"
         }
       },
       "isRLSEnabled": false
@@ -1209,11 +1250,21 @@
         "card"
       ]
     },
+    "public.pack_kind": {
+      "name": "pack_kind",
+      "schema": "public",
+      "values": [
+        "standard",
+        "enchanted",
+        "radiant"
+      ]
+    },
     "public.rarity": {
       "name": "rarity",
       "schema": "public",
       "values": [
         "common",
+        "uncommon",
         "rare",
         "epic",
         "legendary",

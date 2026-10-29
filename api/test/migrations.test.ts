@@ -1,6 +1,11 @@
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { copyFile, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { sql } from "drizzle-orm";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { migrate } from "drizzle-orm/node-postgres/migrator";
+import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, type Db } from "../src/db/client.js";
 import { runMigrations } from "../src/db/migrate.js";
@@ -12,7 +17,7 @@ const MIGRATION_FILES = [
   "0002_accounts_and_throttle.sql",
   "0003_collection_packs.sql",
 ];
-const MIGRATION_WHEN = ["1793207773838", "1793217582152", "1793220843481", "1793272812170"];
+const MIGRATION_WHEN = ["1793207773838", "1793217582152", "1793220843481", "1793285235582"];
 
 /**
  * Spec §5: migrations run at every start-up, so running them against an
@@ -141,7 +146,80 @@ describe("migrations", () => {
     ]);
   });
 
-  it("created the five tiers in rank order and the reserved enums with one value each", async () => {
+  it("gave accounts both pack counters, not null with a default of 0 and bounded by checks", async () => {
+    const columns = await db.execute<{
+      column_name: string;
+      is_nullable: string;
+      column_default: string;
+    }>(sql`
+      select column_name, is_nullable, column_default from information_schema.columns
+      where table_schema = 'public' and table_name = 'accounts'
+        and column_name in ('packs_since_mythic', 'free_packs_opened')
+      order by column_name
+    `);
+    expect(columns.rows).toEqual([
+      { column_name: "free_packs_opened", is_nullable: "NO", column_default: "0" },
+      { column_name: "packs_since_mythic", is_nullable: "NO", column_default: "0" },
+    ]);
+    const checks = await db.execute<{ conname: string; definition: string }>(sql`
+      select conname, pg_get_constraintdef(oid) as definition from pg_constraint
+      where conrelid in ('accounts'::regclass, 'pack_openings'::regclass, 'pool_snapshots'::regclass)
+        and contype = 'c' and conname <> 'pool_snapshots_source_check'
+      order by conname
+    `);
+    expect(checks.rows).toEqual([
+      { conname: "accounts_free_packs_opened_check", definition: "CHECK ((free_packs_opened >= 0))" },
+      {
+        conname: "accounts_packs_since_mythic_check",
+        definition: "CHECK (((packs_since_mythic >= 0) AND (packs_since_mythic <= 299)))",
+      },
+      {
+        conname: "pack_openings_pity_check",
+        definition: "CHECK (((NOT pity) OR (kind <> 'radiant'::pack_kind)))",
+      },
+      { conname: "pool_snapshots_tier_counts_check", definition: "CHECK ((cardinality(tier_counts) = 6))" },
+    ]);
+  });
+
+  it("leaves every 1b account full and both counters at 0 when 0003 runs over it", async () => {
+    // A scratch database, migrated to 0002 with an account in it, then to the end.
+    const name = `anime_migration_probe_${process.pid}`;
+    const url = new URL(migrationsDatabaseUrl());
+    url.pathname = `/${name}`;
+    const folder = await mkdtemp(join(tmpdir(), "anime-migrations-"));
+    await db.execute(sql.raw(`drop database if exists ${name}`));
+    await db.execute(sql.raw(`create database ${name}`));
+    const probe = new pg.Client({ connectionString: url.href });
+    try {
+      for (const file of MIGRATION_FILES.slice(0, 3)) {
+        await copyFile(new URL(`../src/db/migrations/${file}`, import.meta.url), join(folder, file));
+      }
+      const journal = JSON.parse(
+        await readFile(new URL("../src/db/migrations/meta/_journal.json", import.meta.url), "utf8"),
+      ) as { entries: unknown[] };
+      await mkdir(join(folder, "meta"));
+      await writeFile(
+        join(folder, "meta", "_journal.json"),
+        JSON.stringify({ ...journal, entries: journal.entries.slice(0, 3) }),
+      );
+      await probe.connect();
+      await migrate(drizzle(probe), { migrationsFolder: folder });
+      await probe.query(
+        "insert into accounts (login, login_normalized, password_hash, invite_code_hash) values ('old', 'old', 'x', 'y')",
+      );
+      await runMigrations(url.href);
+      const rows = await probe.query(
+        "select packs_anchor_at, packs_since_mythic, free_packs_opened from accounts where login = 'old'",
+      );
+      expect(rows.rows).toEqual([{ packs_anchor_at: null, packs_since_mythic: 0, free_packs_opened: 0 }]);
+    } finally {
+      await probe.end();
+      await rm(folder, { recursive: true, force: true });
+      await db.execute(sql.raw(`drop database if exists ${name}`));
+    }
+  });
+
+  it("created the six tiers in rank order, the pack kinds, and the reserved enums with one value each", async () => {
     const enums = await db.execute<{ name: string; labels: string }>(sql`
       select t.typname as name, string_agg(e.enumlabel, ',' order by e.enumsortorder) as labels
       from pg_type t join pg_enum e on e.enumtypid = t.oid
@@ -151,7 +229,8 @@ describe("migrations", () => {
       { name: "card_variant", labels: "standard" },
       { name: "character_role", labels: "main,supporting" },
       { name: "item_kind", labels: "card" },
-      { name: "rarity", labels: "common,rare,epic,legendary,mythic" },
+      { name: "pack_kind", labels: "standard,enchanted,radiant" },
+      { name: "rarity", labels: "common,uncommon,rare,epic,legendary,mythic" },
     ]);
   });
 
