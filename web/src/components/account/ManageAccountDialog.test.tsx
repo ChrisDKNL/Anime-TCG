@@ -29,6 +29,26 @@ function liveRegion() {
   return screen.getAllByRole("status").find((el) => el.hasAttribute("aria-live"))!;
 }
 
+const UNREACHABLE_FORM = "Couldn't reach the game server. Nothing was changed. Try again.";
+
+async function fillPasswords(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(screen.getByLabelText("Current password"), "old one");
+  await user.type(screen.getByLabelText("New password"), "a new long one");
+  await user.type(screen.getByLabelText("Confirm new password"), "a new long one");
+  await user.click(screen.getByRole("button", { name: "Change password" }));
+}
+
+async function submitDelete(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(screen.getByRole("button", { name: "Delete account…" }));
+  await user.type(screen.getByLabelText("Password"), "a password");
+  await user.click(screen.getByRole("button", { name: "Delete Chris" }));
+}
+
+async function rename(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(screen.getByLabelText("New login"), "2");
+  await user.click(screen.getByRole("button", { name: "Save" }));
+}
+
 describe("ManageAccountDialog", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -96,6 +116,40 @@ describe("ManageAccountDialog", () => {
       const taken = await screen.findByRole("alert");
       expect(taken).toHaveTextContent('The login "abc" is already taken.');
       expect(taken.querySelector("bdi")?.textContent).toBe("abc");
+    });
+
+    it("no answer shows the in-form banner and keeps the new login", async () => {
+      const { user, onRenamed } = setup({ "PATCH /api/account/login": { status: 502, raw: "bad gateway" } });
+      await rename(user);
+      expect(await screen.findByRole("alert")).toHaveTextContent(UNREACHABLE_FORM);
+      expect(screen.getByLabelText("New login")).toHaveValue("Chris2");
+      expect(screen.getByLabelText("New login")).not.toHaveAttribute("aria-invalid");
+      expect(onRenamed).not.toHaveBeenCalled();
+    });
+
+    it("a validation_failed answer is the login-length message on the field", async () => {
+      const { user } = setup({ "PATCH /api/account/login": envelope(400, "validation_failed") });
+      await rename(user);
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Keep the login between 3 and 24 characters.",
+      );
+      expect(screen.getByLabelText("New login")).toHaveAttribute("aria-invalid", "true");
+      expect(screen.getByLabelText("New login")).toHaveFocus();
+    });
+
+    it("an unauthenticated answer ends the session without an in-form message", async () => {
+      const { user, queryClient } = setup({ "PATCH /api/account/login": envelope(401, "unauthenticated") });
+      queryClient.setQueryData(SESSION_QUERY_KEY, { signedIn: true, account });
+      await rename(user);
+      await waitFor(() => expect(queryClient.getQueryData(SESSION_QUERY_KEY)).toEqual({ signedIn: false }));
+      expect(liveRegion()).toHaveAttribute("data-notice", "sessionEnded");
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+
+    it("any other server answer shows the in-form banner", async () => {
+      const { user } = setup({ "PATCH /api/account/login": envelope(500, "internal") });
+      await rename(user);
+      expect(await screen.findByRole("alert")).toHaveTextContent(UNREACHABLE_FORM);
     });
   });
 
@@ -179,6 +233,43 @@ describe("ManageAccountDialog", () => {
       expect(screen.getByRole("button", { name: "Change password" })).not.toHaveAttribute("aria-disabled");
       expect(liveRegion()).toHaveTextContent("You can try again now.");
     });
+
+    it("no answer shows the in-form banner and keeps every field", async () => {
+      const { user } = setup({ "POST /api/account/change-password": { status: 502, raw: "" } });
+      await fillPasswords(user);
+      expect(await screen.findByRole("alert")).toHaveTextContent(UNREACHABLE_FORM);
+      expect(screen.getByLabelText("Current password")).toHaveValue("old one");
+      expect(screen.getByLabelText("New password")).toHaveValue("a new long one");
+      expect(screen.queryByText("Password changed.")).not.toBeInTheDocument();
+    });
+
+    it("a validation_failed answer is the password-length message on New password", async () => {
+      const { user } = setup({ "POST /api/account/change-password": envelope(400, "validation_failed") });
+      await fillPasswords(user);
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Keep the password between 8 and 128 characters.",
+      );
+      expect(screen.getByLabelText("New password")).toHaveAttribute("aria-invalid", "true");
+      expect(screen.getByLabelText("New password")).toHaveFocus();
+      expect(screen.getByLabelText("Current password")).not.toHaveAttribute("aria-invalid");
+    });
+
+    it("an unauthenticated answer ends the session without an in-form message", async () => {
+      const { user, queryClient } = setup({
+        "POST /api/account/change-password": envelope(401, "unauthenticated"),
+      });
+      queryClient.setQueryData(SESSION_QUERY_KEY, { signedIn: true, account });
+      await fillPasswords(user);
+      await waitFor(() => expect(queryClient.getQueryData(SESSION_QUERY_KEY)).toEqual({ signedIn: false }));
+      expect(liveRegion()).toHaveAttribute("data-notice", "sessionEnded");
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+
+    it("any other server answer shows the in-form banner", async () => {
+      const { user } = setup({ "POST /api/account/change-password": envelope(429, "rate_limited") });
+      await fillPasswords(user);
+      expect(await screen.findByRole("alert")).toHaveTextContent(UNREACHABLE_FORM);
+    });
   });
 
   describe("Delete section", () => {
@@ -258,6 +349,57 @@ describe("ManageAccountDialog", () => {
         "Couldn't reach the game server. Nothing was changed. Try again.",
       );
       expect(screen.getByRole("heading", { name: "Delete Chris?" })).toBeInTheDocument();
+    });
+
+    it("the server's wait counts down on the delete button, sends nothing meanwhile and announces the end", async () => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
+      const { user, fetchMock } = setup({
+        "POST /api/account/delete": envelope(429, "too_many_failures", 3),
+      });
+      await submitDelete(user);
+
+      const button = await screen.findByRole("button", { name: "Try again in 3 s" });
+      expect(button).toHaveAttribute("aria-disabled", "true");
+      expect(button).not.toBeDisabled();
+      expect(screen.getByText(/Five misses in a row/)).toHaveAttribute("role", "status");
+      await user.click(button);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      act(() => {
+        vi.advanceTimersByTime(1000);
+      });
+      expect(screen.getByRole("button", { name: "Try again in 2 s" })).toBeInTheDocument();
+      act(() => {
+        vi.advanceTimersByTime(2000);
+      });
+      expect(screen.getByRole("button", { name: "Delete Chris" })).not.toHaveAttribute("aria-disabled");
+      expect(liveRegion()).toHaveTextContent("You can try again now.");
+    });
+
+    it("a validation_failed answer reads as a wrong password", async () => {
+      const { user } = setup({ "POST /api/account/delete": envelope(400, "validation_failed") });
+      await submitDelete(user);
+      expect(await screen.findByRole("alert")).toHaveTextContent("That password is incorrect.");
+      expect(screen.getByLabelText("Password")).toHaveValue("");
+      expect(screen.getByLabelText("Password")).toHaveFocus();
+    });
+
+    it("an unauthenticated answer ends the session without an in-form message", async () => {
+      const { user, queryClient, onDeleted } = setup({
+        "POST /api/account/delete": envelope(401, "unauthenticated"),
+      });
+      queryClient.setQueryData(SESSION_QUERY_KEY, { signedIn: true, account });
+      await submitDelete(user);
+      await waitFor(() => expect(queryClient.getQueryData(SESSION_QUERY_KEY)).toEqual({ signedIn: false }));
+      expect(liveRegion()).toHaveAttribute("data-notice", "sessionEnded");
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(onDeleted).not.toHaveBeenCalled();
+    });
+
+    it("any other server answer shows the in-form banner", async () => {
+      const { user } = setup({ "POST /api/account/delete": envelope(500, "internal") });
+      await submitDelete(user);
+      expect(await screen.findByRole("alert")).toHaveTextContent(UNREACHABLE_FORM);
     });
   });
 });

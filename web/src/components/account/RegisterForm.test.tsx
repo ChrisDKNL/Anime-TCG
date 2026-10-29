@@ -22,6 +22,15 @@ async function toStep2(user: ReturnType<typeof userEvent.setup>) {
   await screen.findByText("Step 2 of 2");
 }
 
+const UNREACHABLE_FORM = "Couldn't reach the game server. Nothing was changed. Try again.";
+
+async function fillStep2AndSubmit(user: ReturnType<typeof userEvent.setup>) {
+  await user.type(screen.getByLabelText("Login"), "Chris");
+  await user.type(screen.getByLabelText("Password"), "a strong one");
+  await user.type(screen.getByLabelText("Confirm password"), "a strong one");
+  await user.click(screen.getByRole("button", { name: "Register" }));
+}
+
 describe("RegisterForm step 1", () => {
   afterEach(() => vi.unstubAllGlobals());
 
@@ -178,6 +187,55 @@ describe("RegisterForm step 2", () => {
     // Back to step 2 (after a successful re-check) still has the login filled.
     await user.click(screen.getByRole("button", { name: "Continue" }));
     expect(await screen.findByLabelText("Login")).toHaveValue("Chris");
+  });
+
+  it("no answer at submit shows the in-form banner on step 2 and keeps the values", async () => {
+    const { user, onRegistered } = setup({
+      "POST /api/accounts/check-invite": noContent,
+      "POST /api/accounts/register": { status: 502, raw: "bad gateway" },
+    });
+    await toStep2(user);
+    await fillStep2AndSubmit(user);
+    expect(await screen.findByRole("alert")).toHaveTextContent(UNREACHABLE_FORM);
+    expect(screen.getByText("Step 2 of 2")).toBeInTheDocument();
+    expect(screen.getByLabelText("Login")).toHaveValue("Chris");
+    expect(screen.getByLabelText("Password")).toHaveValue("a strong one");
+    expect(onRegistered).not.toHaveBeenCalled();
+  });
+
+  it("a validation_failed answer at submit is the login-length message on Login", async () => {
+    const { user } = setup({
+      "POST /api/accounts/check-invite": noContent,
+      "POST /api/accounts/register": envelope(400, "validation_failed"),
+    });
+    await toStep2(user);
+    await fillStep2AndSubmit(user);
+    expect(await screen.findByRole("alert")).toHaveTextContent("Keep the login between 3 and 24 characters.");
+    expect(screen.getByLabelText("Login")).toHaveAttribute("aria-invalid", "true");
+    expect(screen.getByLabelText("Login")).toHaveFocus();
+  });
+
+  it("the cap reached between the steps replaces the body with the cap message", async () => {
+    const { user } = setup({
+      "POST /api/accounts/check-invite": noContent,
+      "POST /api/accounts/register": envelope(403, "cap_reached"),
+    });
+    await toStep2(user);
+    await fillStep2AndSubmit(user);
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "All 10 places are taken for now. Ask the owner to make room.",
+    );
+    expect(screen.queryByLabelText("Login")).not.toBeInTheDocument();
+  });
+
+  it("any other server answer at submit shows the in-form banner", async () => {
+    const { user } = setup({
+      "POST /api/accounts/check-invite": noContent,
+      "POST /api/accounts/register": envelope(500, "internal"),
+    });
+    await toStep2(user);
+    await fillStep2AndSubmit(user);
+    expect(await screen.findByRole("alert")).toHaveTextContent(UNREACHABLE_FORM);
   });
 
   it("Back keeps the code and focuses it", async () => {
