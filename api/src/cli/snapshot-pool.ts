@@ -122,7 +122,7 @@ export function describeOutcome({ summary, requests }: SnapshotOutcome): string[
     `Franchises (${summary.franchisesMerged} merged and ${summary.franchisesSplit} split since the current snapshot):`,
     ...summary.franchises.map(
       (f) =>
-        `  ${f.popularityRank}. ${JSON.stringify(f.title)} (${f.id}): ${f.entries} entries, ${f.characters} characters`,
+        `  ${f.popularityRank}. ${JSON.stringify(f.title)} (${f.id}): ${f.entries} ${f.entries === 1 ? "entry" : "entries"}, ${f.characters} characters`,
     ),
   ];
 }

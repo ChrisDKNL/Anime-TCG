@@ -319,7 +319,7 @@ describe("snapshot-pool as a command", () => {
     expect(result.stdout.split("\n")[0]).toMatch(
       /^Dry run, nothing activated\. The snapshot would hold 100 entries in 100 franchises, 600 characters .*read from a file\.$/,
     );
-    expect(result.stdout).toContain('  100. "Series 100" (900100): 1 entries, 6 characters');
+    expect(result.stdout).toContain('  100. "Series 100" (900100): 1 entry, 6 characters');
     expect(await app.db.select({ id: poolSnapshots.id }).from(poolSnapshots)).toEqual(before);
   });
 
