@@ -6,7 +6,7 @@ import { useOptionalGame, type Game } from "../../hooks/useGame";
 import { useShellContext } from "../../hooks/useShell";
 import { menuCopy } from "../../lib/copy";
 import { rethrowUnlessKnown } from "../../lib/failures";
-import { headerCopy } from "../../lib/navigationCopy";
+import { headerCopy, poolCopy } from "../../lib/navigationCopy";
 import { AccountControl } from "../account/AccountControl";
 import { PageFrame } from "./PageFrame";
 import { PageLink } from "./PageLink";
@@ -82,13 +82,15 @@ function SignedInFrame({ game, children }: { game: Game; children: ReactNode }) 
             role="alert"
             className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-900/60 bg-red-950/40 p-4 text-sm text-red-200"
           >
-            <span>Couldn't load characters: {pool.error}</span>
+            <span>
+              {poolCopy.failed} {pool.error}
+            </span>
             <button
               type="button"
               onClick={() => pool.reload(true)}
               className="rounded-lg bg-red-800/60 px-3 py-1 font-medium hover:bg-red-700/60"
             >
-              Retry
+              {poolCopy.retry}
             </button>
           </div>
         )

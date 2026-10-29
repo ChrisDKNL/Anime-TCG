@@ -3,6 +3,7 @@ import { BoosterPack } from "../components/BoosterPack";
 import { CharacterCard } from "../components/CharacterCard";
 import { PageHeading } from "../components/layout/PageHeading";
 import { useGame } from "../hooks/useGame";
+import { packsCopy, poolCopy } from "../lib/navigationCopy";
 import { pageHeading } from "../lib/routes";
 
 /**
@@ -32,14 +33,14 @@ export function PacksPage() {
 
         {pool.status === "loading" && (
           <p className="text-sm text-zinc-500" aria-live="polite">
-            Loading character pool from AniList…
+            {poolCopy.loading}
           </p>
         )}
 
         {lastPack.length > 0 && (
           <section className="w-full" aria-live="polite">
             <h2 className="mb-3 text-center text-sm font-medium text-zinc-400">
-              You pulled{" "}
+              {packsCopy.pulled}{" "}
               {packSummary.legendary > 0 && (
                 <span className="font-bold text-amber-300">{packSummary.legendary} Legendary</span>
               )}
