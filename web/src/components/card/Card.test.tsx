@@ -32,7 +32,7 @@ describe("Card (card-and-rarity.md)", () => {
     "%s: its frame, %i stars in the tier's text colour, and the tier named for a screen reader",
     (rarity, n, label) => {
       const card = renderCard(rarity);
-      expect(card).toHaveAccessibleName(`Frieren, ${label}, Sousou no Frieren`);
+      expect(card).toHaveAccessibleName(`\u2068Frieren\u2069, ${label}, \u2068Sousou no Frieren\u2069`);
       expect(card).toHaveClass(`card-frame-${rarity}`);
       const stars = within(card).getByText("✦".repeat(n));
       expect(stars).toHaveAttribute("aria-hidden", "true");
@@ -104,7 +104,7 @@ describe("Card (card-and-rarity.md)", () => {
     );
     expect(screen.getByText("#0007")).toBeInTheDocument();
     expect(screen.getByText("Popularity rank 7")).toBeInTheDocument();
-    expect(screen.getByRole("article")).toHaveAccessibleName("Character 2, Rare");
+    expect(screen.getByRole("article")).toHaveAccessibleName("\u2068Character 2\u2069, Rare");
   });
 
   it("draws no rank chip for a character the current snapshot dropped", () => {
@@ -126,10 +126,37 @@ describe("Card (card-and-rarity.md)", () => {
     expect(card.querySelector("img")).toBeNull();
   });
 
-  it("keeps the full name and series in `title` for the truncated lines", () => {
+  it('keeps the full name and series in `title` for the truncated lines, isolated, each in a `dir="auto"` element', () => {
     const card = renderCard("common");
-    expect(within(card).getByText("Frieren")).toHaveAttribute("title", "Frieren");
-    expect(within(card).getByText("Sousou no Frieren")).toHaveAttribute("title", "Sousou no Frieren");
+    const name = within(card).getByText("Frieren");
+    const series = within(card).getByText("Sousou no Frieren");
+    expect(name).toHaveAttribute("title", "\u2068Frieren\u2069");
+    expect(series).toHaveAttribute("title", "\u2068Sousou no Frieren\u2069");
+    expect(name).toHaveAttribute("dir", "auto");
+    expect(series).toHaveAttribute("dir", "auto");
+  });
+
+  it("isolates an RTL override in the label and the titles, so it cannot reorder the tier or the series (C9)", () => {
+    const name = "\u202Egnp.exe";
+    const series = "\u202Eseires";
+    render(
+      <Card
+        character={makeCharacter(9, { name })}
+        rarity="epic"
+        series={series}
+        poolSize={null}
+        effects="full"
+      />,
+    );
+    const card = screen.getByRole("article");
+    expect(card).toHaveAttribute("aria-label", `\u2068${name}\u2069, Epic, \u2068${series}\u2069`);
+    expect(within(card).getByText(name)).toHaveAttribute("title", `\u2068${name}\u2069`);
+    expect(within(card).getByText(series)).toHaveAttribute("title", `\u2068${series}\u2069`);
+  });
+
+  it("without a series, no series title", () => {
+    render(<Card character={makeCharacter(2)} rarity="rare" series={null} poolSize={null} effects="full" />);
+    expect(screen.getByRole("article").querySelectorAll("[title]")).toHaveLength(1);
   });
 
   it("renders hostile AniList strings as text (T1)", () => {

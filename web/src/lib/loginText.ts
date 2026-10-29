@@ -12,15 +12,6 @@ export interface LoginSentence {
 /** Text for the live region or a field message: plain copy, or a sentence with a login in it. */
 export type CopyText = string | LoginSentence;
 
-/**
- * The login between U+2068 FIRST STRONG ISOLATE and U+2069 POP DIRECTIONAL
- * ISOLATE: the plain-string counterpart of <bdi>, for the places markup cannot
- * go (an aria-label, the title bar, a confirm dialog).
- */
-export function isolateLogin(login: string): string {
-  return `\u2068${login}\u2069`;
-}
-
 /** Never part of any copy, so splitting on it finds exactly the places the template puts the login. */
 const SLOT = "\u0000";
 

@@ -8,11 +8,11 @@
  * spec moved them there and took the login out of the title bar.
  */
 
-import { isolateLogin } from "./loginText";
+import { isolate } from "./bidi";
 
 /** `Manage account` has no ellipsis: it goes to a page (navigation-and-landing.md §3.4). */
 export const header = {
-  accountMenuLabel: (login: string) => `Account menu. Signed in as ${isolateLogin(login)}`,
+  accountMenuLabel: (login: string) => `Account menu. Signed in as ${isolate(login)}`,
   manage: "Manage account",
   logOut: "Log out",
 } as const;

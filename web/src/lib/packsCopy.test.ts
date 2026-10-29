@@ -347,11 +347,14 @@ describe("the card's text", () => {
     expect(cardCopy.rankSpoken(1_204, null)).toBe("Popularity rank 1,204");
   });
 
-  it("labels the card with its name, tier and series", () => {
+  it("labels the card with its name, tier and series, each AniList string isolated with FSI/PDI", () => {
     expect(cardCopy.label("Frieren", "epic", "Frieren: Beyond Journey's End")).toBe(
-      "Frieren, Epic, Frieren: Beyond Journey's End",
+      "\u2068Frieren\u2069, Epic, \u2068Frieren: Beyond Journey's End\u2069",
     );
-    expect(cardCopy.label("Frieren", "epic", null)).toBe("Frieren, Epic");
+    expect(cardCopy.label("Frieren", "epic", null)).toBe("\u2068Frieren\u2069, Epic");
+    expect(cardCopy.label("\u202Egnp.exe", "mythic", "\u202Eseires")).toBe(
+      "\u2068\u202Egnp.exe\u2069, Mythic, \u2068\u202Eseires\u2069",
+    );
   });
 });
 

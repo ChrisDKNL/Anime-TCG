@@ -38,7 +38,9 @@ describe("Reveal (packs-page.md §3.4)", () => {
     const list = within(section).getByRole("list", { name: "Your pack" });
     const items = within(list).getAllByRole("listitem");
     expect(items.map((item) => item.dataset.slot)).toEqual(["0", "1", "2", "3", "4"]);
-    expect(within(items[4]!).getByRole("article")).toHaveAccessibleName("Character 1004, Epic, Series 102");
+    expect(within(items[4]!).getByRole("article")).toHaveAccessibleName(
+      "\u2068Character 1004\u2069, Epic, \u2068Series 102\u2069",
+    );
   });
 
   it("marks exactly the new cards, under the card, and adds `· <k> new` to the summary", () => {

@@ -1,5 +1,6 @@
 import type { CharacterPublic, Rarity } from "@anime-tcg/shared/api";
 import { useState } from "react";
+import { isolate } from "../../lib/bidi";
 import { cardCopy } from "../../lib/packsCopy";
 
 /**
@@ -81,7 +82,8 @@ type ArtState = "loading" | "loaded" | "failed";
  * the name, the tier stars, the art with its rank chip and the series. It is
  * not a control; where it stands alone it is an article named for the
  * character, its tier and its series (§8). Every AniList string is rendered
- * as text (T1). Nothing on it moves on hover except the frame effects §5.4
+ * as text in its own `dir="auto"` element and isolated in the plain strings,
+ * the label and the titles (T1). Nothing on it moves on hover except the frame effects §5.4
  * allows, and those stop under reduced motion.
  */
 export function Card({ character, rarity, series, poolSize, effects }: Props) {
@@ -96,7 +98,11 @@ export function Card({ character, rarity, series, poolSize, effects }: Props) {
     >
       <div className="flex h-full min-w-0 flex-col overflow-hidden rounded-[8px] card-face">
         <div className="flex min-w-0 flex-col gap-[3px] px-[10px] pt-[9px] pb-[7px]">
-          <p className="truncate text-[13px] leading-tight font-bold text-card-ink" title={character.name}>
+          <p
+            dir="auto"
+            className="truncate text-[13px] leading-tight font-bold text-card-ink"
+            title={isolate(character.name)}
+          >
             {character.name}
           </p>
           <p className={`text-[11px] leading-none tracking-[2px] whitespace-nowrap ${STARS_TEXT[rarity]}`}>
@@ -129,8 +135,9 @@ export function Card({ character, rarity, series, poolSize, effects }: Props) {
           )}
         </div>
         <p
+          dir="auto"
           className="truncate px-[10px] py-[9px] text-[12px] leading-tight text-card-ink-muted"
-          title={series ?? undefined}
+          title={series === null ? undefined : isolate(series)}
         >
           {series}
         </p>

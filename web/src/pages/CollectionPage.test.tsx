@@ -53,9 +53,9 @@ describe("/collection, the interim view (packs-page.md §3.6)", () => {
         .getAllByRole("article")
         .map((card) => card.getAttribute("aria-label")),
     ).toEqual([
-      "Mythic One, Mythic, Series 101",
-      "Epic Two, Epic, Series 102",
-      "Common Three, Common, Series 100",
+      "\u2068Mythic One\u2069, Mythic, \u2068Series 101\u2069",
+      "\u2068Epic Two\u2069, Epic, \u2068Series 102\u2069",
+      "\u2068Common Three\u2069, Common, \u2068Series 100\u2069",
     ]);
     expect(within(grid).getByText("#0012 / 2983")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Reset" })).not.toBeInTheDocument();
@@ -162,8 +162,16 @@ describe("/collection, the interim view (packs-page.md §3.6)", () => {
     ]);
     hostile.franchises.push(makeFranchise(7, { title: "\u202E<script>alert(1)</script>" }));
     renderApp({ [COLLECTION]: { status: 200, body: hostile } }, account, "/collection");
-    expect(await screen.findByText("<img src=x onerror=alert(1)>")).toBeInTheDocument();
-    expect(screen.getByText("\u202E<script>alert(1)</script>")).toBeInTheDocument();
+    const name = await screen.findByText("<img src=x onerror=alert(1)>");
+    const series = screen.getByText("\u202E<script>alert(1)</script>");
     expect(document.querySelectorAll("script")).toHaveLength(0);
+    // Each in its own `dir="auto"` element, and isolated in the plain strings (collection-overview.md §5.6).
+    expect(name).toHaveAttribute("dir", "auto");
+    expect(series).toHaveAttribute("dir", "auto");
+    expect(name).toHaveAttribute("title", "\u2068<img src=x onerror=alert(1)>\u2069");
+    expect(series).toHaveAttribute("title", "\u2068\u202E<script>alert(1)</script>\u2069");
+    expect(screen.getByRole("article").getAttribute("aria-label")).toMatch(
+      /^\u2068<img src=x onerror=alert\(1\)>\u2069, \w+, \u2068\u202E<script>alert\(1\)<\/script>\u2069$/,
+    );
   });
 });

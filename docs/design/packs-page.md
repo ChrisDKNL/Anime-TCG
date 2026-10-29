@@ -301,6 +301,7 @@ No text on this page uses `zinc-500` (4.12:1 on `zinc-950`, below AA). The card'
 - **Touch targets**: `Open pack`, `Check again`, `Try again`, `Pack odds`, `Close` and the `Rarity` select are at least 40 px tall on a phone (the existing `PHONE_MIN_HEIGHT`).
 - **Reduced motion**: no entrance, glint or drift (§6.3, `card-and-rarity.md` §5.3). Nothing else on the page moves.
 - **T1**: character names, native names and series titles are rendered as text nodes only (no `dangerouslySetInnerHTML`, no `title` built by concatenating markup), in the reveal and in the collection.
+- **Bidi isolation**: each name and series title sits in its own `dir="auto"` element and is wrapped in U+2068 … U+2069 in every plain-string sink (the card's `aria-label` and `title`s), as C9 does for logins (`card-and-rarity.md` §8, `collection-overview.md` §5.6).
 
 ## 8. Copy
 

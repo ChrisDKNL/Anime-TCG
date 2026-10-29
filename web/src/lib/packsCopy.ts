@@ -9,6 +9,7 @@
 
 import type { PackKind, PublishedOdds, Rarity } from "@anime-tcg/shared/api";
 import { RARITIES, RARITY_LABEL } from "@anime-tcg/shared/rarity";
+import { isolate } from "./bidi";
 import { common, shortDate } from "./copy";
 
 const NUMBER = new Intl.NumberFormat("en-GB");
@@ -242,8 +243,11 @@ export const cardCopy = {
     pool === null
       ? `Popularity rank ${NUMBER.format(rank)}`
       : `Popularity rank ${NUMBER.format(rank)} of ${NUMBER.format(pool)}`,
+  /** The article's name; the AniList strings in it are isolated (collection-overview.md §5.6 rule 3). */
   label: (name: string, rarity: Rarity, series: string | null) =>
-    series === null ? `${name}, ${RARITY_LABEL[rarity]}` : `${name}, ${RARITY_LABEL[rarity]}, ${series}`,
+    series === null
+      ? `${isolate(name)}, ${RARITY_LABEL[rarity]}`
+      : `${isolate(name)}, ${RARITY_LABEL[rarity]}, ${isolate(series)}`,
 } as const;
 
 export const collectionCopy = {

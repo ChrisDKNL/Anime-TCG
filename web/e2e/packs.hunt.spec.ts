@@ -72,8 +72,9 @@ import {
  * Hostile AniList text (§7 T1; collection-packs.md §9; §10 item 13)
  * - Names and series titles with markup, an RTL override, zero-width characters, combining marks
  *   and 200+ characters without a space render as text in the reveal and in the collection: no
- *   element or handler is created, the full string is the element's text and its `title`, nothing
- *   else sits inside the name's element, and at 320 px nothing widens a column or the page.
+ *   element or handler is created, the full string is the element's text and, between FSI and
+ *   PDI, its `title`; nothing else sits inside the name's element, which has `dir="auto"`; and at
+ *   320 px nothing widens a column or the page.
  *
  * Nothing nags (§2, §10 item 14)
  * - Across a countdown to zero (tab hidden), an opening and a 429 wait: no Notification permission
@@ -116,7 +117,7 @@ function requestIds(api: FakeApi): string[] {
 async function revealNames(page: Page): Promise<string[]> {
   return revealList(page)
     .getByRole("article")
-    .evaluateAll((articles) => articles.map((a) => a.querySelector("[title]")?.getAttribute("title") ?? ""));
+    .evaluateAll((articles) => articles.map((a) => a.querySelector("[title]")?.textContent ?? ""));
 }
 
 /** What the scripted game deals for its `n`th opening: the names the reveal must show. */
@@ -676,24 +677,30 @@ const HOSTILE_PACK: PackOpened = {
 };
 
 /**
- * In the page: for each card in `scope`, the element holding the name (found by its `title`)
- * has exactly the name as its text and no child element; the series likewise.
+ * In the page: for each card in `scope`, the element holding the name (found by its `title`, the
+ * name between FSI and PDI) has exactly the name as its text, no child element and `dir="auto"`;
+ * the series likewise; the article's label holds both, each isolated (collection-overview.md §5.6).
  */
 async function expectCardsAsText(page: Page, scope: "Your pack" | "Your cards") {
   const report = await page.getByRole("list", { name: scope }).evaluate((list, hostile) => {
+    const isolated = (text: string) => `\u2068${text}\u2069`;
     return hostile.map(({ name, series }) => {
       const byTitle = (text: string) =>
         Array.from(list.querySelectorAll("[title]")).filter(
-          (element) => element.getAttribute("title") === text,
+          (element) => element.getAttribute("title") === isolated(text),
         );
+      const asText = (element: Element | undefined, text: string) =>
+        element?.textContent === text &&
+        element.childElementCount === 0 &&
+        element.getAttribute("dir") === "auto";
       const [nameElement] = byTitle(name);
       const [seriesElement] = byTitle(series);
       return {
-        name: nameElement?.textContent === name && nameElement.childElementCount === 0,
-        series: seriesElement?.textContent === series && seriesElement.childElementCount === 0,
+        name: asText(nameElement, name),
+        series: asText(seriesElement, series),
         label: Array.from(list.querySelectorAll("article")).some((article) => {
           const label = article.getAttribute("aria-label") ?? "";
-          return label.includes(name) && label.includes(series);
+          return label.includes(isolated(name)) && label.includes(isolated(series));
         }),
       };
     });
