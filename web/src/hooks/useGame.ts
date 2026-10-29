@@ -1,62 +1,266 @@
-import type { AccountPublic } from "@anime-tcg/shared/api";
-import { createContext, useCallback, useContext, useMemo, useReducer } from "react";
+import type { AccountPublic, CollectionResponse, PackOpened } from "@anime-tcg/shared/api";
 import {
-  collectionStats,
+  queryOptions,
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type UseQueryResult,
+} from "@tanstack/react-query";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from "react";
+import { ApiError, getCollection, getPacks, isApiError, NetworkError, openPack } from "../lib/api";
+import {
   gameReducer,
   initialGame,
   nextGame,
-  type CollectionStats,
+  type GameOwner,
   type GameState,
+  type PacksAnswer,
+  type RarityFilter,
+  type Row,
 } from "../lib/game";
-import { openPack } from "../lib/pack";
-import type { CharacterPool } from "./useCharacterPool";
+import { revealCopy } from "../lib/packsCopy";
+import type { ShellActions } from "./useShell";
+import { useSingleFlight } from "./useSingleFlight";
 
-/** The pause between pressing the pack button and the cards landing, for the feel of tearing the pack. */
-const REVEAL_DELAY_MS = 350;
+/** The wait after a 429 without `Retry-After`: the window of `PACK_RATE_LIMIT` (packs-page.md §9, question 3). */
+const RATE_LIMIT_FALLBACK_SECONDS = 60;
+const SECOND_MS = 1000;
+
+/**
+ * Account-scoped answers are keyed by the account and the game session, so a
+ * log out, a session end or an account switch never shows one account's
+ * cached packs or cards to the next session.
+ */
+const packsKey = (owner: GameOwner | null) =>
+  ["packs", owner?.accountId ?? null, owner?.session ?? 0] as const;
+const collectionKey = (owner: GameOwner | null) =>
+  ["collection", owner?.accountId ?? null, owner?.session ?? 0] as const;
+
+function packsQueryOptions(owner: GameOwner | null, nextSeq: () => number, report: (err: unknown) => void) {
+  return queryOptions({
+    queryKey: packsKey(owner),
+    queryFn: async (): Promise<PacksAnswer> => {
+      const seq = nextSeq();
+      try {
+        const answer = await getPacks();
+        return { seq, answer, receivedAt: performance.now() };
+      } catch (err) {
+        report(err);
+        throw err;
+      }
+    },
+  });
+}
+
+function collectionQueryOptions(owner: GameOwner | null, report: (err: unknown) => void) {
+  return queryOptions({
+    queryKey: collectionKey(owner),
+    queryFn: async (): Promise<CollectionResponse> => {
+      try {
+        return await getCollection();
+      } catch (err) {
+        report(err);
+        throw err;
+      }
+    },
+  });
+}
+
+export type PacksQueryOptions = ReturnType<typeof packsQueryOptions>;
+export type CollectionQueryOptions = ReturnType<typeof collectionQueryOptions>;
 
 export interface Game {
   /** The signed-in account, as the session query last named it (a rename updates it here too). */
   account: AccountPublic;
   state: GameState;
-  stats: CollectionStats;
-  pool: CharacterPool;
-  openPack: () => void;
-  clearCollection: () => void;
+  /** `Collection (<N>)`: the last collection answer's total, or the session's count before one (§9, question 4). */
+  cardCount: number;
+  /** For the packs page's own observer: it fetches each time the page is shown, and only then. */
+  packsQuery: PacksQueryOptions;
+  collectionQuery: CollectionQueryOptions;
+  collection: UseQueryResult<CollectionResponse>;
+  /** Opens a pack; `row` is the control's row now, which a generic failure's line stays tied to. */
+  openPack: (row: Row) => void;
+  setRarityFilter: (filter: RarityFilter) => void;
+}
+
+interface Options {
+  account: AccountPublic | null;
+  shell: ShellActions;
+  /** Whether `/packs` is on screen: a reveal that lands on another page is not announced (§3.3 step 5). */
+  packsShowing: () => boolean;
+}
+
+/** Numbers requests in the order they are sent, for the newest-answer-wins rule (packs-page.md §3.1 step 5). */
+function requestCounter(): () => number {
+  let sent = 0;
+  return () => (sent += 1);
+}
+
+function newCards(pack: PackOpened): number {
+  return pack.cards.filter((card) => card.isNew).length;
 }
 
 /**
- * The signed-in account's game state, held by the root layout so it survives
- * every page change, the not-found page included (navigation-and-landing.md
- * §3.10). A different account (or none) resets it during render, the way a
- * keyed remount would, but without remounting the pages around it. A pack
- * that is still landing when the account changes is dropped by the reducer.
+ * The signed-in account's game, held by the root layout so it survives every
+ * page change, the not-found page included (navigation-and-landing.md §3.10).
+ * A different account (or none) resets it during render, the way a keyed
+ * remount would, without remounting the pages around it. The layout fetches
+ * the collection at sign-in and after every opening answer; the packs page
+ * fetches the allowance itself. An answer that lands after its session ended
+ * changes nothing.
  */
-export function useGameState(account: AccountPublic | null, pool: CharacterPool): Game | null {
+export function useGameState({ account, shell, packsShowing }: Options): Game | null {
   const accountId = account?.id ?? null;
   const [stored, dispatch] = useReducer(gameReducer, accountId, initialGame);
   if (stored.accountId !== accountId) dispatch({ type: "reset", accountId });
   const state = stored.accountId === accountId ? stored : nextGame(stored, accountId);
+  const { session, key } = state;
+  const owner = useMemo(() => (accountId === null ? null : { accountId, session }), [accountId, session]);
 
-  const { opening, session } = state;
-  const open = useCallback(() => {
-    if (accountId === null || pool.status !== "ready" || opening) return;
-    const cards = openPack(pool.characters);
-    const owner = { accountId, session };
-    dispatch({ type: "openStarted", ...owner, at: cards[0]?.pulledAt ?? Date.now() });
-    // Dispatched whatever page is showing by then: the reveal waits on /packs (§3.5 step 4). A session
-    // that ended meanwhile is a different `session`, so its pack is dropped even for the same account.
-    window.setTimeout(() => dispatch({ type: "packLanded", ...owner, cards }), REVEAL_DELAY_MS);
-  }, [accountId, session, pool, opening]);
+  const queryClient = useQueryClient();
+  const [nextSeq] = useState(requestCounter);
+  const current = useRef(owner);
+  useEffect(() => {
+    current.current = owner;
+  }, [owner]);
+  const isCurrent = useCallback(
+    (of: GameOwner) => current.current?.accountId === of.accountId && current.current.session === of.session,
+    [],
+  );
 
-  const clearCollection = useCallback(() => {
-    if (accountId !== null) dispatch({ type: "cleared", accountId, session });
-  }, [accountId, session]);
+  const { sessionEnded, unreachable, announce } = shell;
+  /** A read that failed: an ended session goes to `/login`, no answer shows the banner, anything else is the page's to show. */
+  const report = useCallback(
+    (err: unknown) => {
+      if (isApiError(err, "unauthenticated")) sessionEnded();
+      else if (err instanceof NetworkError) unreachable();
+    },
+    [sessionEnded, unreachable],
+  );
 
-  const stats = useMemo(() => collectionStats(state.cards), [state.cards]);
+  const packsQuery = useMemo(() => packsQueryOptions(owner, nextSeq, report), [owner, nextSeq, report]);
+  const collectionQuery = useMemo(() => collectionQueryOptions(owner, report), [owner, report]);
+  // Observed here but never fetched from here: the held answer stays in the cache for the whole
+  // session, so returning to `/packs` shows it at once (§3.1 step 2) while the page's observer refetches.
+  useQuery({ ...packsQuery, enabled: false });
+  const collection = useQuery({ ...collectionQuery, enabled: owner !== null });
 
+  const { mutateAsync } = useMutation({ mutationFn: openPack });
+  const singleFlight = useSingleFlight();
+
+  const settleFailure = useCallback(
+    (err: unknown, of: GameOwner, seq: number, row: Row) => {
+      if (err instanceof NetworkError) {
+        dispatch({ type: "noAnswer", ...of });
+        unreachable();
+        return;
+      }
+      if (!(err instanceof ApiError)) throw err;
+      switch (err.code) {
+        case "unauthenticated":
+          sessionEnded();
+          return;
+        case "no_pack_available":
+          dispatch({
+            type: "noneLeft",
+            ...of,
+            seq,
+            receivedAt: performance.now(),
+            retryAfterSeconds: err.retryAfterSeconds ?? null,
+          });
+          // Another tab or device spent the packs: one `GET` corrects the allowance, and the collection changed.
+          void queryClient.refetchQueries({ queryKey: packsKey(of) });
+          void queryClient.refetchQueries({ queryKey: collectionKey(of) });
+          return;
+        case "pool_unavailable":
+          dispatch({ type: "unavailable", ...of, seq });
+          return;
+        case "rate_limited": {
+          const seconds = err.retryAfterSeconds ?? RATE_LIMIT_FALLBACK_SECONDS;
+          dispatch({ type: "rateLimited", ...of, until: performance.now() + seconds * SECOND_MS });
+          return;
+        }
+        default:
+          dispatch({ type: "failed", ...of, row });
+      }
+    },
+    [queryClient, sessionEnded, unreachable],
+  );
+
+  const open = useCallback(
+    (row: Row) => {
+      if (owner === null) return;
+      void singleFlight(async () => {
+        // A key held from an opening that got no answer is sent again, so the retry shows that pack.
+        const requestId = key ?? crypto.randomUUID();
+        dispatch({ type: "openStarted", ...owner, key: requestId });
+        const seq = nextSeq();
+        try {
+          const pack = await mutateAsync({ requestId });
+          dispatch({ type: "opened", ...owner, seq, receivedAt: performance.now(), pack });
+          if (!isCurrent(owner)) return;
+          if (packsShowing()) {
+            announce(
+              revealCopy.announce(
+                pack.packKind,
+                pack.cards.map((card) => card.rarity),
+                newCards(pack),
+              ),
+            );
+          }
+          void queryClient.refetchQueries({ queryKey: collectionKey(owner) });
+        } catch (err) {
+          if (isCurrent(owner)) settleFailure(err, owner, seq, row);
+        }
+      });
+    },
+    [
+      owner,
+      singleFlight,
+      key,
+      nextSeq,
+      mutateAsync,
+      isCurrent,
+      packsShowing,
+      announce,
+      queryClient,
+      settleFailure,
+    ],
+  );
+
+  const setRarityFilter = useCallback(
+    (filter: RarityFilter) => {
+      if (owner !== null) dispatch({ type: "rarityFilter", ...owner, filter });
+    },
+    [owner],
+  );
+
+  const cardCount = collection.data?.totals.cards ?? account?.cards ?? 0;
   return useMemo(
-    () => (account === null ? null : { account, state, stats, pool, openPack: open, clearCollection }),
-    [account, state, stats, pool, open, clearCollection],
+    () =>
+      account === null
+        ? null
+        : {
+            account,
+            state,
+            cardCount,
+            packsQuery,
+            collectionQuery,
+            collection,
+            openPack: open,
+            setRarityFilter,
+          },
+    [account, state, cardCount, packsQuery, collectionQuery, collection, open, setRarityFilter],
   );
 }
 

@@ -1,9 +1,13 @@
 import type {
   AccountResponse,
   ChangePasswordBody,
+  CollectionResponse,
   DeleteBody,
   InviteBody,
   LoginBody,
+  OpenPackBody,
+  PackOpened,
+  PacksResponse,
   RegisterBody,
   RenameBody,
   SessionResponse,
@@ -15,15 +19,19 @@ import { ERROR_CODES, type ErrorCode, type ErrorEnvelope } from "@anime-tcg/shar
 export class ApiError extends Error {
   readonly status: number;
   readonly code: ErrorCode;
-  /** Only on `too_many_failures`: how long the sign-in breather still lasts. */
+  /**
+   * How long to wait, in seconds: the envelope's own number (`too_many_failures`,
+   * `no_pack_available`), else the `Retry-After` header, which is all a
+   * `rate_limited` answer carries (packs-page.md §9, question 3).
+   */
   readonly retryAfterSeconds: number | undefined;
 
-  constructor(status: number, error: ErrorEnvelope["error"]) {
+  constructor(status: number, error: ErrorEnvelope["error"], retryAfterHeader?: number) {
     super(error.message);
     this.name = "ApiError";
     this.status = status;
     this.code = error.code;
-    this.retryAfterSeconds = error.retryAfterSeconds;
+    this.retryAfterSeconds = error.retryAfterSeconds ?? retryAfterHeader;
   }
 }
 
@@ -83,10 +91,20 @@ async function readJson(res: Response): Promise<unknown> {
   }
 }
 
-function failure(status: number, json: unknown): Error {
+/**
+ * `Retry-After` in whole seconds, at least 1. The HTTP-date form is not read:
+ * the api only sends seconds, and a date would need the device clock.
+ */
+export function retryAfterHeader(headers: Headers): number | undefined {
+  const value = headers.get("retry-after")?.trim();
+  if (value === undefined || !/^\d+$/.test(value)) return undefined;
+  return Math.max(1, Number(value));
+}
+
+function failure(res: Response, json: unknown): Error {
   return isErrorEnvelope(json)
-    ? new ApiError(status, json.error)
-    : new NetworkError(`unexpected ${status} answer`);
+    ? new ApiError(res.status, json.error, retryAfterHeader(res.headers))
+    : new NetworkError(`unexpected ${res.status} answer`);
 }
 
 /** A route whose success carries a JSON body of type `T` (the response schema is the server's contract). */
@@ -94,14 +112,14 @@ async function expectJson<T>(method: Method, path: string, body?: object): Promi
   const res = await send(method, path, body);
   const json = await readJson(res);
   if (res.ok) return json as T;
-  throw failure(res.status, json);
+  throw failure(res, json);
 }
 
 /** A route whose success is 204. */
 async function expectNoContent(method: Method, path: string, body?: object): Promise<void> {
   const res = await send(method, path, body);
   if (res.ok) return;
-  throw failure(res.status, await readJson(res));
+  throw failure(res, await readJson(res));
 }
 
 export function getSession(): Promise<SessionResponse> {
@@ -135,4 +153,17 @@ export function changePassword(body: ChangePasswordBody): Promise<void> {
 
 export function deleteAccount(body: DeleteBody): Promise<void> {
   return expectNoContent("POST", "/api/account/delete", body);
+}
+
+export function getPacks(): Promise<PacksResponse> {
+  return expectJson<PacksResponse>("GET", "/api/packs");
+}
+
+/** 201 for a new opening and 200 for a replay of `requestId` carry the same body. */
+export function openPack(body: OpenPackBody): Promise<PackOpened> {
+  return expectJson<PackOpened>("POST", "/api/packs/open", body);
+}
+
+export function getCollection(): Promise<CollectionResponse> {
+  return expectJson<CollectionResponse>("GET", "/api/collection");
 }
