@@ -58,6 +58,8 @@ export interface Answer {
   status: number;
   json?: unknown;
   raw?: string;
+  /** Extra response headers, e.g. `Retry-After` on a 429 (the api's rate limiter sends no number in the body). */
+  headers?: Record<string, string>;
 }
 
 export interface ApiCall {
@@ -98,12 +100,18 @@ export function deferred(): { promise: Promise<void>; release: () => void } {
  * of `cap`, each opening deals five characters no earlier opening dealt into the
  * collection, and `pity` free packs to the guarantee. A test scripts these routes itself
  * to override them.
+ *
+ * Like the api (collection-packs.md §5.3), an opening whose `requestId` this account has
+ * already used is a replay: answered 200 with the cards that opening dealt and the
+ * allowance as it is now, before the allowance is checked, and nothing more is spent.
  */
 export class FakeGame {
   cap = 3;
   available = 3;
   opened = 0;
   pity = 300;
+  /** The opening number each `requestId` dealt, for the replay. */
+  readonly openings = new Map<string, number>();
 
   private allowance() {
     return makeAllowance({
@@ -121,7 +129,17 @@ export class FakeGame {
     }));
   }
 
-  reply(key: string): Answer | undefined {
+  /** The `n`th opening as the api answers it now: its cards, the allowance and pity count of this moment. */
+  private pack(n: number) {
+    return makePackOpened({
+      openingId: `6f9c1a52-4c1e-4b8e-9d3a-${String(n).padStart(12, "0")}`,
+      cards: this.cards(n),
+      allowance: this.allowance(),
+      packsUntilGuarantee: this.pity,
+    });
+  }
+
+  reply(key: string, body?: unknown): Answer | undefined {
     switch (key) {
       case "GET /api/packs":
         return {
@@ -129,18 +147,15 @@ export class FakeGame {
           json: makePacks({ allowance: this.allowance(), packsUntilGuarantee: this.pity }),
         };
       case "POST /api/packs/open": {
+        const requestId = (body as { requestId?: unknown } | undefined)?.requestId;
+        const replayed = typeof requestId === "string" ? this.openings.get(requestId) : undefined;
+        if (replayed !== undefined) return { status: 200, json: this.pack(replayed) };
         if (this.available === 0) return envelope(409, "no_pack_available", 600);
         this.available -= 1;
         this.opened += 1;
         this.pity -= 1;
-        const openingId = `6f9c1a52-4c1e-4b8e-9d3a-${String(this.opened).padStart(12, "0")}`;
-        const pack = makePackOpened({
-          openingId,
-          cards: this.cards(this.opened),
-          allowance: this.allowance(),
-          packsUntilGuarantee: this.pity,
-        });
-        return { status: 201, json: pack };
+        if (typeof requestId === "string") this.openings.set(requestId, this.opened);
+        return { status: 201, json: this.pack(this.opened) };
       }
       case "GET /api/collection": {
         const entries = Array.from({ length: this.opened }, (_, i) => this.cards(i + 1))
@@ -176,9 +191,9 @@ export class FakeApi {
   }
 
   /** The test's script for `key`, else the game's default for it, else nothing (an unexpected call). */
-  private nextReply(key: string): Reply | undefined {
+  private nextReply(key: string, body: unknown): Reply | undefined {
     const queue = this.replies.get(key);
-    if (queue === undefined || queue.length === 0) return this.game.reply(key);
+    if (queue === undefined || queue.length === 0) return this.game.reply(key, body);
     return queue.length > 1 ? queue.shift() : queue[0];
   }
 
@@ -188,7 +203,7 @@ export class FakeApi {
     const raw = request.postData();
     const call: ApiCall = { key, body: raw === null ? undefined : (JSON.parse(raw) as unknown) };
     this.calls.push(call);
-    const reply = this.nextReply(key);
+    const reply = this.nextReply(key, call.body);
     if (reply === undefined) {
       this.unexpected.push(key);
       await route.fulfill(envelope(500, "internal"));
@@ -198,11 +213,16 @@ export class FakeApi {
     if (answer === "abort") {
       await route.abort("connectionrefused");
     } else if (answer.raw !== undefined) {
-      await route.fulfill({ status: answer.status, body: answer.raw, contentType: "text/html" });
+      await route.fulfill({
+        status: answer.status,
+        body: answer.raw,
+        contentType: "text/html",
+        headers: answer.headers,
+      });
     } else if (answer.json === undefined) {
-      await route.fulfill({ status: answer.status });
+      await route.fulfill({ status: answer.status, headers: answer.headers });
     } else {
-      await route.fulfill({ status: answer.status, json: answer.json });
+      await route.fulfill({ status: answer.status, json: answer.json, headers: answer.headers });
     }
   }
 }
