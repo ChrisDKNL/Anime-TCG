@@ -94,6 +94,7 @@ services:
     <<: *db
     profiles: [acceptance]
     container_name: anime-tcg-db-acceptance
+    restart: unless-stopped
     environment:
       POSTGRES_USER: anime
       POSTGRES_DB: anime
@@ -110,6 +111,7 @@ services:
     <<: *api
     profiles: [acceptance]
     container_name: anime-tcg-api-acceptance
+    restart: unless-stopped
     depends_on:
       db-acceptance:
         condition: service_healthy
@@ -122,6 +124,7 @@ services:
     <<: *caddy
     profiles: [acceptance]
     container_name: anime-tcg-acceptance
+    restart: unless-stopped
     depends_on:
       api-acceptance:
         condition: service_healthy

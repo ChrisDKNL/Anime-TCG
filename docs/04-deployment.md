@@ -82,7 +82,7 @@ docker compose --env-file .env.acceptance.local --profile acceptance down       
 docker compose --env-file .env.acceptance.local --profile acceptance down --volumes  # drops it
 ```
 
-Acceptance is bound to loopback and cannot be changed through a variable. It is for the owner's own checks on the host, never for the LAN.
+Acceptance is bound to loopback and cannot be changed through a variable. It is for the owner's own checks on the host, never for the LAN. On the dev station it is kept on the newest app change of `main` by the acceptance watcher (`docs/03-release-process.md`, _Automatic acceptance_). The three acceptance services restart unless stopped, so a Docker restart brings the stack back.
 
 **A database that ran the five-tier `0003`** (an acceptance or development volume that ran `feat/collection-packs` before its six-tier revision): migration `0003_collection_packs.sql` was rewritten in place before it reached `main`, with a newer timestamp, so the migrator tries to apply it again, fails on the types and tables the old one created, and the api exits. Recreate the volume with `down --volumes` and load the snapshot again; nothing in it is worth keeping. A database that never ran the branch, production included, just applies the new `0003`.
 

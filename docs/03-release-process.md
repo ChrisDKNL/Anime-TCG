@@ -4,13 +4,25 @@ How finished work gets in front of the owner for approval and then into producti
 
 ## Environments
 
-| Environment | Where                             | Runs                           | Who updates it    |
-| ----------- | --------------------------------- | ------------------------------ | ----------------- |
-| Preview     | Vite dev server / CI              | any branch                     | anyone            |
-| Acceptance  | Docker on the dev station         | the sprint's release candidate | local Claude Code |
-| Production  | Docker on the dev station, public | the last approved release tag  | local Claude Code |
+| Environment | Where                             | Runs                            | Who updates it                 |
+| ----------- | --------------------------------- | ------------------------------- | ------------------------------ |
+| Preview     | Vite dev server / CI              | any branch                      | anyone                         |
+| Acceptance  | Docker on the dev station         | the newest app change on `main` | the acceptance watcher (below) |
+| Production  | Docker on the dev station, public | the last approved release tag   | local Claude Code              |
 
 Deployment files (`Dockerfile`, `compose.yml`, proxy config without secrets) must live in this repo (roadmap item 0.2). Until they do, the first handoff asks the local session to commit them on a branch and open a PR.
+
+## Automatic acceptance
+
+Since 2026-10-29 (owner's request) acceptance follows `main` on its own; the local session no longer deploys it by hand. A scheduled task on the dev station, `AnimeTCG-AcceptanceWatch`, runs `ops/acceptance-watch.sh` (installed as `C:\ProgramData\AnimeTCG\acceptance-watch.sh`) every 10 minutes. When `origin/main` has a commit that changes the app (`web/`, `api/`, `shared/`, `Caddyfile`, a Dockerfile, `compose.yml` or the lockfile) since the last deployment, it:
+
+1. checks the commit out in the acceptance checkout, builds it with `TAG=acceptance-<sha>` and starts the stack with `--wait` (the api applies pending migrations at start);
+2. loads the newest card snapshot file from the owner's snapshot folder if acceptance has no current snapshot;
+3. smoke-tests `/`, `/packs`, `/api/session` and the api's own health probe;
+4. on success, closes the previous `Acceptance ready: <sha>` issue and opens a new one listing the merged changes, so the owner is notified and replies `acceptance ok <sha>` or what is wrong;
+5. on failure, rolls back to the previous deployment, opens `Acceptance deploy failed: <sha>` with the reason, and does not retry that commit.
+
+Docs-only merges are not deployed and notify nobody. It keeps the current and previous acceptance images and removes older ones. Production is untouched: it still runs only an owner-approved tag, deployed through the handoff below. The owner's `acceptance ok <sha>` on a ready issue is recorded in a `docs/releases/` note as before.
 
 ## Sprint
 
