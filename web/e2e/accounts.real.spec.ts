@@ -19,7 +19,7 @@ import { isolated, mockCardImages } from "./support/fake-api";
  * 2. Open a pack: 5 cards, Collection (5).
  * 3. Log out: the landing page at /, title reset; GET /api/session answers signed out.
  * 4. Log in with the login in a different case: signed in under the stored display login; the
- *    collection is empty again (in memory only until roadmap 1c).
+ *    collection is the server's since 1c, so the pack from step 2 is still there (Collection (5)).
  * 5. Rename: header, title and live region follow.
  * 6. Change password: the cookie is rotated and the old value is signed out; in a second browser
  *    the old password no longer signs in and the new one does; this tab survives a reload.
@@ -93,7 +93,7 @@ test.describe("accounts journey against the real api", () => {
       });
 
       await test.step("open a pack", async () => {
-        await page.getByRole("button", { name: /open booster pack/i }).click();
+        await page.getByRole("button", { name: "Open pack", exact: true }).click();
         await expect(page.getByRole("article")).toHaveCount(5);
         await expect(page.getByRole("link", { name: "Collection (5)" })).toBeVisible();
       });
@@ -107,7 +107,8 @@ test.describe("accounts journey against the real api", () => {
         await openLogInForm(page);
         await logIn(page, LOGIN.toUpperCase(), PASSWORD_1);
         await expect(controlFor(page, LOGIN)).toBeVisible();
-        await expect(page.getByRole("link", { name: "Collection (0)" })).toBeVisible();
+        // Since 1c the collection is the server's: the pack opened before the log out is still there.
+        await expect(page.getByRole("link", { name: "Collection (5)" })).toBeVisible();
         await expectSessionCookie(page.context());
       });
 
