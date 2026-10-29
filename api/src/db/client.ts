@@ -11,3 +11,9 @@ export function createDb(connectionString: string) {
 }
 
 export type Db = ReturnType<typeof createDb>;
+
+/** The pool or an open transaction: what a read or write that may run inside a caller's transaction takes. */
+export type Queryable = Pick<
+  Db,
+  "select" | "selectDistinct" | "selectDistinctOn" | "insert" | "update" | "delete" | "execute"
+>;

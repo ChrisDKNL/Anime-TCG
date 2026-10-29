@@ -2,8 +2,8 @@ import type { PerRarity } from "@anime-tcg/shared/api";
 import { PACK_SIZE } from "@anime-tcg/shared/economy";
 import { RARITIES, type Rarity, SHARE_SCALE, TIER_SHARE } from "@anime-tcg/shared/rarity";
 
-/** A `PerRarity` filled tier by tier, in rank order. */
-export function perRarity(value: (tier: Rarity) => number): PerRarity {
+/** One value per tier, filled tier by tier in rank order (a `PerRarity` when the values are counts). */
+export function perRarity<T>(value: (tier: Rarity) => T): Record<Rarity, T> {
   return {
     common: value("common"),
     rare: value("rare"),
