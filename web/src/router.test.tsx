@@ -156,6 +156,34 @@ describe("the return path from history state (§3.3 step 3)", () => {
     expect(screen.getByText("Log in to manage your account.")).toBeInTheDocument();
   });
 
+  it("registering after the guard lands on the page asked for, replacing /register (§3.3 step 6)", async () => {
+    const { history } = renderApp(
+      {
+        ...signedOut,
+        "POST /api/accounts/check-invite": { status: 204 },
+        "POST /api/accounts/register": { status: 201, body: { signedIn: true, account } },
+      },
+      account,
+      "/collection",
+    );
+    await pageHeading("Log in");
+    const user = userEvent.setup();
+    await user.click(within(screen.getByRole("main")).getByRole("link", { name: "Register" }));
+    await pageHeading("Register");
+    await fill(user, screen.getByLabelText("Invite code"), "local-dev-invite");
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await fill(user, await screen.findByLabelText("Login"), "Chris");
+    await fill(user, screen.getByLabelText("Password"), "a strong one");
+    await fill(user, screen.getByLabelText("Confirm password"), "a strong one");
+    await user.click(screen.getByRole("button", { name: "Register" }));
+
+    const heading = await pageHeading("Collection");
+    await waitFor(() => expect(heading).toHaveFocus());
+    expect(history.location.pathname).toBe("/collection");
+    // The guard replaced /collection with /login, the cross-link pushed /register, and the sign-in replaced it.
+    expect(history.length).toBe(2);
+  });
+
   it("the header's Log in link carries no return path", async () => {
     const { history } = renderApp(signedOut, account, "/register");
     await pageHeading("Register");
@@ -205,6 +233,29 @@ describe("paths (§3.1 rule 2)", () => {
     expect(history.location.pathname).toBe("/packs/1");
     expect(screen.getByRole("link", { name: "Go to the start page" })).toHaveAttribute("href", "/");
     expect(within(mainNav()).getByRole("link", { name: "Log in" })).toBeInTheDocument();
+  });
+
+  it("unreachable on an unknown path: Try again that finds a session stays there, with the signed-in header", async () => {
+    const { fetchMock, history } = renderApp(
+      { "GET /api/session": { status: 502, raw: "bad gateway" } },
+      account,
+      "/no-such-page",
+    );
+    await pageHeading("Page not found");
+    expect(within(mainNav()).getByRole("link", { name: "Log in" })).toBeInTheDocument();
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ signedIn: true, account }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    );
+    await userEvent.setup().click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByRole("button", { name: /^Account menu/ })).toBeInTheDocument();
+    expect(history.location.pathname).toBe("/no-such-page");
+    expect(screen.getByRole("heading", { level: 1, name: "Page not found" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Go to Packs" })).toBeInTheDocument();
   });
 
   it("keeps the game state across the not-found page", async () => {
