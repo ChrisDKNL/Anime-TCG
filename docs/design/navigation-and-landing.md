@@ -1,0 +1,516 @@
+# Navigation, routes and landing page
+
+Cross-cutting (no roadmap number yet; the manager adds the row) · builds on `accounts.md` (shipped in PR #25) and comes before the screens of `collection-packs.md` §8 (1c web), `collection-overview.md` (item 3), `market-and-shop.md` and `economy.md` §12 (item 2) · the demo pack depends on 1c's server pool (`collection-packs.md` §5.1) · server-authoritative under [ADR 0008](../adr/0008-server-authoritative.md) · written 2026-10-29 from the owner's decisions of the same day
+
+> **Owner decisions this spec implements (2026-10-29, binding).** 1. Every screen has its own short English path. 2. Pages only: no addresses for single cards, and filters and search are not kept in the URL. 3. `/` is a landing page that makes visitors want to play, with a way to try opening packs without an account; the demo grants nothing, stores nothing, says so plainly and leads naturally to Register. 4. (Manager) A signed-out visitor who opens a page that needs an account goes to `/login` and returns to that page after logging in, through a validated return path; a signed-in visitor at `/`, `/login` or `/register` goes to `/packs`.
+>
+> **The reference.** The owner named kyara.games for the feel. It is a client-rendered app; without a browser only its page metadata was readable (a French anime-card booster game: free boosters on a timer, a large character pool, trading). Nothing of its layout, text, names or assets is used here. The idea taken is the general one: the landing page leads with opening a pack, not with a pitch.
+
+## 1. Goal
+
+Every screen of the game gets an address a visitor can type, bookmark, reload and move through with the browser's Back and Forward buttons, and the tabs in the header become links to those pages. A first-time visitor who opens the site without an account lands on a page that shows what the game is through the game itself: they open a demo pack drawn by the server at the real odds, see five real cards, read the odds and what the game offers, and find Register one step away. Nothing about the demo is kept, and the page says so. The router is an engineering choice the manager records in an ADR; this spec says what it has to do. The server stays the source of every card and every odd, the demo included.
+
+## 2. Out of scope
+
+- **Addresses for single cards, series, listings or filters** (owner decision 2). No `/collection/123`, no `?rarity=epic`, no `#series`. Search, filters, sort, page and view reset on reload, as `collection-overview.md` §2 already says.
+- **The Profile page** (roadmap item 4). This spec reserves `/profile` and its placeholder state only.
+- **The pages' own contents**: the pack page (`collection-packs.md` §8 and the 1c web PR's UI spec), the collection (`collection-overview.md`), the shop and the market (`market-and-shop.md`). This spec gives each page its path, title, `h1`, guard and place in the navigation; it does not redesign what is inside.
+- **The router library.** Requirements only (§3.9); the manager picks the library and records it in an ADR.
+- **The demo endpoint's implementation.** §3.8 states what the UI needs back; the API spec (paths, schemas, limits) is the manager's, under T3 (§3.8).
+- **The visual-system rework** (`docs/design/visual-system.md`, not written yet). This spec changes only the header parts it has to touch: the title becomes a plain wordmark link and the explanatory subtitle goes (§6.1).
+- **A "leave this page?" prompt** for unsaved forms. Leaving a page discards what was typed in its fields, as closing a dialog does today.
+- **Server-side rendering, prerendering or search-engine work.** The app stays a static single-page build behind Caddy.
+- **Remembering the last page across reloads or sign-ins.** A sign-in without a return path always lands on `/packs`.
+- **Mini-games** (items 5, 6): no routes yet. Their paths are chosen in their own specs, by the rules of §3.1.
+
+## 3. Flow
+
+Terms: **public page**, a page anyone can open (`/`, `/login`, `/register`, the not-found page); **account page**, a page that needs a session (`/packs`, `/collection`, `/shop`, `/market`, `/profile`, `/account`); **guard**, the check that sends a signed-out visitor from an account page to `/login`; **return path**, the account page the guard sent the visitor away from; **push** adds a history entry, **replace** swaps the current one; **page-change focus**, the rule of §3.6.
+
+### 3.1 Routes
+
+| Path           | Signed out                                           | Signed in                                  | `document.title`             | `h1` (receives focus on navigation) | Ships with                 |
+| -------------- | ---------------------------------------------------- | ------------------------------------------ | ---------------------------- | ----------------------------------- | -------------------------- |
+| `/`            | Landing page (§3.7)                                  | Replace to `/packs`                        | `Anime TCG`                  | `Anime TCG`                         | this feature               |
+| `/packs`       | Replace to `/login`, return path `/packs`            | The pack page (today's Booster tab)        | `Packs · Anime TCG`          | `Packs`                             | this feature               |
+| `/collection`  | Replace to `/login`, return path `/collection`       | The collection (today's Collection tab)    | `Collection · Anime TCG`     | `Collection`                        | this feature               |
+| `/shop`        | Replace to `/login`, return path `/shop`             | The Karma shop (`market-and-shop.md` §3.3) | `Shop · Anime TCG`           | `Shop`                              | `feat/economy-ui`          |
+| `/market`      | Replace to `/login`, return path `/market`           | The market (`market-and-shop.md` §3.4–3.6) | `Market · Anime TCG`         | `Market`                            | `feat/market-ui`           |
+| `/profile`     | Replace to `/login`, return path `/profile`          | Placeholder (§4.6) until item 4            | `Profile · Anime TCG`        | `Profile`                           | this feature (placeholder) |
+| `/login`       | Log in (`accounts.md` §3.4, as amended in §3.5)      | Replace to `/packs`                        | `Log in · Anime TCG`         | `Log in`                            | this feature               |
+| `/register`    | Register (`accounts.md` §3.3, as amended in §3.5)    | Replace to `/packs`                        | `Register · Anime TCG`       | `Register`                          | this feature               |
+| `/account`     | Replace to `/login`, return path `/account`          | Manage account, as a page (§3.4)           | `Manage account · Anime TCG` | `Manage account`                    | this feature               |
+| anything else  | Not-found page (§4.7)                                | Not-found page (§4.7)                      | `Page not found · Anime TCG` | `Page not found`                    | this feature               |
+| (any, booting) | Header wordmark only; `Loading…` after 300 ms (§4.1) | same                                       | `Anime TCG`                  | none                                | this feature               |
+
+Rules that hold for every row:
+
+1. **A route exists from the PR that builds its page.** Until `feat/economy-ui` merges, `/shop` is the not-found page, and so is `/market` until `feat/market-ui`; neither has a header link before then, and there is no "coming soon" page. `/profile` is the one reserved exception (owner decision 1), with the placeholder of §4.6.
+2. **Paths are exact and lower case.** `/packs/` (one trailing slash) is replaced by `/packs`; `/Packs`, `/packs/1` and `/index.html` are the not-found page. A query string or hash on any path is ignored: the app never reads one and never writes one, and it is dropped from the address the next time the app navigates.
+3. **The route list is one typed module.** The header links, the guard, the return-path check (§3.3), the titles and the `h1` text all come from it, so a path cannot be added to one and missed in another.
+4. **Signed-in titles do not carry the login.** The page name comes first so a row of browser tabs can be told apart; the header already shows whose account is open. This replaces `accounts.md` §8's `<login> · Anime TCG` (§10).
+
+### 3.2 Boot and the session check
+
+1. Every load, whatever the path, starts with `GET /api/session` (`accounts.md` §3.1). Until it answers, the header shows the wordmark only (no links, no Account control) and the main area shows nothing, then `Loading…` once 300 ms have passed (§4.1). No page renders before the answer, the landing page included: a signed-in player at `/` must not see the landing flash before the replace to `/packs`.
+2. The answer is held for the page's lifetime (the query layer already caches it). Navigating between pages does not ask again; only a reload, a sign-in, a log-out, a deletion or an `unauthenticated` answer changes it.
+3. Then the route table decides: render, or replace to another path. A replace on boot is part of the load: focus is not moved (§3.6) and nothing is announced.
+4. **Server unreachable at boot**: the app is treated as signed out (`accounts.md` §3.1). A public page renders with the unreachable banner. An account page replaces to `/login` with its return path, and the banner shows there; the forms stay usable. When `Try again` in the banner gets an answer that names a session, the app replaces `/login` with the return path (or `/packs`).
+
+### 3.3 The guard and the return path
+
+1. A signed-out visitor who opens an account page (typed, bookmarked, reloaded, or reached by Back) is sent to `/login` with a **replace**, so Back does not bounce them into the guard again.
+2. The return path travels in the history entry's state (`history.state`), not in the URL. The address bar reads `/login` and nothing else. This keeps the URL to pages only (owner decision 2), and a link from another site cannot carry a return path at all, because history state can only be written by this origin's own scripts.
+3. The return path is checked twice, when it is written and when it is used: it must be **exactly equal** to the path of an account page in the route list of this build (`/packs`, `/collection`, `/profile`, `/account`, plus `/shop` and `/market` once they exist). Anything else (a full URL, `//host`, `/\host`, `/packs?x`, `/PACKS`, a path with a trailing slash, an encoded character, a value that is not a string, a value longer than the longest listed path) is discarded and the destination is `/packs`. The UI never passes the stored value to `location`, `window.open` or an `href`; it looks the path up in the route list and navigates to the list's own entry. There is no open redirect because nothing outside the list can be reached.
+4. `/login` shows a line under its `h1` naming where the visitor is going (§8 "Guard lines"), only when a valid return path is held and the session-ended banner is not showing.
+5. The `Register` link on `/login` carries the return path into `/register`'s history state, and the `Log in` link on `/register` carries it back, so a visitor who switches forms still returns to the page they asked for.
+6. On a successful log in or register, the app **replaces** `/login` (or `/register`) with the return path, or `/packs` without one. Back from there goes to the entry before `/login`, never to a form the visitor already completed.
+7. A signed-in visitor at `/`, `/login` or `/register` is replaced to `/packs`. The return path is not consulted here; it only applies to a sign-in.
+
+### 3.4 Manage account becomes a page
+
+`/account` is a page, not a dialog opened from a route. Reasons:
+
+- **Every screen has an address** (owner decision 1), and a page is what an address means everywhere else in the app. A dialog "opened by a route" makes Back close a dialog on one screen and leave the page on every other; two meanings for one button is the confusion a route exists to remove.
+- **It is page-sized.** Three sections, each a form with its own errors and server waits, already scroll inside an 85 vh dialog on a phone. A page scrolls with the document and needs no focus trap.
+- **No history entries for dialogs.** The card dialog (`collection-overview.md` §3.4) and the shop's confirmation stay dialogs because they are steps inside a page; making one dialog a route would make the rule "dialogs are never addresses" untrue.
+
+What changes from `accounts.md` §3.5.3 and §4.6:
+
+1. The Account menu item reads `Manage account` (no ellipsis: it goes to a page, it does not open a dialog) and is a link to `/account`. When `/account` is the current page, that item carries `aria-current="page"`.
+2. The page shows, top to bottom: the `h1` `Manage account`; the avatar (`size-10`), the login and the meta line (`<N cards> · Created <D Mon YYYY>`); then the **Login**, **Password** and **Delete account** sections with their `h2`s (they were `h3`s in the dialog). Every field, rule, error, wait and success line is unchanged.
+3. `Delete account…` keeps its ellipsis: it opens the delete confirmation as a native modal `<dialog>` (the Manage dialog's shell, `max-w-lg`), with the same heading, body, `Password` field, `Delete <login>` and `Cancel`. `Cancel` and Escape close it and return focus to `Delete account…` (`accounts.md` §11).
+4. There is no Close button: the page is left like any other page.
+5. Deleting succeeds: the session is gone, the app **replaces** `/account` with `/`, the landing page's `h1` takes focus, and the live region reads `Deleted <login>.`
+
+### 3.5 Header navigation, Log in and Register
+
+1. **Signed out**: the wordmark on the left (a link to `/`); on the right, `Log in` (a link to `/login`) and `Register` (a link to `/register`). These replace the signed-out `Account` button of `accounts.md` §4.5. The current one of the two carries `aria-current="page"`.
+2. **Signed in**: the wordmark (a link to `/packs`), the page links, and the Account control, which stays exactly as `accounts.md` §3.5 has it apart from the `Manage account` item (§3.4) and, from item 4, a `Profile` item (open question 2). Page links, in order: `Packs` · `Collection (<N>)` now; `Packs` · `Shop` · `Market` · `Collection (<N>)` once item 2's PRs have merged (the order `market-and-shop.md` §3.2 decided, with `Booster` renamed `Packs` to match its path). `<N>` is the card count the Collection tab shows today.
+3. The links are real links (`<a href="/collection">`) that the router intercepts, so middle-click, Ctrl-click and "open in new tab" work. The link of the current page has `aria-current="page"`. Activating the current page's own link does nothing: no new history entry, no scroll, no focus move.
+4. Links stay usable while a pack opens. An opening started on `/packs` finishes even if the player leaves: the result lands in the signed-in layout's state (§3.10), `Collection (<N>)` updates, and the reveal is there on return. The Account control is still disabled during an opening (`accounts.md` §4.5).
+5. **Log in page**: the `accounts.md` form without its `Back` button (Back is the browser's, and the header links go everywhere a `Back` went). Under the form, before the forgotten-password line: `No account yet?` and a `Register` link. A visitor who arrived through the guard sees the guard line under the `h1` (§3.3 step 4).
+6. **Register page**: step 1 without its `Back` button; under the form, `Already registered?` and a `Log in` link. Step 2 keeps its `Back` to step 1; the two steps are one page and one history entry, so the browser's Back from step 2 leaves `/register`. The step indicator tells the visitor where they are; an extra history entry for a form step would make Back discard a typed password silently.
+7. **Log out** (any page): as `accounts.md` §3.5.2, then the app **replaces** the current page with `/`, the landing `h1` takes focus, and the live region reads `Logged out.` A replace, so Back does not land on an account page that would only bounce to `/login`.
+8. **Session ended** (any `unauthenticated` answer on an account page): `accounts.md` §4.8, then a **replace** to `/login` with the current page as the return path; the session-ended banner shows; the `Log in` `h1` takes focus. After logging in, the player is back on the page they were on, with that page's state as §3.10 describes (it was cleared with the account state).
+
+### 3.6 Focus, announcement and title on navigation
+
+1. **Every navigation after the first render** (a link, Back, Forward, a redirect after an action) sets `document.title` from the route list, then moves focus to the new page's `h1` (`tabindex="-1"`). Screen readers read the heading on focus, which is the route-change announcement; the live region is **not** also used for it, so nothing is read twice.
+2. **The first render** (load or reload) sets the title and moves no focus: the browser starts at the top of the document as on any page load. A replace during boot (§3.2 step 3) counts as the first render.
+3. **Actions that navigate** keep their own live-region message and then follow rule 1: log in and register (`Logged in. You're now on <login>.`, `Registered <login>. You're now on <login>.`), log out (`Logged out.`), delete (`Deleted <login>.`). Focus goes to the destination's `h1`, not to the pack button; this replaces `accounts.md` §3.3.4, §3.4.4 and §7's focus on the pack button (§10). The pack button is the first control after the `Packs` heading, one Tab away.
+4. **Session ended**: focus to the `Log in` `h1`; the banner is `role="status"` and is read when focus lands just after it in reading order (`accounts.md` §7).
+5. **A page whose content is still loading** (the collection's skeleton, the shop's) still has its `h1` rendered from the start, so focus always has somewhere to go.
+6. **Skip link**: the first focusable element of every page is `Skip to content`, visually hidden until focused. It moves focus to the page's `h1` without changing the URL (no hash).
+
+### 3.7 The landing page (`/`, signed out)
+
+Top to bottom, in one left-aligned column (§5.3). There is no centred hero, no pair of buttons above the fold, no icon grid.
+
+1. **Opening and the demo** (`<section aria-labelledby="landing-heading">`)
+   1. `h1` `Anime TCG`.
+   2. The lede, one sentence built from the server's pool facts: `<characters> characters from the <entries> most popular anime on AniList, five to a pack.` Before the facts arrive, or with no pool: `Characters from the most popular anime on AniList, five to a pack.` The numbers are never in the bundle.
+   3. The demo control: one primary button, `Open a demo pack`, and directly under it the plain disclosure (§8): the demo uses the same odds as every pack, and its cards are not kept. It is written once, under the button, before the first press, so nobody has to open a pack to learn it.
+   4. The reveal area: five empty slots (3:4, static, `aria-hidden`) where the cards will land. A demo opening fills them with the server's five cards in slot order, using the 1c reveal card (tier border, no glow, no `NEW` marker, no count), over the pull summary `Demo pack: <summary>`, where `<summary>` is the 1c reveal's own summary phrase.
+   5. After the first reveal, one line under the grid: `To keep cards, register with an invite code.` with `Register` as a link. It appears once and does not change, grow or repeat with further demo packs.
+   6. The button keeps the label `Open a demo pack` for every pack. There is no counter, no "another", no "one more", and no comment on what was pulled. A new demo pack replaces the previous five cards; earlier ones are not listed anywhere.
+2. **How it plays** (`<section aria-labelledby>`, `h2` `How it plays`): a one-column definition list. Each row is a term and one sentence, filled with the server's numbers where there are any; no icons, no cards, no boxes.
+   - `Packs`: `A new pack every <interval>, and up to <cap> can pile up. Five cards each.`
+   - `Rarity`: `Every character has one of five tiers, set by how many AniList users favourited them. Every pack uses the odds below.`
+   - `Collection`: `See how much of each series you have, and how much of all <characters> characters.`
+   - From `feat/economy-ui`: `Karma` — `Recycle duplicates for Karma and spend it on themed packs. Karma comes only from playing. It can't be bought.`
+   - From `feat/market-ui`: `Market` — `List cards for other players to buy with Karma, and buy theirs.`
+   - Mini-games get a row in their own PRs, never before they ship. A row describes only what a player can do today.
+   - Without pool facts the rows that need a number drop the number (§8).
+3. **The odds** (inside How it plays, after the list): `h3` `Pack odds`, then a table with the five tiers, lowest first: `Tier`, `At least one per pack`, `Each card`. Figures are the server's `perPack` and `perSlot` over `scale`, in the percentage format of `market-and-shop.md` §3.3 (three significant digits, so `0.0661%` keeps its digits). Under it the source line `Drawn from <characters> characters, as of <D Mon YYYY>.` With no pool, the whole `Pack odds` block is absent rather than empty.
+4. **Join** (`h2` `Join`): `Playing needs an account, and registering needs an invite code from the owner.` Then one primary link styled as a button, `Register`, and on the same line the text `Already registered?` with a `Log in` link. One action is primary; the other is a sentence.
+5. The attribution footer, as on every page.
+
+What the landing page never shows: account data of any kind, a player count, recent pulls by other players, a timer, a "limited" or "today only" message, a currency balance, an exclamation mark.
+
+**Demo cards are not kept.** They live in the landing page's component state. Leaving `/` (to `/register`, `/login` or anywhere) or reloading discards them, and nothing about them reaches storage, the server or a later account. A visitor who registers starts with the empty collection every new account starts with (`collection-packs.md` §5.5), and the page's disclosure line has already said so.
+
+### 3.8 What the demo needs from the server
+
+The demo is a read of the server's pool and a roll by the server's RNG with nothing written. The browser holds no pool, no odds and no roll (`collection-packs.md` §8 deletes them in 1c; the demo must not bring them back).
+
+1. **Pool facts, public**: `GET /api/demo` (name for the API spec to confirm), no session needed, answering:
+   - `odds`: 1c's `PublishedOdds` (`scale`, `perSlot`, `perPack`, `tierSizes`, `snapshot`), the same object `GET /api/packs` returns, or `null` with no snapshot;
+   - `pool`: `{ characters, entries }` from the current snapshot (`entries` is 100 in the owner's snapshot), or `null` with no snapshot;
+   - `allowance`: `{ intervalSeconds, cap }`, the timer-pack parameters, so How it plays states them without a constant in `web/`.
+2. **A demo opening, public**: `POST /api/demo/open` (name to confirm), no body, behind the 1a CSRF origin check, answering 200 with `{ cards, franchises }`: five cards in slot order, each `{ slot, character, rarity }` with 1c's `CharacterPublic` (name, native name, image, `franchiseIds`), and the `FranchiseRef`s they name. No `isNew` (there is no collection to compare with), no `openingId`, no `requestId`, no allowance.
+3. **Same roll, same odds.** The opening uses 1c's slot roll and character pick (`collection-packs.md` §5.4: `SLOT_ODDS`, the current snapshot's tiers, `crypto.randomInt`) with the writes left out. A demo pack is never boosted, seeded or tuned: odds better than a real pack's would be a bait, which ADR 0004 §6 rules out. A test draws demo packs and real packs from one fixture snapshot and checks both against `SLOT_ODDS`.
+4. **Stores nothing.** No account, session, cookie, opening, card or ledger row is created or touched; the response sets no cookie, and a visitor with no session still has none afterwards. The only state is the rate limiter's in-memory bucket for the client address, as for every route, and the ordinary request log line (method, path, status, duration, request id), with no card data in it.
+5. **Rate-limited**: a per-client-address limit of its own (`DEMO_RATE_LIMIT`; 10 a minute is the starting point for the API spec), answered with 429 `rate_limited` and `Retry-After`. It is a public endpoint that reads the database, so the limit bounds the cost of a script, not the pace of a person: ten packs a minute is more than anyone reads.
+6. **Errors the UI maps**: 503 `pool_unavailable` → the demo-unavailable state; 429 → the demo wait state, counting down from `Retry-After` (or a plain line without one); 403 `bad_origin` and 400 → the generic demo failure (a client bug); no answer → the demo failure line with `Try again`.
+7. **Tier**: T3 (a public endpoint on the RNG and pack-roll code) by `docs/05-security.md`; `security-officer` reviews it and adds it to the threat model (§10).
+8. **Before 1c's server pool exists** there is nothing to draw from and no endpoint to call. The landing page is built for that order: see open question 1.
+
+### 3.9 What the router must do
+
+Requirements for the library the manager chooses (ADR); none of them names one.
+
+1. **Nested layouts**: a root layout (frame, banners, live region, skip link, footer) around a public layout (signed-out header) and a signed-in layout (header with page links and the Account control, the account's game state, §3.10). Moving between two pages of one layout does not remount the layout.
+2. **A guard** on the signed-in layout that waits for the session check (§3.2) and replaces to `/login` with the return path in history state (§3.3); a matching rule that replaces signed-in visitors away from `/`, `/login` and `/register`.
+3. **History state** read and written per entry, for the return path; **replace** as well as push.
+4. **Title per route** from the one route module (§3.1 rule 3), set on every navigation.
+5. **Focus on route change** to the page's `h1`, not on the first render (§3.6), and a way to know which of the two a render is.
+6. **Scroll control** as §3.11 describes: top on a new navigation, restored on Back and Forward.
+7. **A catch-all** route for the not-found page, and the trailing-slash replace of §3.1 rule 2.
+8. **Real links** with an active state for `aria-current="page"`, client-side navigation on a plain click, and the browser's behaviour on modified clicks.
+9. **No search-parameter state.** The app does not use the router's query or hash state for anything.
+10. **Code splitting is optional.** If pages are split, a chunk that fails to load (a deploy replaced it) shows the page-load failure of §4.8 instead of a blank page.
+11. Works with React 19 and the TanStack Query layer already in `web/`, in strict TypeScript with typed paths; a new dependency is reviewed under C13.
+
+### 3.10 State that survives navigation
+
+1. Everything account-scoped lives in the signed-in layout and survives moving between its pages: today's in-memory collection (until 1c moves it to the server) and the last pack's reveal on `/packs`; from 1c, the collection answer and its stale flag; from item 3, the collection's search, filters, sort, page and view (`collection-overview.md` §2 already keeps them across tab switches); from item 2, the Karma balance, the shop's reveal and the market's filters.
+2. Returning to `/packs` shows the last reveal without re-running the reveal animation; the animation runs only for a new opening.
+3. A reload discards all of it (owner decision 2), and so does log out or session end: the signed-in layout unmounts with the account.
+4. Dialogs are not history entries. Back with the card dialog or a confirmation open leaves the page; the dialog closes with it, its in-flight request finishes and its result applies to the layout's state, and its live-region message is still announced. The market link inside the card dialog (`See <name> on the market`) sets the market's character filter in the layout's state and pushes `/market`; Back returns to `/collection` with the dialog closed.
+
+### 3.11 Back, Forward and scroll
+
+1. A link click pushes; a redirect, a sign-in, a log-out, a deletion and a session end replace (§3.3, §3.5). The browser's Back and Forward move through pushed pages only.
+2. **New navigation** (a link): the page starts at the top, instantly (no smooth scroll).
+3. **Back and Forward**: the scroll position of that history entry is restored once the page's content has rendered from data the layout holds. If the data is not held (the first visit after a reload), the page starts at the top.
+4. A signed-in player pressing Back onto an entry of `/` or `/login` is replaced forward to `/packs` (§3.3 step 7); one more Back leaves the site, or reaches whatever came before. This is accepted: the alternative is open question 2's opposite, a landing page that signed-in players can see, which this spec does not recommend (§9).
+
+### 3.12 Hosting: what Caddy must do
+
+The repo `Caddyfile` already serves the build as a single-page app (`try_files {path} /index.html` in its last `handle`). The engineer keeps that and makes the following true, with a test for each in `web/e2e/stack.spec.ts`:
+
+1. **SPA fallback**: every path that is not under `/api`, not `/healthz` and not an existing file is answered with `index.html`, status 200, with the site's existing headers (the CSP, `X-Content-Type-Options`, `Referrer-Policy`, `Permissions-Policy`, no `Server`, no `Via`) and `Cache-Control: no-cache`. Tested on `/packs`, `/collection`, `/account`, `/login` and an unknown `/no-such-page`.
+2. **`/api` untouched**: the api handle matches `/api` itself as well as `/api/*` (today `/api` alone falls through to the SPA shell). Every path under it goes to the api, and an unknown one answers the api's JSON 404 envelope (`not_found`), never `index.html`. The existing test for an unknown api route stays and gains a case for `/api`.
+3. **`/healthz` untouched**: Caddy's own `ok`; the api's own probe stays unreachable through the proxy (existing tests).
+4. **`/assets/*` never falls back**: a missing asset is a plain 404, not `index.html` served as JavaScript, so a stale chunk fails loudly (§3.9 item 10). Cache headers for assets unchanged.
+5. **Absolute asset URLs**: Vite's `base` stays `/`, so `index.html` loaded at any path references `/assets/...`. A relative base would break every page reached by its own address.
+6. **The CSP does not change for this feature.** The demo endpoints are same-origin (`connect-src 'self'`); card images keep coming from `img-src https://s4.anilist.co`; the landing page loads no font, script or image from anywhere else.
+7. `web/index.html`'s `<title>` becomes `Anime TCG` (it reads `Anime TCG — Booster Packs` today), so the title before the script runs matches the boot title.
+8. The development server (Vite) and `vite preview` already fall back to `index.html`; the e2e suite runs the guard and deep-link tests against them as well as the stack.
+9. The owner's host proxy or tunnel forwards every path unchanged (`docs/04-deployment.md`); nothing there changes.
+
+## 4. States
+
+### 4.1 Boot and routing
+
+| State                                 | User sees                                                                                                             | User can do                     |
+| ------------------------------------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| checking session, under 300 ms        | Header with the wordmark only; main area empty; title `Anime TCG`                                                     | Wait                            |
+| checking session, over 300 ms         | Same, plus `Loading…` in the main area (`text-sm text-zinc-500`, `role="status"`)                                     | Wait                            |
+| signed out, public page               | The page                                                                                                              | Use it                          |
+| signed out, account page              | Replaced by `/login` with the guard line                                                                              | Log in, register                |
+| signed in, `/`, `/login`, `/register` | Replaced by `/packs`                                                                                                  | Play                            |
+| unreachable, public page              | The page with the unreachable banner (`accounts.md` §4.1)                                                             | Try again, use the page         |
+| unreachable, account page             | `/login` with the unreachable banner and the guard line; `Try again` that finds a session replaces to the return path | Try again, log in               |
+| trailing slash                        | Replaced by the path without it, then as above                                                                        | —                               |
+| unknown path                          | The not-found page (§4.7)                                                                                             | Go to the start, use the header |
+
+### 4.2 Header navigation
+
+| State                     | User sees                                                                                                            | User can do                   |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| booting                   | Wordmark only                                                                                                        | —                             |
+| signed out                | Wordmark (link to `/`); `Log in`, `Register`; the current one marked                                                 | Go to either, or to `/`       |
+| signed in                 | Wordmark (link to `/packs`); page links with the current one marked; Account control                                 | Go to any page, open the menu |
+| signed in, opening a pack | As signed in; the Account control disabled (`accounts.md` §4.5); links usable                                        | Go to another page            |
+| on a non-nav page         | On `/account`, `/profile` or not-found, no page link is marked; `Manage account` in the menu is marked on `/account` | As signed in                  |
+
+### 4.3 Log in and Register pages
+
+`accounts.md` §4.4 A and B apply unchanged except: no `Back` on Log in or on Register step 1; the `h1` is the page heading; the cross-links of §3.5 are present and usable in every state, submitting included. Leaving while a request is in flight drops its answer from the screen but not from the server: a registration or log in that completes still starts the session, and the app, which holds the session answer, shows the visitor signed in. Success replaces the page as §3.3 step 6.
+
+### 4.4 Manage account page
+
+`accounts.md` §4.6 applies to the page except: `open` is the page itself; the delete confirmation is a modal dialog on the page (§3.4); `delete done` replaces to `/` (§3.4 step 5); `session ended` replaces to `/login` with return path `/account`.
+
+### 4.5 Landing page
+
+| State                             | User sees                                                                                                                                                                | User can do                                          |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------- |
+| facts loading                     | `h1`, the lede without numbers, the demo button enabled, the disclosure, five empty slots; How it plays rows without numbers; no odds block yet; Join                    | Open a demo pack, register, log in                   |
+| facts loaded                      | Lede, rows and odds block with the server's numbers                                                                                                                      | Same                                                 |
+| facts failed (no answer)          | As facts loading; the app's unreachable banner                                                                                                                           | Try again, open a demo pack (it retries the network) |
+| no pool (`odds: null`)            | Lede and rows without numbers; no odds block; the demo button replaced by the unavailable line                                                                           | Register, log in                                     |
+| demo idle                         | `Open a demo pack`, disclosure, five empty slots                                                                                                                         | Open                                                 |
+| demo opening                      | Button reads `Opening…` and is `aria-disabled`; slots unchanged                                                                                                          | Wait                                                 |
+| demo revealed                     | Five cards in slot order with the reveal motion; `Demo pack: <summary>`; the keep-cards line under the grid; button back to `Open a demo pack`                           | Open again, register                                 |
+| demo revealed, opening again      | The previous five cards stay until the new answer arrives, then are replaced                                                                                             | Wait                                                 |
+| demo unavailable (503)            | In place of the button: the unavailable line (§8); previous cards, if any, stay                                                                                          | Register, log in                                     |
+| demo wait (429)                   | Button `aria-disabled`, reading `Try again in <S> s` (from `Retry-After`, down to 1, `tabular-nums`), and the wait line under it; at 0 it reads `Open a demo pack` again | Wait                                                 |
+| demo failed (no answer, 400, 403) | Under the button, `role="alert"`, the demo failure line; previous cards stay                                                                                             | Try again                                            |
+| image failed on a demo card       | The reveal card's own `No image` fallback                                                                                                                                | —                                                    |
+
+### 4.6 Profile placeholder (`/profile`, signed in, until item 4)
+
+| State   | User sees                                                                               | User can do          |
+| ------- | --------------------------------------------------------------------------------------- | -------------------- |
+| default | `h1` `Profile`; one line `Your profile isn't here yet.`; a link `Go to your collection` | Go to the collection |
+
+No illustration, no "coming soon" badge, no date promise. Item 4 replaces the whole page.
+
+### 4.7 Not-found page
+
+| State      | User sees                                                                                                      | User can do               |
+| ---------- | -------------------------------------------------------------------------------------------------------------- | ------------------------- |
+| signed out | Public header; `h1` `Page not found`; `There's no page at this address.`; link `Go to the start page` (to `/`) | Follow it, use the header |
+| signed in  | Signed-in header; same `h1` and line; link `Go to Packs` (to `/packs`)                                         | Follow it, use the header |
+
+The not-found page needs no session to render its body, but it waits for the boot check like every page so its header is the right one.
+
+### 4.8 Cross-cutting
+
+| State                            | User sees                                                                                                                                                     | User can do |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| page code failed to load         | The page's `h1` and, under it, `role="alert"`, `This page couldn't load. Reload to get the latest version.` with a `Reload` button (only with code splitting) | Reload      |
+| session ended on an account page | `/login`, the session-ended banner, focus on `Log in` (§3.5 step 8)                                                                                           | Log in      |
+| server unreachable later         | The app-level banner on whatever page is showing (`accounts.md` §4.8); no navigation happens because of it                                                    | Try again   |
+
+## 5. Layout
+
+Breakpoints are Tailwind's: phone below 640 px, `sm` 640, `lg` 1024. The page container stays `max-w-6xl px-4 sm:px-6`.
+
+### 5.1 Header
+
+The header no longer carries an `h1` (each page has its own). It does not collapse into a menu at any width: at most four short links, which fit a 288 px row, and a hidden main navigation costs every phone player an extra tap on every page change.
+
+| Width          | Signed out                                            | Signed in, before item 2                                                                    | Signed in, with Shop and Market                                                                                                                |
+| -------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| below 640 px   | One row: wordmark left; `Log in` and `Register` right | Row 1: wordmark left, Account control right. Row 2: the links, full width, each `flex-auto` | `market-and-shop.md` §5.1: wordmark; then balance left and Account control right; then the four links full width, each `flex-auto` with `px-2` |
+| 640–1023 px    | One row, as on phone                                  | One row: wordmark left; links, then the Account control, right                              | Wordmark; then one row, links left, balance and Account control right                                                                          |
+| 1024 px and up | One row, as on phone                                  | One row, as at `sm`                                                                         | One row: wordmark left; links, balance and Account control right, `gap-3`                                                                      |
+
+Below 400 px the `(<N>)` of `Collection (<N>)` is visually hidden (`sr-only min-[400px]:not-sr-only`), as `market-and-shop.md` §5.1 has it; the accessible name keeps it. The login in the Account control truncates as `accounts.md` §5 says.
+
+### 5.2 Page heading
+
+Every page starts its `<main>` with its `h1`, left-aligned, `mb-6`. On `/login` and `/register` the `h1` sits inside the existing panel (`w-full max-w-sm`, where today's `h2` is); the guard line is under it. On `/account` the page is one column, `max-w-lg`, the sections separated as in the dialog (`border-t border-zinc-800 pt-6 mt-6`). `/profile` and the not-found page are one column, `max-w-md`, `py-12`.
+
+### 5.3 Landing page
+
+- One column, left-aligned, `max-w-3xl` for text; the reveal grid uses the full container width.
+- **Opening**: `h1`, lede (`max-w-xl`), then the button and the disclosure under it, left-aligned at every width; the button is full width on phone and auto from `sm`.
+- **Reveal grid**: the 1c reveal grid's columns (2 / 3 / 5 at phone / `sm` / `lg` today), `mt-6`; the summary above it and the keep-cards line under it, both left-aligned. The five empty slots use the same grid, so nothing jumps when the cards land.
+- **How it plays**: `mt-16`; the definition list as a two-column grid from `sm` (`grid-cols-[8rem_1fr] gap-x-6 gap-y-3`), stacked on phone (term above its sentence). The odds table `mt-8`, full width up to `max-w-xl`, numbers right-aligned; on a 320 px phone the three columns fit at `text-sm` (the longest cell is `Legendary`).
+- **Join**: `mt-16 border-t border-zinc-800 pt-8`; the sentence, then the `Register` link-button and the log-in sentence on one row from `sm`, stacked on phone.
+- The footer as on every page.
+
+## 6. Visual treatment
+
+No new tokens. Everything below uses existing utilities, `web/src/components/account/styles.ts` and the rarity tokens 1c adds.
+
+### 6.1 Header
+
+- **Wordmark**: `Anime TCG` as a link, `text-xl font-black tracking-tight text-zinc-100`, no gradient (it was gradient text, debt in `docs/06-engineering-standards.md` §2), the violet focus ring. Not a heading.
+- **Subtitle removed**: `Open packs, collect characters. Data from AniList.` is explanatory copy (§2 debt). The AniList credit lives in the footer, which gains a link on `AniList` (§8).
+- **Page links**: today's tab group, unchanged in look: the group `flex gap-1 rounded-xl bg-zinc-900 p-1`; each link `rounded-lg px-4 py-1.5 text-sm font-medium` (`px-2` on phone with four links), current `bg-zinc-700 text-white`, others `text-zinc-400 hover:text-zinc-200`, the violet focus ring, `min-h-10 sm:min-h-0`. The current page is shown by the fill and announced by `aria-current`; nothing else changes on hover.
+- **Signed out**: `Log in` in `BUTTON.text` at `text-sm`, `Register` in `BUTTON.secondary`, both links.
+- The page's radial violet background is debt for `visual-system.md`; this feature leaves it.
+
+### 6.2 Landing page
+
+- `h1` `text-3xl font-black tracking-tight text-zinc-100 sm:text-4xl`; lede `text-base text-zinc-300`; section `h2`s `text-lg font-bold text-zinc-100`; `h3` `Pack odds` `text-sm font-semibold text-zinc-200`.
+- `Open a demo pack`: `BUTTON.primary`. It is an ordinary primary action, not the 1c pack control and not louder than it: no gradient, no emoji, no size bump, no shadow, no hover scale.
+- Disclosure line and keep-cards line: `text-sm text-zinc-400`, the `Register` link inside it `text-zinc-200 underline decoration-zinc-600 underline-offset-2 hover:text-white`.
+- Empty slots: `aspect-[3/4] rounded-lg border border-zinc-800 bg-zinc-900`, static (no shimmer, no pulse, no card-back art).
+- Demo cards: the 1c reveal card exactly, so the demo shows what the game shows. No `Demo` stamp on the art: the summary line says it, and drawing on the art hides it.
+- Definition list: terms `text-sm font-semibold text-zinc-200`, sentences `text-sm text-zinc-400`, numbers `tabular-nums`.
+- Odds table: header cells `text-xs text-zinc-400`, rows `border-b border-zinc-800 py-2 text-sm`, the tier word in its tier's text colour (`collection-overview.md` §6.1), figures `text-zinc-200 tabular-nums`. The source line `text-xs text-zinc-400`.
+- Join: the sentence `text-sm text-zinc-300`; `Register` as a link with `BUTTON.primary`'s classes; `Log in` an underlined text link as above.
+- Demo failure: `ERROR_TEXT` at `text-sm`; wait line `text-xs text-zinc-400`; unavailable line `text-sm text-zinc-400`.
+- **Motion**: the 1c reveal's card entrance, held to the 150–250 ms of `docs/06-engineering-standards.md` §3 (the current `card-reveal` runs 550 ms and is the 1c web PR's to shorten); nothing else on the page moves. Off under `prefers-reduced-motion: reduce`.
+- **Nothing else**: no confetti, sparkles, glows, gradients, card fans, floating cards, counters, sound, "rare pull" emphasis, or a different treatment for a Legendary or Mythic in the demo.
+
+### 6.3 Other pages
+
+- `h1` on account pages, `/account`, `/profile`, not-found: `text-xl font-bold text-zinc-100`, `focus:outline-none` (it receives programmatic focus only, like today's account heading).
+- `/login`, `/register`: the existing `PANEL_HEADING` on the `h1`.
+- Skip link: `sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-20` with `BUTTON.secondary` and `bg-zinc-950`.
+- Not-found and profile lines `text-sm text-zinc-400`; their links `BUTTON.secondary`.
+
+## 7. Accessibility
+
+- **Landmarks**: one `<header>` (the wordmark, `<nav aria-label="Main">` with the page links, the Account control); one `<main>`; one `<footer>`. Signed out, `Log in` and `Register` are inside the same `<nav aria-label="Main">`.
+- **Links**: `aria-current="page"` on the current page's link only. Not `aria-pressed` (today's tab buttons); these are links, and Tab moves through them in order. `Collection (<N>)` keeps its full accessible name at every width.
+- **Headings**: exactly one `h1` per page, the one in the route table; sections below it start at `h2`. The collection's and the market's visually hidden region headings become the visible `h1`s (§10).
+- **Focus**: as §3.6. The `h1` has `tabindex="-1"` and is the focus target of every navigation after the first render; dialogs restore focus to their opener as before; when a page is left with a dialog open, focus goes to the new page's `h1`.
+- **Skip link**: first in the tab order, named `Skip to content`, moves focus to the `h1`.
+- **Titles**: set before focus moves, so a screen reader that reads the title on focus change reads the new one.
+- **Live region**: the existing single app-level region (`accounts.md` §7) carries the action messages of §3.6 step 3 and the demo's announcement; it never carries "navigated to".
+- **Landing demo**: `Open a demo pack` is a `<button>`; while in flight it is `aria-disabled` and keeps focus (`accounts.md` §11). When the cards arrive, focus stays on the button, and the live region reads `Demo pack: <summary>.` once. The reveal grid is a list (`<ul aria-label="Demo pack">`) of five items; each card's name, series and rarity are text in it, so a screen reader can walk the cards without the art. The wait is announced once by its `role="status"` line, and `You can try again now.` when it ends, as the Log in wait does. Empty slots are `aria-hidden`.
+- **Odds table**: a real `<table>` with `<caption>` (`Pack odds`, the visible `h3` text as the caption, or the `h3` and `aria-labelledby`), `<th scope="col">` and a `<th scope="row">` per tier. The tier is a word, never colour alone.
+- **Definition list**: `<dl>` with `<dt>`/`<dd>` pairs.
+- **Guard line, unavailable and failure lines**: the guard line is plain text (read with the page); the demo failure is `role="alert"`; the unavailable line is plain text.
+- **Touch targets**: links, the skip link and the demo button are at least 40 px tall on phone (`accounts.md` §7).
+- **Reduced motion**: the reveal entrance is the only motion and is off under `prefers-reduced-motion: reduce`.
+- **Scroll**: restoring a position on Back never moves focus away from the `h1` it set; the `h1` is focused with `preventScroll` so the restored position holds.
+
+## 8. Copy
+
+Exact strings. `<login>` the account login; `<N>` a number; `<S>` countdown seconds; `<characters>` the pool's character count and `<entries>` its anime entry count (`Intl.NumberFormat("en-GB")`, `2,143`); `<interval>` `intervalSeconds` as `<n> minutes` (or `1 minute`, or `<n> hours` when it is a whole number of hours over 59 minutes); `<cap>` the pack cap (`cap`) as a number; `<summary>` the 1c reveal's summary phrase; `<D Mon YYYY>` the `metaLine` date format of `accounts.md`, from `odds.snapshot.takenAt`; percentages as `market-and-shop.md` §3.3.
+
+**Words.** The words "secure", "verified", "protected", "safe", "private", "attempt", "locked" and "blocked" do not appear in any string below and must not be added (`accounts.md` §8). The money and nudge rules of `collection-overview.md` §8 apply to every string here, the landing page included: no "pay", "paid", "cash", "money", "coins", "earn", "profit", "worth", "value", "balance", "wallet", "store", "checkout", "purchase", no currency symbol; no exclamation marks; no urgency ("hurry", "act now", "today only", "ending soon", "last chance", "don't miss"); no scarcity ("only <N> left", "limited"); no "free", "lucky", "jackpot", "win", "prize", "you could get", "try your luck", "one more", "another"; no comment on what a demo pack contained. "Demo" is allowed. The copy test scans every string of this section for these, as it does for the accounts copy.
+
+**Titles and headings**
+
+| Element                | Copy                                                                                                                               |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Titles                 | as the route table (§3.1); `Anime TCG` while booting                                                                               |
+| `h1`s                  | `Anime TCG` · `Packs` · `Collection` · `Shop` · `Market` · `Profile` · `Log in` · `Register` · `Manage account` · `Page not found` |
+| `index.html` `<title>` | `Anime TCG`                                                                                                                        |
+
+**Header and footer**
+
+| Element      | Copy                                                                                                                                                                                            |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Wordmark     | `Anime TCG`                                                                                                                                                                                     |
+| Nav label    | `Main`                                                                                                                                                                                          |
+| Page links   | `Packs` · `Collection (<N>)` / before the first count `Collection`; from item 2 `Packs` · `Shop` · `Market` · `Collection (<N>)`                                                                |
+| Signed out   | `Log in` · `Register`                                                                                                                                                                           |
+| Account menu | `Manage account` · `Log out` (from item 4, `Profile` first; open question 2)                                                                                                                    |
+| Skip link    | `Skip to content`                                                                                                                                                                               |
+| Footer       | `Non-commercial fan project. Character images and titles © their respective owners, served via the AniList API.` with `AniList` as a link to `https://anilist.co` (`rel="noreferrer"`, new tab) |
+
+**Log in and Register pages** (only the strings that change; everything else is `accounts.md` §8)
+
+| Element                        | Copy                                  |
+| ------------------------------ | ------------------------------------- |
+| Log in cross-link              | `No account yet?` + link `Register`   |
+| Register cross-link            | `Already registered?` + link `Log in` |
+| Guard line, from `/packs`      | `Log in to open your packs.`          |
+| Guard line, from `/collection` | `Log in to see your collection.`      |
+| Guard line, from `/shop`       | `Log in to see the shop.`             |
+| Guard line, from `/market`     | `Log in to see the market.`           |
+| Guard line, from `/profile`    | `Log in to see your profile.`         |
+| Guard line, from `/account`    | `Log in to manage your account.`      |
+
+**Landing page**
+
+| Element                              | Copy                                                                                                                                                                                                                           |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `h1`                                 | `Anime TCG`                                                                                                                                                                                                                    |
+| Lede                                 | `<characters> characters from the <entries> most popular anime on AniList, five to a pack.`                                                                                                                                    |
+| Lede without facts                   | `Characters from the most popular anime on AniList, five to a pack.`                                                                                                                                                           |
+| Demo button                          | `Open a demo pack` / in flight `Opening…` / waiting `Try again in <S> s`                                                                                                                                                       |
+| Disclosure (under the button)        | `A demo pack uses the same odds as every pack in the game. Its cards aren't kept: nothing is saved, and they don't go to any account.`                                                                                         |
+| Reveal list label                    | `Demo pack`                                                                                                                                                                                                                    |
+| Summary                              | `Demo pack: <summary>`                                                                                                                                                                                                         |
+| Live region on reveal                | `Demo pack: <summary>.`                                                                                                                                                                                                        |
+| Keep-cards line                      | `To keep cards, register with an invite code.` with `Register` as the link text                                                                                                                                                |
+| Unavailable (503)                    | `Demo packs are unavailable right now.`                                                                                                                                                                                        |
+| Wait (429, `role="status"`)          | `Demo packs take a short pause after many in a row. The button comes back by itself.`                                                                                                                                          |
+| Wait without `Retry-After`           | the button reads `Open a demo pack` and stays `aria-disabled` for 60 s, with the same wait line                                                                                                                                |
+| Wait over (live)                     | `You can try again now.`                                                                                                                                                                                                       |
+| Failure (no answer, 400, 403)        | `Couldn't reach the game server. Try again.`                                                                                                                                                                                   |
+| Section `h2`                         | `How it plays`                                                                                                                                                                                                                 |
+| Row `Packs`                          | `A new pack every <interval>, and up to <cap> can pile up. Five cards each.` / without facts `A new pack on a timer, and a few can pile up. Five cards each.`                                                                  |
+| Row `Rarity`                         | `Every character has one of five tiers, set by how many AniList users favourited them. Every pack uses the odds below.` / without odds `Every character has one of five tiers, set by how many AniList users favourited them.` |
+| Row `Collection`                     | `See how much of each series you have, and how much of all <characters> characters.` / without facts `See how much of each series you have, and of the whole pool.`                                                            |
+| Row `Karma` (from `feat/economy-ui`) | `Recycle duplicates for Karma and spend it on themed packs. Karma comes only from playing. It can't be bought.`                                                                                                                |
+| Row `Market` (from `feat/market-ui`) | `List cards for other players to buy with Karma, and buy theirs.`                                                                                                                                                              |
+| Odds `h3` / caption                  | `Pack odds`                                                                                                                                                                                                                    |
+| Odds columns                         | `Tier` · `At least one per pack` · `Each card`                                                                                                                                                                                 |
+| Odds source                          | `Drawn from <characters> characters, as of <D Mon YYYY>.`                                                                                                                                                                      |
+| Join `h2`                            | `Join`                                                                                                                                                                                                                         |
+| Join sentence                        | `Playing needs an account, and registering needs an invite code from the owner.`                                                                                                                                               |
+| Join actions                         | `Register` · `Already registered?` + link `Log in`                                                                                                                                                                             |
+
+**Profile placeholder and not-found**
+
+| Element                    | Copy                                                                           |
+| -------------------------- | ------------------------------------------------------------------------------ |
+| Profile line               | `Your profile isn't here yet.`                                                 |
+| Profile link               | `Go to your collection`                                                        |
+| Not-found line             | `There's no page at this address.`                                             |
+| Not-found link, signed out | `Go to the start page`                                                         |
+| Not-found link, signed in  | `Go to Packs`                                                                  |
+| Page-load failure          | `This page couldn't load. Reload to get the latest version.` · button `Reload` |
+
+**Copy that changes elsewhere** (`accounts.md` §8; the other specs in §10)
+
+| Element                              | Old                                                                                     | New                                                     |
+| ------------------------------------ | --------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| Document title, signed in            | `<login> · Anime TCG`                                                                   | per page (§3.1)                                         |
+| Document title, signed out           | `Anime TCG`                                                                             | per page (§3.1)                                         |
+| Control, signed out                  | `Account`                                                                               | removed; `Log in` · `Register` links                    |
+| Account screen                       | `Your account`, `Log in to your collection, or register a new one with an invite code.` | removed (the landing page and the two pages replace it) |
+| Menu item                            | `Manage account…`                                                                       | `Manage account`                                        |
+| Header subtitle                      | `Open packs, collect characters. Data from AniList.`                                    | removed                                                 |
+| Tab `Booster`                        | `Booster`                                                                               | link `Packs`                                            |
+| `Back` on Log in and Register step 1 | `Back`                                                                                  | removed                                                 |
+
+## 9. Open questions
+
+For the owner; each is a choice of three, and this spec is drawn for the recommended one.
+
+1. **The demo before 1c's server pool exists.** This feature can ship before 1c's server PR; then there is no pool on the server and no demo endpoint, and the browser's own pool is about to be deleted (`collection-packs.md` §8).
+   - **A (recommended)**: the navigation PR ships the landing page without the demo block (the opening section is the `h1`, the lede without numbers, and the Join actions); the demo block, the numbers and the odds table land in one later PR together with the demo endpoints, after 1c's server PR has merged. The server stays the only source of cards and odds from the first demo pack on, and no throwaway code is written.
+   - B: hold the whole navigation PR until the demo endpoints exist, so the landing page appears complete in one step. Routes, the guard and the not-found page wait for a feature they do not need.
+   - C: build a demo on the browser's current AniList pool and roll until 1c lands. Visitors get a demo sooner, but it rolls in the browser at the old odds, which the server-authority rule (ADR 0008, `docs/06-engineering-standards.md` §4) and the 1c deletions forbid, and its odds would differ from the real game's.
+2. **Profile in the navigation.** `/profile` exists from this feature as a placeholder.
+   - **A (recommended)**: no link to it until item 4 ships; then a `Profile` item at the top of the Account menu, because a profile is about the account, and the page links stay the four game pages that fit a phone row. Before item 4 the placeholder is reachable only by typing the address.
+   - B: a `Profile` item in the Account menu from now, leading to the placeholder. Players find a page that says it is not there yet, which is the explanatory filler `docs/06-engineering-standards.md` §2 warns about.
+   - C: a fifth page link, `Profile`, from item 4. Five links no longer fit a 288 px row, so the phone header would need a second row or a menu.
+3. **How many demo packs a visitor can open.**
+   - **A (recommended)**: as many as they like, within the server's per-address rate limit (`DEMO_RATE_LIMIT`, 10 a minute to start). The button never changes its label and nothing counts the packs; the limit only stops scripts, and the wait it causes is stated plainly.
+   - B: three demo packs per page load, then the button is replaced by the Join sentence. A fixed allowance reads as "your free tries are used up", the casino pattern the game avoids, and a reload resets it anyway.
+   - C: one demo pack per page load. The least load on the server, but one pack of mostly Commons shows little of the game.
+4. **The HTTP status of an unknown path.**
+   - **A (recommended)**: Caddy answers 200 with `index.html` for every non-API, non-asset path, and the app shows the not-found page. Caddy holds no copy of the route list, so a new page cannot be missed in the `Caddyfile`; crawlers and status checks see 200 for a mistyped path, which matters little for an invite-only game.
+   - B: Caddy lists the app's paths and answers 404 with `index.html` for everything else. Correct statuses, but the route list then lives in two places that must change together, and a forgotten line turns a real page into a 404.
+   - C: a build step writes the route list into a Caddy snippet the `Caddyfile` imports. Correct statuses without hand-kept duplication, at the cost of build machinery and one more T3 file.
+
+Decided in this spec, with the reasons given where they are made: `/account` is a page (§3.4); a signed-in visitor at `/` goes to `/packs` and does not see the landing page, because its demo shows cards that would not go into their collection and its Join section asks them to do what they have already done (§3.3 step 7, §3.11 step 4); the return path travels in history state, not in the URL (§3.3); signed-in titles carry the page name, not the login (§3.1 rule 4); the header never collapses into a menu (§5.1).
+
+## 10. Changes to other specs
+
+Not made here; each spec's owner (the `ui-designer` for UI specs, the manager for the rest) applies them in the PR that touches that spec.
+
+**`docs/design/accounts.md`** (shipped; amend with this feature's PR)
+
+- §3.1, §4.1: boot then routing as §3.2 here; unreachable on an account page goes to `/login` with the return path.
+- §3.2, §4.3, §7 "Account screen": the choice screen and its copy are retired; `/login` and `/register` are pages, and the landing page offers the choice.
+- §3.3.4, §3.4.4, §4.4 "success": land on the return path or `/packs` by replace; focus to that page's `h1` (§3.6 step 3), not the pack button.
+- §3.4.1, §4.4-A step 1, §4.4-B idle: no `Back`; the cross-links of §3.5; the `h1` replaces the panel's `h2`.
+- §3.5.2, §4.5 "after Log out": replace to `/`, focus to the landing `h1`.
+- §3.5.3, §4.6, §5 "Dialog", §7 "Dialog": Manage account is the `/account` page (§3.4 here); the delete confirmation becomes a modal dialog on it; sections use `h2`.
+- §4.5 signed out: the `Account` button is replaced by `Log in` and `Register` links.
+- §4.8 session ended: replace to `/login` with the current page as the return path.
+- §5 Header: as §5.1 here.
+- §8: the rows in this spec's "Copy that changes elsewhere".
+
+**`docs/design/collection-packs.md` §8** (1c web PR) and the 1c web UI spec
+
+- "Booster tab" becomes the `/packs` page with the `h1` `Packs`; the pack control and reveal sit under it.
+- The reveal card and the summary phrase are shared with the landing demo; the reveal entrance stays within 150–250 ms.
+- "The pool is no longer loaded at boot or while signed out": still true; the landing page reads only the demo endpoints.
+- §6.3 gains the two demo routes (or a separate API spec does; the manager decides), with §3.8's rules: public, no session, no writes, `DEMO_RATE_LIMIT`, the 1c roll with no writes, and the shared-odds test.
+
+**`docs/design/collection-overview.md`**
+
+- "the Collection tab" throughout becomes the `/collection` page; §3.1 "when the tab is shown" becomes "when the page is shown".
+- §4.1 empty state: `Open a pack` is a link to `/packs` (focus by §3.6, to the `Packs` `h1`), not "switches to Booster, focuses the pack button".
+- §7 Region: the visually hidden `h2` `Collection` becomes the visible `h1` `Collection`; headings below shift down one level.
+- §2 "survive switching tabs" becomes "survive moving between pages"; still reset on reload and log out.
+- §3.5 `See <name> on the market`: navigates to `/market` (push) with the character filter set in the signed-in layout's state; Back returns to `/collection` with the dialog closed.
+- §8 "Tab label": the header link label, same strings.
+
+**`docs/design/market-and-shop.md`**
+
+- §3.2: the tabs are the page links `Packs` · `Shop` · `Market` · `Collection (<N>)` (`Booster` renamed `Packs`), on `/packs`, `/shop`, `/market`, `/collection`.
+- §3.3, §3.4: "showing the tab" becomes "showing the page"; the shop reveal stays "until the page is left".
+- §5.1: the header table stays, with the wordmark in place of the title block and no subtitle.
+- §7 Tabs: `<nav aria-label="Main">` with links and `aria-current="page"`, not `aria-pressed` buttons. Shop and Market: the visually hidden `h2`s become the visible `h1`s `Shop` and `Market`.
+- §8 Tabs row: `Packs` · `Shop` · `Market` · `Collection (<N>)`.
+- `feat/economy-ui` adds the landing `Karma` row, `feat/market-ui` the `Market` row (§8 here).
+
+**`docs/design/economy.md` §12**
+
+- "its own **Shop** tab" becomes the `/shop` page; "the free timer pack keeps its own control on the Booster tab" becomes "on the `/packs` page".
+
+**For the manager** (not specs this designer edits)
+
+- `docs/02-roadmap.md`: a row for this feature, and the order with 1c (open question 1).
+- An ADR choosing the router (§3.9).
+- `docs/05-security.md`: the demo endpoints in the threat model (public, unauthenticated, RNG, database reads, rate limit) at T3; the return-path check as a control against open redirects, with its tests (every rejected form of §3.3 step 3); the `Caddyfile` change of §3.12 at T3 (proxy).
+- `docs/04-deployment.md`: one line that every non-API path serves the app and `/api` itself goes to the api.
