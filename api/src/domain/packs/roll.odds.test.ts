@@ -32,6 +32,14 @@ const ENCHANTED_PACKS = 80_000;
 const RADIANT_PACKS = 20_000;
 const DRAWS_PER_CHARACTER = 2_000;
 
+/**
+ * The deal of 400 000 packs and the larger single tests take seconds each
+ * (11 s for the deal under coverage on the dev station), past vitest's
+ * defaults of 10 s per hook and 5 s per test; the bound is generous so a
+ * slow CI runner times out only on a real hang.
+ */
+const SAMPLING_TIMEOUT_MS = 120_000;
+
 /** Chi-square 0.999 quantiles, by degrees of freedom. */
 const CRITICAL: Record<number, number> = {
   1: 10.83,
@@ -153,7 +161,7 @@ describe("pack odds on crypto.randomInt (collection-packs.md §9)", () => {
         for (const card of pack.slice(0, 3)) slots123.add(card.tier);
         slot5.add(pack[4]?.tier ?? "none");
       }
-    });
+    }, SAMPLING_TIMEOUT_MS);
 
     it("deals well-formed packs and never a pity pack (the deterministic half)", () => {
       expect(violations).toEqual([]);
@@ -208,51 +216,59 @@ describe("pack odds on crypto.randomInt (collection-packs.md §9)", () => {
     });
   });
 
-  it(`test 5: Enchanted forced (free_packs_opened = 9), ${ENCHANTED_PACKS} packs, slot 5 against ENCHANTED_SLOT_ODDS (2 df)`, () => {
-    const counters = { packsSinceMythic: 0, freePacksOpened: 9 };
-    const slot5 = new Tally();
-    let enchanted = 0;
-    for (let i = 0; i < ENCHANTED_PACKS; i += 1) {
-      const plan = planPack(counters, "free", cryptoRng);
-      const pack = drawPack(POOL, plan, cryptoRng);
-      const wrong = wellFormed(pack, plan);
-      if (wrong !== null) throw new Error(wrong);
-      if (plan.kind !== "enchanted") {
-        expect(plan.kind).toBe("radiant");
-        continue;
+  it(
+    `test 5: Enchanted forced (free_packs_opened = 9), ${ENCHANTED_PACKS} packs, slot 5 against ENCHANTED_SLOT_ODDS (2 df)`,
+    () => {
+      const counters = { packsSinceMythic: 0, freePacksOpened: 9 };
+      const slot5 = new Tally();
+      let enchanted = 0;
+      for (let i = 0; i < ENCHANTED_PACKS; i += 1) {
+        const plan = planPack(counters, "free", cryptoRng);
+        const pack = drawPack(POOL, plan, cryptoRng);
+        const wrong = wellFormed(pack, plan);
+        if (wrong !== null) throw new Error(wrong);
+        if (plan.kind !== "enchanted") {
+          expect(plan.kind).toBe("radiant");
+          continue;
+        }
+        enchanted += 1;
+        slot5.add(pack[4]?.tier ?? "none");
       }
-      enchanted += 1;
-      slot5.add(pack[4]?.tier ?? "none");
-    }
-    const tiers: Rarity[] = ["epic", "legendary", "mythic"];
-    expect(slot5.get("rare") + slot5.get("uncommon") + slot5.get("common")).toBe(0);
-    expectFits(
-      "Enchanted slot 5",
-      tiers,
-      tiers.map((t) => slot5.get(t)),
-      expectedOver([ENCHANTED_SLOT_ODDS], enchanted, tiers),
-    );
-  });
+      const tiers: Rarity[] = ["epic", "legendary", "mythic"];
+      expect(slot5.get("rare") + slot5.get("uncommon") + slot5.get("common")).toBe(0);
+      expectFits(
+        "Enchanted slot 5",
+        tiers,
+        tiers.map((t) => slot5.get(t)),
+        expectedOver([ENCHANTED_SLOT_ODDS], enchanted, tiers),
+      );
+    },
+    SAMPLING_TIMEOUT_MS,
+  );
 
-  it(`test 6: Radiant forced (a scripted first call), ${RADIANT_PACKS} packs, slots 1-4 against RADIANT_SLOT_ODDS (2 df)`, () => {
-    const counters = { packsSinceMythic: 0, freePacksOpened: 0 };
-    const slots = new Tally();
-    for (let i = 0; i < RADIANT_PACKS; i += 1) {
-      const plan = planPack(counters, "free", () => 0);
-      expect(plan.kind).toBe("radiant");
-      const pack = drawPack(POOL, plan, cryptoRng);
-      const wrong = wellFormed(pack, plan);
-      if (wrong !== null) throw new Error(wrong);
-      for (const card of pack.slice(0, 4)) slots.add(card.tier);
-    }
-    const tiers: Rarity[] = ["epic", "legendary", "mythic"];
-    expectFits(
-      "Radiant slots 1-4",
-      tiers,
-      tiers.map((t) => slots.get(t)),
-      expectedOver([RADIANT_SLOT_ODDS], RADIANT_PACKS * 4, tiers),
-    );
-  });
+  it(
+    `test 6: Radiant forced (a scripted first call), ${RADIANT_PACKS} packs, slots 1-4 against RADIANT_SLOT_ODDS (2 df)`,
+    () => {
+      const counters = { packsSinceMythic: 0, freePacksOpened: 0 };
+      const slots = new Tally();
+      for (let i = 0; i < RADIANT_PACKS; i += 1) {
+        const plan = planPack(counters, "free", () => 0);
+        expect(plan.kind).toBe("radiant");
+        const pack = drawPack(POOL, plan, cryptoRng);
+        const wrong = wellFormed(pack, plan);
+        if (wrong !== null) throw new Error(wrong);
+        for (const card of pack.slice(0, 4)) slots.add(card.tier);
+      }
+      const tiers: Rarity[] = ["epic", "legendary", "mythic"];
+      expectFits(
+        "Radiant slots 1-4",
+        tiers,
+        tiers.map((t) => slots.get(t)),
+        expectedOver([RADIANT_SLOT_ODDS], RADIANT_PACKS * 4, tiers),
+      );
+    },
+    SAMPLING_TIMEOUT_MS,
+  );
 
   it.each([...RARITIES].reverse().map((tier, index) => [index + 7, tier] as const))(
     `test %i: picks each %s character uniformly, ${DRAWS_PER_CHARACTER} draws per character, the tier forced`,
@@ -282,5 +298,6 @@ describe("pack odds on crypto.randomInt (collection-packs.md §9)", () => {
         ids.map(() => DRAWS_PER_CHARACTER),
       );
     },
+    SAMPLING_TIMEOUT_MS,
   );
 });
