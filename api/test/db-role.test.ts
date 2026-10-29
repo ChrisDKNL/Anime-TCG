@@ -9,6 +9,8 @@ import {
   cards,
   characters,
   packOpenings,
+  poolFetches,
+  poolFetchPages,
   poolSnapshotCharacters,
   poolSnapshotSeries,
   poolSnapshots,
@@ -181,8 +183,8 @@ describe("app database role", () => {
       { table_name: "cards", rights: "INSERT,SELECT" },
       { table_name: "characters", rights: "INSERT,SELECT,UPDATE" },
       { table_name: "pack_openings", rights: "DELETE,INSERT,SELECT" },
-      { table_name: "pool_fetch_pages", rights: all },
-      { table_name: "pool_fetches", rights: all },
+      { table_name: "pool_fetch_pages", rights: "INSERT,SELECT" },
+      { table_name: "pool_fetches", rights: "DELETE,INSERT,SELECT" },
       { table_name: "pool_snapshot_characters", rights: "INSERT,SELECT" },
       { table_name: "pool_snapshot_franchises", rights: "INSERT,SELECT" },
       { table_name: "pool_snapshot_memberships", rights: "INSERT,SELECT" },
@@ -236,6 +238,28 @@ describe("app database role", () => {
     expect(result).toMatchObject({ applied: true, cards: 1, openings: 1 });
     expect(await app.db.select().from(cards).where(eq(cards.accountId, accountId))).toEqual([]);
     expect(await app.db.select().from(packOpenings).where(eq(packOpenings.accountId, accountId))).toEqual([]);
+  });
+
+  it("cannot change or delete a staged page or change a fetch, and a fetch still takes its pages by cascade (0004)", async () => {
+    const [fetch] = await app.db
+      .insert(poolFetches)
+      .values({ startedAt: new Date() })
+      .returning({ id: poolFetches.id });
+    if (fetch === undefined) throw new Error("fetch insert returned no row");
+    await app.db
+      .insert(poolFetchPages)
+      .values({ fetchId: fetch.id, kind: "series", key: "", page: 1, body: {}, fetchedAt: new Date() });
+    await expect(app.db.update(poolFetchPages).set({ body: { forged: true } })).rejects.toMatchObject({
+      cause: { code: PERMISSION_DENIED },
+    });
+    await expect(app.db.delete(poolFetchPages)).rejects.toMatchObject({ cause: { code: PERMISSION_DENIED } });
+    await expect(app.db.update(poolFetches).set({ startedAt: new Date(0) })).rejects.toMatchObject({
+      cause: { code: PERMISSION_DENIED },
+    });
+    await app.db.delete(poolFetches).where(eq(poolFetches.id, fetch.id));
+    expect(await app.db.select().from(poolFetchPages).where(eq(poolFetchPages.fetchId, fetch.id))).toEqual(
+      [],
+    );
   });
 
   it("refuses a card slot outside the pack's five (0004)", async () => {
