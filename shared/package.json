@@ -9,6 +9,10 @@
       "types": "./dist/api.d.ts",
       "default": "./dist/api.js"
     },
+    "./economy": {
+      "types": "./dist/economy.d.ts",
+      "default": "./dist/economy.js"
+    },
     "./errors": {
       "types": "./dist/errors.d.ts",
       "default": "./dist/errors.js"

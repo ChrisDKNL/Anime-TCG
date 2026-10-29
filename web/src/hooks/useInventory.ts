@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import { RARITIES, type Rarity } from "@anime-tcg/shared/rarity";
+import { LEGACY_RARITIES as RARITIES, type LegacyRarity as Rarity } from "@anime-tcg/shared/rarity";
 import type { Card } from "../types";
 
 /**

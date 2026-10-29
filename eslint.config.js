@@ -30,6 +30,23 @@ export default tseslint.config(
     ],
     languageOptions: { globals: { ...globals.browser, ...globals.node } },
     rules: {
+      // collection-packs.md §5.4: the UI shows the odds and numbers the server returns, never constants of its own.
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@anime-tcg/shared/rarity",
+              importNames: ["ODDS_SCALE", "SLOT_ODDS", "SHARE_SCALE", "TIER_SHARE"],
+              message: "Show the odds GET /api/packs returns; the server's numbers are the only ones.",
+            },
+            {
+              name: "@anime-tcg/shared/economy",
+              message: "The game's numbers are the server's; show what the api returns.",
+            },
+          ],
+        },
+      ],
       // C9 (docs/05-security.md): the UI renders every string as text and never injects HTML, through
       // React or straight into the DOM. Flat config replaces a rule's options instead of merging them:
       // a later block that sets no-restricted-syntax for web files would silently drop every selector
