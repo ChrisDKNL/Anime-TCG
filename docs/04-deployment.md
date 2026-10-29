@@ -84,6 +84,8 @@ docker compose --env-file .env.acceptance.local --profile acceptance down --volu
 
 Acceptance is bound to loopback and cannot be changed through a variable. It is for the owner's own checks on the host, never for the LAN.
 
+**A database that ran the five-tier `0003`** (an acceptance or development volume that ran `feat/collection-packs` before its six-tier revision): migration `0003_collection_packs.sql` was rewritten in place before it reached `main`, with a newer timestamp, so the migrator tries to apply it again, fails on the types and tables the old one created, and the api exits. Recreate the volume with `down --volumes` and load the snapshot again; nothing in it is worth keeping. A database that never ran the branch, production included, just applies the new `0003`.
+
 ## Production
 
 ```bash
@@ -146,9 +148,9 @@ The two commands below (`docs/design/collection-packs.md` §7) work the same way
 
 ### Take the card pool snapshot
 
-The game deals cards only from a snapshot of AniList that the owner takes: every MAIN and SUPPORTING character of the 100 most popular anime, with fixed rarity tiers by favourites rank and the anime grouped into franchises. The api server never calls AniList; this command is the only thing in the system that does, and only when you run it. It runs in the api container, which reaches the internet through its `front` network (no compose change; `back` stays internal).
+The game deals cards only from a snapshot of AniList that the owner takes: the MAIN and SUPPORTING characters of the 100 most popular anime, the anime grouped into franchises, each franchise keeping its 60 most-favourited characters (`SNAPSHOT_CHARACTERS_PER_FRANCHISE`), and each character given one of six fixed rarity tiers by its favourites rank in that capped pool (Mythic the top 2 %, Legendary 6 %, Epic 12 %, Rare 20 %, Uncommon 25 %, Common 35 %). The cap is applied when a snapshot is built, never to the fetched pages or a snapshot file, so the same file always builds the same pool. The api server never calls AniList; this command is the only thing in the system that does, and only when you run it. It runs in the api container, which reaches the internet through its `front` network (no compose change; `back` stays internal).
 
-**A fresh install has no snapshot.** Until the first one is active, `GET /api/packs` answers `odds: null` and `POST /api/packs/open` answers 503 `pool_unavailable`; accounts keep their pack allowance (it accrues up to 3 and is not spent by a refused opening). Take the first snapshot after the first deploy:
+**A fresh install has no snapshot.** Until the first one is active, `GET /api/packs` answers `odds: null` and `packsUntilGuarantee: null`, and `POST /api/packs/open` answers 503 `pool_unavailable`; accounts keep their pack allowance (it accrues up to 3 and is not spent by a refused opening) and their pity and Enchanted counters do not move. Take the first snapshot after the first deploy:
 
 ```bash
 docker compose --env-file .env.production.local --profile production exec -T api-production \
@@ -157,13 +159,14 @@ docker compose --env-file .env.production.local --profile production exec -T api
   node api/dist/cli/snapshot-pool.js               # build from the pages the dry run fetched, and activate
 ```
 
-It prints one line, for example `Snapshot 2 active: 100 entries in 61 franchises, 2143 characters (22 mythic, 86 legendary, 214 epic, 535 rare, 1286 common); 7 skipped; 31 changed tier, 12 dropped, 55 added; 247 AniList requests.`; `--dry-run` prints the same counts and the franchise list instead and writes no snapshot. Progress goes to stderr as JSON log lines every 25 requests.
+It prints one line, for example `Snapshot 2 active: 100 entries in 77 franchises, 2983 characters (60 mythic, 179 legendary, 358 epic, 596 rare, 746 uncommon, 1044 common); 0 skipped; 2190 capped in 18 franchises; 31 changed tier, 12 dropped, 55 added; 291 AniList requests.`; `--dry-run` prints the same counts and the franchise list instead, each franchise with its kept characters and, when the cap trimmed it, how many it cut (`8. "ONE PIECE" (21): 1 entry, 60 characters (755 capped)`), and writes no snapshot. `capped` counts the characters the cap left out of the pool; they are not errors and are not in `skipped`. The `snapshot built` log line on stderr carries the same counts and `cappedByFranchise` (franchise id to characters cut). Progress goes to stderr as JSON log lines every 25 requests.
 
 - **Pace**: one request every 2.5 s (24 a minute, below AniList's degraded 30), never in parallel. Expect about 210 to 310 requests, 9 to 13 minutes. More than 1 000 needed, or more than 40 for the franchise relations, is refused (exit 1) rather than built from a partial answer.
 - **Resume**: every page is stored as it arrives. A 429 waits its `Retry-After` (60 s without one, 15 minutes at most); other failures back off 2, 4, 8, 16 and 32 s. After five retries of one request the command stops with exit code 2 (`Paused after 118 of about 240 requests; run again to resume.`); running it again continues from the first missing page. A fetch that began more than 24 hours ago is started over so a snapshot never mixes rankings from days apart; `--restart` starts over on demand. A dry run keeps the fetched pages, so the run after it sends no request.
-- **Refusals** (exit 1, nothing changes, the current snapshot stays): fewer than 90 valid entries or 500 valid characters, more than 6 000 characters, a tier with fewer than 5 characters, or AniList refusing a request with a 4xx other than 429.
-- **Updating later**: run the same command whenever you choose. Cards players already own keep the rarity they were granted with; names and images refresh from the new snapshot; tier changes apply to packs opened from the activation on; a character the new snapshot drops stays in collections and is never dealt again. A dry run takes a version number that the next real activation does not reuse.
-- **From a file** (an offline install, AniList down, or seeding a test stack): `--stdin` loads a snapshot file through the same validation and refusals and records it as source `file`; `--export` prints the current snapshot as such a file, so one install can seed another. Files are at most 64 MB.
+- **Refusals** (exit 1, nothing changes, the current snapshot stays): fewer than 90 valid entries, fewer than 500 or more than 6 000 characters in the capped pool, a tier with fewer than 5 characters, or AniList refusing a request with a 4xx other than 429. With at most 100 franchises of at most 60 the cap itself keeps the pool at 6 000 or fewer.
+- **Skipped items** are counted by reason in the output and the log (`character:image`, `character:name`, ...). An image URL is accepted only when it is already in the exact form the browser loads (https on `s4.anilist.co`, nothing the URL parser would rewrite); a name or native name with no visible character is skipped. AniList's own data passes both rules (the 2026-10-29 snapshot skipped nothing), so a jump in skips means AniList changed what it sends.
+- **Updating later**: run the same command whenever you choose. Cards players already own keep the rarity they were granted with; names, images and the rank shown on the card refresh from the new snapshot; tier changes apply to packs opened from the activation on; a character the new snapshot drops stays in collections and is never dealt again. Players' pity and Enchanted counters are not touched by an activation. A dry run takes a version number that the next real activation does not reuse.
+- **From a file** (an offline install, AniList down, or seeding a test stack): `--stdin` loads a snapshot file through the same validation, cap and refusals and records it as source `file`; `--export` prints the current snapshot as such a file (the capped pool, so loading it again builds the same pool), so one install can seed another. Files are at most 64 MB. The owner's real snapshot of 2026-10-29 (`snapshot-2026-10-29.json`, kept outside the repository) loads as 2 983 characters, 2 190 capped in 18 franchises; with `REAL_SNAPSHOT_FILE` set to its path, `npm run test:routes -w api` checks those figures (CI never has the file and skips that test).
 
 ```bash
 docker compose --env-file .env.production.local --profile production exec -T api-production \
@@ -178,12 +181,12 @@ There is no player-facing reset; the owner resets one account's collection:
 
 ```bash
 docker compose --env-file .env.production.local --profile production exec -T api-production \
-  node api/dist/cli/reset-collection.js <login>             # Would reset <login>: 214 cards, 43 openings.
+  node api/dist/cli/reset-collection.js <login>             # Would reset <login>: 214 cards, 43 openings; pity and Enchanted counters to zero.
 docker compose --env-file .env.production.local --profile production exec -T api-production \
-  node api/dist/cli/reset-collection.js <login> --confirm   # Collection reset for <login>: 214 cards and 43 openings removed; packs full.
+  node api/dist/cli/reset-collection.js <login> --confirm   # Collection reset for <login>: 214 cards and 43 openings removed; packs full; counters reset.
 ```
 
-Without `--confirm` it only counts. With it, the account's pack openings and their cards are deleted and its allowance is full again, in one transaction under the same account lock an opening takes, so an opening running at that moment is either removed whole or kept whole. The login, password, sessions and account id stay; a signed-in player sees the empty collection on the next fetch. The login is matched case-insensitively; an unknown one is exit code 1.
+Without `--confirm` it only counts. With it, the account's pack openings and their cards are deleted, its allowance is full again and both pack counters are 0 as on registration (the guarantee reads 300 free packs again and the next Enchanted pack is the 10th), in one transaction under the same account lock an opening takes, so an opening running at that moment is either removed whole or kept whole. The login, password, sessions and account id stay; a signed-in player sees the empty collection on the next fetch. The login is matched case-insensitively; an unknown one is exit code 1.
 
 ## Rollback
 
@@ -193,7 +196,7 @@ Re-run production with the previous tag and without a build:
 TAG=2026-10-21 docker compose --env-file .env.production.local --profile production up -d --no-build
 ```
 
-Compose recreates the containers from the older images. The database keeps its data; migrations are forward-only, so rolling back past a migration is safe only when that migration was additive (true of everything so far: `0000` creates the `sessions` table, `0001` grants the app role row access, `0002` creates `accounts` and `auth_throttle` and adds the foreign key from `sessions.account_id`, `0003` creates the snapshot pool, pack opening and card tables and adds the nullable `accounts.packs_anchor_at`; an older api image that still connects as `anime` is unaffected by the grants, one that never sets `account_id` is unaffected by the constraint, and one from before 1c never reads the new tables or column). Session rows survive a rollback, account, snapshot and card rows stay in their tables for the next deploy, and the browser-side collection the web app still keeps until the 1c web PR is unaffected.
+Compose recreates the containers from the older images. The database keeps its data; migrations are forward-only, so rolling back past a migration is safe only when that migration was additive (true of everything so far: `0000` creates the `sessions` table, `0001` grants the app role row access, `0002` creates `accounts` and `auth_throttle` and adds the foreign key from `sessions.account_id`, `0003` creates the snapshot pool, pack opening and card tables and adds the nullable `accounts.packs_anchor_at` and the two pack counters `packs_since_mythic` and `free_packs_opened`, both defaulting to 0; an older api image that still connects as `anime` is unaffected by the grants, one that never sets `account_id` is unaffected by the constraint, and one from before 1c never reads the new tables or column). Session rows survive a rollback, account, snapshot and card rows stay in their tables for the next deploy, and the browser-side collection the web app still keeps until the 1c web PR is unaffected.
 
 ## Headers
 
