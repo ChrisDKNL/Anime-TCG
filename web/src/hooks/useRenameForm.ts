@@ -31,7 +31,7 @@ export function useRenameForm({ login, onRenamed }: Options) {
       }
       switch (failure.code) {
         case "login_taken":
-          setField(withMessage(common.loginTaken(attempted)));
+          setField(withMessage({ template: common.loginTaken, login: attempted }));
           focusField("login");
           break;
         case "validation_failed":

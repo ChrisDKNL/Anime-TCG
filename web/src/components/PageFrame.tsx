@@ -1,11 +1,13 @@
 import type { ReactNode } from "react";
 import type { Notice } from "../hooks/useShell";
 import { banners } from "../lib/copy";
+import type { CopyText } from "../lib/loginText";
+import { LoginText } from "./account/LoginText";
 import { ALERT_BANNER, STATUS_BANNER } from "./account/styles";
 
 /** What the frame shows around the main area: the live region text and the app-level notice (accounts.md §4.8). */
 export interface Frame {
-  announcement: string;
+  announcement: CopyText;
   notice: Notice;
   retrying: boolean;
   onRetry: () => void;
@@ -47,7 +49,7 @@ export function PageFrame({ frame, headerRight, children }: Props) {
         </header>
 
         <p role="status" aria-live="polite" className="sr-only">
-          {frame.announcement}
+          <LoginText text={frame.announcement} />
         </p>
 
         {frame.notice === "unreachable" && (

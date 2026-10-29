@@ -9,6 +9,7 @@ import {
   useState,
   type RefObject,
 } from "react";
+import type { CopyText } from "../lib/loginText";
 import { SESSION_QUERY_KEY } from "./useAccountSession";
 
 /** Elements the spec moves focus to from somewhere else in the tree (accounts.md §7). */
@@ -19,7 +20,7 @@ export type Notice = "none" | "unreachable" | "sessionEnded";
 
 export interface ShellActions {
   /** Puts text in the single app-level live region (§7 "Live region"). */
-  announce: (text: string) => void;
+  announce: (text: CopyText) => void;
   /** Focuses the target now if it is mounted, or as soon as it mounts. */
   requestFocus: (target: FocusTarget) => void;
   /** Any `unauthenticated` answer: signed out, neutral banner, focus to the Account screen heading (§4.8). */
@@ -30,7 +31,7 @@ export interface ShellActions {
 }
 
 export interface ShellState {
-  announcement: string;
+  announcement: CopyText;
   notice: Notice;
 }
 
@@ -48,12 +49,12 @@ export type ShellContextValue = ShellActions & Registry;
  */
 export function useShell(): { state: ShellState; context: ShellContextValue } {
   const queryClient = useQueryClient();
-  const [announcement, setAnnouncement] = useState("");
+  const [announcement, setAnnouncement] = useState<CopyText>("");
   const [notice, setNotice] = useState<Notice>("none");
   const elements = useRef(new Map<FocusTarget, HTMLElement>());
   const pending = useRef<FocusTarget | null>(null);
 
-  const announce = useCallback((text: string) => setAnnouncement(text), []);
+  const announce = useCallback((text: CopyText) => setAnnouncement(text), []);
   const clearNotice = useCallback(() => setNotice("none"), []);
   const unreachable = useCallback(() => setNotice("unreachable"), []);
 

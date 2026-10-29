@@ -197,9 +197,9 @@ export function Game({ frame, account, pool }: Props) {
           setManageOpen(false);
           requestFocus("accountControl");
         }}
-        onRenamed={(renamed) => announce(manageCopy.loginChanged(renamed.login))}
+        onRenamed={(renamed) => announce({ template: manageCopy.loginChanged, login: renamed.login })}
         onDeleted={(login) => {
-          announce(manageCopy.deleted(login));
+          announce({ template: manageCopy.deleted, login });
           requestFocus("accountHeading");
         }}
       />

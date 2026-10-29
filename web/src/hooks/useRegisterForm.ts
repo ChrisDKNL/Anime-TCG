@@ -75,7 +75,7 @@ export function useRegisterForm({ onRegistered }: Options) {
       }
       switch (failure.code) {
         case "login_taken":
-          setFields({ ...ALL_OK, login: withMessage(common.loginTaken(login)) });
+          setFields({ ...ALL_OK, login: withMessage({ template: common.loginTaken, login }) });
           focusField("login");
           break;
         case "validation_failed":

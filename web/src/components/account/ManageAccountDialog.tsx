@@ -6,6 +6,8 @@ import { useRenameForm } from "../../hooks/useRenameForm";
 import { cardCount, common, manageCopy, metaLine } from "../../lib/copy";
 import { Avatar } from "./Avatar";
 import { FormBanner } from "./FormBanner";
+import type { CopyText } from "../../lib/loginText";
+import { LoginText } from "./LoginText";
 import { PasswordField, SubmitButton, TextField } from "./fields";
 import { BODY_TEXT, BUTTON, HINT_TEXT, PANEL_HEADING, SECTION_HEADING } from "./styles";
 
@@ -116,8 +118,8 @@ function Sections({ account, focusDeleteTrigger, onClose, onRenamed, onDeleteReq
       <div className="mt-4 flex items-center gap-3">
         <Avatar login={account.login} size="lg" />
         <div className="min-w-0">
-          <p className="truncate font-semibold text-zinc-100" title={account.login}>
-            {account.login}
+          <p className="truncate font-semibold text-zinc-100">
+            <bdi title={account.login}>{account.login}</bdi>
           </p>
           <p className={HINT_TEXT}>{metaLine(account.cards, account.createdAt)}</p>
         </div>
@@ -266,21 +268,27 @@ interface ConfirmDeleteProps {
 function ConfirmDelete({ account, onCancel, onDeleted }: ConfirmDeleteProps) {
   const form = useDeleteForm({ onDeleted: () => onDeleted(account.login) });
   const waiting = form.waitRemaining !== null;
-  const label =
+  const label: CopyText =
     form.waitRemaining !== null
       ? common.tryAgainIn(form.waitRemaining)
       : form.deleting
         ? manageCopy.deleting
-        : manageCopy.deleteButton(account.login);
+        : { template: manageCopy.deleteButton, login: account.login };
   return (
     <form noValidate onSubmit={(event) => void form.submit(event)} className="flex flex-col gap-4">
       <h2 id="manage-heading" className={`${PANEL_HEADING} break-words`}>
-        {manageCopy.deleteHeading(account.login)}
+        <LoginText text={{ template: manageCopy.deleteHeading, login: account.login }} />
       </h2>
       <p id="delete-body" className={`${BODY_TEXT} break-words`}>
-        {account.cards === 0
-          ? manageCopy.deleteBodyNoCards(account.login)
-          : manageCopy.deleteBody(account.login, cardCount(account.cards))}
+        <LoginText
+          text={{
+            template:
+              account.cards === 0
+                ? manageCopy.deleteBodyNoCards
+                : (login) => manageCopy.deleteBody(login, cardCount(account.cards)),
+            login: account.login,
+          }}
+        />
       </p>
       {form.unreachable && <FormBanner />}
       <PasswordField
@@ -300,7 +308,7 @@ function ConfirmDelete({ account, onCancel, onDeleted }: ConfirmDeleteProps) {
           disabled={form.password.length === 0}
           className={`${BUTTON.dangerSolid} w-full break-words sm:w-auto ${waiting ? "tabular-nums" : ""}`}
         >
-          {label}
+          <LoginText text={label} />
         </SubmitButton>
         <button
           type="button"

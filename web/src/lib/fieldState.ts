@@ -1,13 +1,15 @@
+import type { CopyText } from "./loginText";
+
 /** A form field's validity after a submit: invalid with a message under it, invalid without one (the login field on "incorrect"), or fine. */
 export interface FieldState {
   invalid: boolean;
-  message: string | null;
+  message: CopyText | null;
 }
 
 export const OK: FieldState = { invalid: false, message: null };
 export const FLAGGED: FieldState = { invalid: true, message: null };
 
-export function withMessage(message: string): FieldState {
+export function withMessage(message: CopyText): FieldState {
   return { invalid: true, message };
 }
 

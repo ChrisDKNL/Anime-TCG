@@ -27,9 +27,10 @@ export function SignedOut({ frame, loading, showLoading }: Props) {
   /** Register and Log in both land on the Booster tab with the pack button focused (§3.3.4, §3.4.4). */
   const signedIn = (via: SignedInVia, account: AccountPublic) => {
     clearNotice();
-    announce(
-      via === "registered" ? registerCopy.registered(account.login) : loginCopy.loggedIn(account.login),
-    );
+    announce({
+      template: via === "registered" ? registerCopy.registered : loginCopy.loggedIn,
+      login: account.login,
+    });
     requestFocus("packButton");
   };
 

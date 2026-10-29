@@ -53,9 +53,9 @@ export function AccountControl({ login, disabled, onManage, onLogout }: SignedIn
         className={CONTROL}
       >
         <Avatar login={login} size="sm" />
-        <span className="max-w-[8rem] truncate sm:max-w-[10rem]" title={login}>
+        <bdi className="max-w-[8rem] truncate sm:max-w-[10rem]" title={login}>
           {login}
-        </span>
+        </bdi>
         <svg
           aria-hidden="true"
           viewBox="0 0 20 20"

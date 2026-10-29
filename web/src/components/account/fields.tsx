@@ -1,6 +1,7 @@
 import { useState, type ComponentPropsWithoutRef, type Ref } from "react";
 import type { FieldState } from "../../lib/fieldState";
 import { common } from "../../lib/copy";
+import { LoginText } from "./LoginText";
 import { BUTTON, ERROR_TEXT, HINT_TEXT, INPUT, INPUT_BORDER } from "./styles";
 
 interface FieldShellProps {
@@ -57,7 +58,7 @@ function FieldShell({ id, label, labelHidden = false, hint, state, children }: F
       )}
       {state.message !== null && (
         <p id={errorId ?? undefined} role="alert" className={ERROR_TEXT}>
-          {state.message}
+          <LoginText text={state.message} />
         </p>
       )}
     </div>

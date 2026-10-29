@@ -93,7 +93,9 @@ describe("ManageAccountDialog", () => {
 
       await user.type(field, "c");
       await user.click(screen.getByRole("button", { name: "Save" }));
-      expect(await screen.findByRole("alert")).toHaveTextContent('The login "abc" is already taken.');
+      const taken = await screen.findByRole("alert");
+      expect(taken).toHaveTextContent('The login "abc" is already taken.');
+      expect(taken.querySelector("bdi")?.textContent).toBe("abc");
     });
   });
 

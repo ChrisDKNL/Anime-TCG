@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { LoginText } from "../components/account/LoginText";
 import { ShellContext, useShell } from "../hooks/useShell";
 
 /** The app shell's live region and context, enough for a form or dialog to run on its own in a test. */
@@ -7,7 +8,7 @@ export function TestShell({ children }: { children: ReactNode }) {
   return (
     <ShellContext value={context}>
       <p role="status" aria-live="polite" data-notice={state.notice}>
-        {state.announcement}
+        <LoginText text={state.announcement} />
       </p>
       {children}
     </ShellContext>
