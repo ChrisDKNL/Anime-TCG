@@ -29,6 +29,7 @@ import { mockAniList } from "./support/fake-api";
  *   without the year-long cache an existing asset keeps.
  * - /packs/ is served the shell too (the app replaces it with /packs); /apix is not the api.
  * - /healthz stays Caddy's own `ok`, whatever the fallback.
+ * - (tester) /assets without a slash is the shell like any page address, not a listing, with no-cache.
  * - In a browser through Caddy: a deep link signed out lands on /login with its guard line and survives a
  *   reload; an unknown path is the not-found page (§3.12 item 8). AniList is mocked.
  */
@@ -171,6 +172,24 @@ test.describe("deployed stack through Caddy", () => {
       // Only an existing, content-hashed file is cached for a year; a miss is asked for again.
       expect(headers["cache-control"] ?? "", path).not.toContain("immutable");
     }
+  });
+
+  test("/assets without a slash is the app shell like any other page address, never a listing or a long cache", async ({
+    request,
+  }) => {
+    // `/assets` is not under `/assets/`, so it is an address like `/no-such-page`: the shell, which the app
+    // shows as the not-found page (owner decision 4). It must not be a file_server directory listing.
+    const res = await request.get(`${STACK_URL}/assets`);
+    expect(res.status()).toBe(200);
+    const headers = res.headers();
+    expect(headers["content-type"]).toMatch(/^text\/html/);
+    expect(headers["content-security-policy"]).toBe(EXPECTED_CSP);
+    expect(headers["x-content-type-options"]).toBe("nosniff");
+    expect(headers["cache-control"]).toBe("no-cache");
+    expect(headers["server"]).toBeUndefined();
+    const html = await res.text();
+    expect(html).toContain("<title>Anime TCG</title>");
+    expect(html).not.toMatch(/<a href="[^"]*\.js"/);
   });
 
   test("an existing asset keeps its long cache policy", async ({ request }) => {

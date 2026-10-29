@@ -223,10 +223,23 @@ async function newSignedOutContext(browser: Browser): Promise<BrowserContext> {
   return browser.newContext({ baseURL: REAL_API_URL });
 }
 
+/**
+ * Opens /account from the menu. Already on /account the item is the current page's own link, which
+ * does nothing (navigation-and-landing.md §3.5 step 3): the menu closes onto its button, the address
+ * and the history stay as they are, and the heading does not take focus.
+ */
 async function openManage(page: Page, login: string) {
+  const alreadyThere = new URL(page.url()).pathname === "/account";
+  const entries = await page.evaluate(() => history.length);
   await controlFor(page, login).click();
   await page.getByRole("menuitem", { name: "Manage account" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Manage account" })).toBeFocused();
+  if (alreadyThere) {
+    await expect(controlFor(page, login)).toBeFocused();
+    expect(new URL(page.url()).pathname).toBe("/account");
+    expect(await page.evaluate(() => history.length)).toBe(entries);
+  } else {
+    await expect(page.getByRole("heading", { level: 1, name: "Manage account" })).toBeFocused();
+  }
 }
 
 async function logOut(page: Page, login: string) {
