@@ -99,9 +99,10 @@
 	# An error (the api down: 502; a method file_server does not serve: 405)
 	# skips the routes above, and with them the site headers, so it would go
 	# out without the CSP or nosniff and with `Server: Caddy`. Here it gets the
-	# same headers, its status and an empty body.
+	# same headers, its status and an empty body. The "" is that body: a lone
+	# placeholder would be taken as the body, not the status.
 	handle_errors {
 		import site_headers
-		respond {err.status_code}
+		respond "" {err.status_code}
 	}
 }

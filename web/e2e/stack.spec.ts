@@ -32,8 +32,8 @@ import { mockAniList } from "./support/fake-api";
  * - (tester) /assets without a slash is the shell like any page address, not a listing, with no-cache.
  * - In a browser through Caddy: a deep link signed out lands on /login with its guard line and survives a
  *   reload; an unknown path is the not-found page (§3.12 item 8). AniList is mocked.
- * - An error Caddy answers itself (a POST to a page: 405) keeps the site headers and sends no Server;
- *   with STACK_API_DOWN=1 against a stack whose api is stopped, so does the 502 for /api.
+ * - An error Caddy answers itself (a POST to a page: 405) keeps the site headers, sends no Server and
+ *   has an empty body; with STACK_API_DOWN=1 against a stack whose api is stopped, so does the 502 for /api.
  */
 
 const STACK_URL = process.env.STACK_URL?.replace(/\/$/, "");
@@ -236,32 +236,38 @@ test.describe("deployed stack through Caddy", () => {
     expect(viaApi.status()).toBe(404);
   });
 
-  test("an error Caddy answers itself keeps the site headers and sends no Server", async ({ request }) => {
+  test("an error Caddy answers itself keeps the site headers, sends no Server and has an empty body", async ({
+    request,
+  }) => {
     // file_server serves GET and HEAD only, so a POST to a page is Caddy's own 405: the same error
     // path a 502 from a stopped api takes (handle_errors in the Caddyfile).
     const res = await request.post(`${STACK_URL}/packs`, { headers: { Origin: STACK_URL ?? "" } });
-    expectErrorHeaders(res, 405);
+    await expectErrorResponse(res, 405);
     expect(res.headers()["allow"]).toBe("GET, HEAD");
   });
 });
 
 /**
  * Opt-in, against a stack whose api is stopped (`docker stop anime-tcg-api-acceptance`, then
- * `STACK_API_DOWN=1`): Caddy's 502 keeps the site headers and sends no Server.
+ * `STACK_API_DOWN=1`): Caddy's 502 keeps the site headers, sends no Server and has an empty body.
  */
 test.describe("deployed stack through Caddy, api stopped", () => {
   test.skip(!STACK_URL || process.env.STACK_API_DOWN !== "1", "set STACK_URL and STACK_API_DOWN=1");
 
-  test("a 502 for /api keeps the site headers and sends no Server or Via", async ({ request }) => {
+  test("a 502 for /api keeps the site headers, sends no Server or Via and has an empty body", async ({
+    request,
+  }) => {
     for (const path of ["/api/session", "/api"]) {
-      expectErrorHeaders(await request.get(`${STACK_URL}${path}`), 502);
+      await expectErrorResponse(await request.get(`${STACK_URL}${path}`), 502);
     }
   });
 });
 
-function expectErrorHeaders(res: APIResponse, status: number) {
+/** Caddy's own error: its status, the site headers, no Server or Via, and an empty body (handle_errors). */
+async function expectErrorResponse(res: APIResponse, status: number) {
   const url = res.url();
   expect(res.status(), url).toBe(status);
+  expect(await res.text(), url).toBe("");
   const headers = res.headers();
   expect(headers["content-security-policy"], url).toBe(EXPECTED_CSP);
   expect(headers["x-content-type-options"], url).toBe("nosniff");
