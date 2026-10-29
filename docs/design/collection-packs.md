@@ -1,8 +1,8 @@
 # Collection and packs (Sprint 1c, server side)
 
-Manager-written technical spec (non-UI). Moves the character pool, pack grants, pack openings, rarity rolls and the collection from the browser to the API, on the 1b accounts (`accounts-api.md`), as ADR 0008 §1–2 requires. The pool is an owner-managed snapshot of AniList, and each character has one of five fixed rarity tiers set by its popularity (ADR 0011 §4–5); the collection answer carries what the collection overview needs (`collection-overview.md` §3.8), with completion per franchise. §8 is the web change: it lists what the UI needs back and leaves the visual design to `ui-designer`. Security tier **T3** (pack grants and openings, RNG; the web PR also changes the CSP). `security-officer` review and an adversarial test pass are required before each PR opens; a T3 change never merges on the day it is opened unless the owner says so.
+Manager-written technical spec (non-UI). Moves the character pool, pack grants, pack openings, rarity rolls and the collection from the browser to the API, on the 1b accounts (`accounts-api.md`), as ADR 0008 §1–2 requires. The pool is an owner-managed snapshot of AniList, and each character has one of five fixed rarity tiers set by its popularity (ADR 0011 §6–7); the collection answer carries what the collection overview needs (`collection-overview.md` §3.8), with completion per franchise. §8 is the web change: it lists what the UI needs back and leaves the visual design to `ui-designer`. Security tier **T3** (pack grants and openings, RNG; the web PR also changes the CSP). `security-officer` review and an adversarial test pass are required before each PR opens; a T3 change never merges on the day it is opened unless the owner says so.
 
-Written 2026-10-29; revised twice the same day for the owner's decisions (§11).
+Written 2026-10-29; revised three times the same day for the owner's decisions (§11).
 
 ## 1. Goal
 
@@ -10,8 +10,8 @@ A signed-in player opens packs that the server grants: one accrues every interva
 
 ## 2. Out of scope
 
-- Karma, the ledger, the player market, the pack shop and recycle (roadmap item 2, `economy.md`). In 1c a card has no Karma value; these tables are what item 2 builds on.
-- **Masterwork cards and Relics.** The owner has reserved both (§11, round 2, decision 6): a Masterwork is a variant of a character's card with a higher rarity than the character's tier, and a Relic is a separate kind of collectible. **Neither is designed yet**: no rule, odds, source or value exists for them. 1c only reserves the column and the contract fields that let them arrive later without a breaking migration (§4.1, §6.2).
+- Karma, the ledger, the player market, the pack shop and recycling duplicates for Karma (roadmap item 2, `economy.md`). In 1c a card has no Karma value; these tables are what item 2 builds on.
+- **Masterwork cards and Relics.** The owner has reserved both (§11, round 2, decision 6): a Masterwork is a variant of a character's card with a higher rarity than the character's tier, and a Relic is a separate kind of collectible. Upgrades of any kind come only from the mini-games (items 5 and 6, round 3), never from packs or recycling. **Neither is designed yet**: no rule, odds, source or value exists for them. 1c only reserves the column and the contract fields that let them arrive later without a breaking migration (§4.1, §6.2).
 - Packs won as game prizes (items 5, 6). They will be a separate counter consumed by the same opening path (`economy.md` §8.11); the allowance here does not change for them.
 - The collection overview's screen (item 3, `collection-overview.md`). 1c serves the data it needs (§5.5); search, filters, sort and pages are the browser's.
 - Profile and its next-pack timer (item 4). In 1c the countdown lives on the pack control.
@@ -146,7 +146,7 @@ accounts (1b) gains
 
 Rules:
 
-- **The account row is the lock.** Every path with stakes (opening and reset here; listing, buying, the shop and recycle later) starts with `SELECT ... FOR UPDATE` on the acting account's `accounts` row, so two requests of one account run one after the other and all of them share one lock order. The allowance lives on that row for the same reason: the row that is locked is the row that changes.
+- **The account row is the lock.** Every path with stakes (opening and reset here; listing, buying, the shop and recycling later) starts with `SELECT ... FOR UPDATE` on the acting account's `accounts` row, so two requests of one account run one after the other and all of them share one lock order. The allowance lives on that row for the same reason: the row that is locked is the row that changes.
 - **A card is a row**, duplicates included, never a counter. Each card names the opening it came from and the snapshot that granted it, so every pull can be audited against the tier table that was in force, and item 2 can move or remove exactly one copy.
 - **A card's rarity is the card's, frozen.** `cards.rarity` is copied from the snapshot's tier at the grant, and no snapshot update writes it (§5.1.8). It is a property of the card, not of the character, which is also what lets a later Masterwork carry a rarity above its character's tier.
 - **Reserved, not built**: `card_variant` and `item_kind` have one value each today. A Masterwork arrives as a new `card_variant` value (an additive enum change, existing rows keep `standard`); a Relic arrives as its own table and a new `item_kind` value, beside `cards`, so nothing in this model has to be rewritten for either.
@@ -166,7 +166,7 @@ Every number this spec uses, in one place. The game numbers live in `shared/src/
 | `PACK_INTERVAL_MINUTES`       | 10                                                                     | one pack accrues per interval                                                        |
 | `PACK_CAP`                    | 3                                                                      | packs stored at most; a new account starts with this many                            |
 | `ODDS_SCALE`                  | 1 000 000                                                              | per-slot odds are integers out of this                                               |
-| `SLOT_ODDS`                   | common 525 097, rare 432 233, epic 37 977, legendary 4 032, mythic 661 | the tier each slot rolls (§5.4); sums to `ODDS_SCALE`                                |
+| `SLOT_ODDS`                   | common 682 110, rare 275 220, epic 37 977, legendary 4 032, mythic 661 | the tier each slot rolls (§5.4); sums to `ODDS_SCALE`                                |
 | `SHARE_SCALE`                 | 10 000                                                                 | tier shares are integers out of this                                                 |
 | `TIER_SHARE`                  | mythic 100, legendary 400, epic 1 000, rare 2 500, common 6 000        | 1 %, 4 %, 10 %, 25 %, 60 % of the snapshot's characters, by favourites rank (§5.1.4) |
 | `SNAPSHOT_SERIES`             | 100                                                                    | anime entries in a snapshot: AniList's top by `POPULARITY_DESC`                      |
@@ -225,7 +225,7 @@ The owner's split (round 2, decision 2): Mythic 1 %, Legendary 4 %, Epic 10 %, R
 - **Rank**: sort the snapshot's characters by `favourites` descending; **ties are broken by AniList character id ascending**, so equal favourites never make the split depend on query order, and a character with equal favourites and the lower id lands in the higher tier at a boundary. `favourites_rank` is the position, 1 first.
 - **Counts**: with `N` characters, the tier boundaries are cumulative, `b(k) = round(N × cumulative share / 10 000)` with half-up integer rounding: Mythic is ranks 1 to `b(100)`, Legendary up to `b(500)`, Epic up to `b(1 500)`, Rare up to `b(4 000)`, Common the rest. Cumulative boundaries make the five counts sum to `N` exactly. At N = 500: 5 / 20 / 50 / 125 / 300; at N = 2 000: 20 / 80 / 200 / 500 / 1 200; at N = 6 000: 60 / 240 / 600 / 1 500 / 3 600.
 - **Minimum per tier**: every tier must hold at least `PACK_SIZE` (5) characters, so a pack whose five slots all roll one tier still draws five different characters. Mythic, the smallest share, reaches 5 at N = 500, which is why `SNAPSHOT_CHARACTERS_MIN` is 500; a snapshot with a tier below 5 is refused (§5.1.7).
-- **What one character's chance per card works out to**, with `SLOT_ODDS` (§5.4): `SLOT_ODDS[tier] / ODDS_SCALE / tier size`, which is `0.875/N` for a given Common, `1.73/N` for a given Rare, `0.380/N` for a given Epic, `0.101/N` for a given Legendary and `0.066/N` for a given Mythic. Above Rare, each tier's characters are individually rarer than the tier below; a given Rare character is about twice as likely per card as a given Common one, because the Rare tier is a quarter of the pool and fills 43 % of the slots (open question 1).
+- **What one character's chance per card works out to**, with `SLOT_ODDS` (§5.4): `SLOT_ODDS[tier] / ODDS_SCALE / tier size`, which is `1.137/N` for a given Common, `1.101/N` for a given Rare, `0.380/N` for a given Epic, `0.101/N` for a given Legendary and `0.066/N` for a given Mythic: **each tier's characters are individually rarer than the tier below**, Common < Rare < Epic < Legendary < Mythic. The Rare odds were lowered for exactly this (round 3, decision 1): with the 60 / 25 / 10 / 4 / 1 split, a given Rare stays rarer than a given Common only while Rare fills less than 28.16 % of the slots, which is at least one Rare in at most 80.86 % of packs; the owner's 80 % is inside that bound. Common and Rare characters are close (a given Rare about 3 % rarer than a given Common); the upper tiers are far apart.
 
 #### 5.1.5 Taking a snapshot from AniList
 
@@ -318,20 +318,20 @@ Steps 5 to 7 are one domain function, `dealPack(tx, account, rng, pool)`, whose 
 ### 5.4 RNG, tiers and odds
 
 - **RNG**: `crypto.randomInt` only (C10), behind an injectable `Rng` (`(min, max) => integer`) so unit tests can script outcomes. `Math.random` already fails lint in `api/`.
-- **The owner's odds are per pack** (round 2, decision 3): the chance that a 5-card pack contains at least one card of the tier is Rare 94.1 %, Epic 17.6 %, Legendary 2 %, Mythic 0.33 %; Common fills the rest of each slot.
-- **Per slot**: slots roll independently, so a per-pack figure `P` corresponds to a per-slot probability `p = 1 − (1 − P)^(1/5)`: Rare 43.2233 %, Epic 3.7977 %, Legendary 0.40324 %, Mythic 0.066087 %. As integers out of `ODDS_SCALE` = 1 000 000, each upper tier rounded to the nearest unit and Common the remainder, so the five sum to exactly 1 000 000:
+- **The owner's odds are per pack** (round 2, decision 3, with the Rare figure lowered in round 3, decision 1): the chance that a 5-card pack contains at least one card of the tier is Rare 80 %, Epic 17.6 %, Legendary 2 %, Mythic 0.33 %; Common fills the rest of each slot.
+- **Per slot**: slots roll independently, so a per-pack figure `P` corresponds to a per-slot probability `p = 1 − (1 − P)^(1/5)`: Rare 27.5220 % (`1 − 0.2^(1/5)`), Epic 3.7977 %, Legendary 0.40324 %, Mythic 0.066087 %. As integers out of `ODDS_SCALE` = 1 000 000, each upper tier rounded to the nearest unit and Common the remainder, so the five sum to exactly 1 000 000:
 
 | Tier      | Per slot (out of 1 000 000) | Per slot  | At least one per pack (published) | Expected per pack |
 | --------- | --------------------------- | --------- | --------------------------------- | ----------------- |
-| Common    | 525 097                     | 52.5097 % | 97.58 %                           | 2.625             |
-| Rare      | 432 233                     | 43.2233 % | 94.10 %                           | 2.161             |
+| Common    | 682 110                     | 68.2110 % | 99.68 %                           | 3.411             |
+| Rare      | 275 220                     | 27.5220 % | 80.00 %                           | 1.376             |
 | Epic      | 37 977                      | 3.7977 %  | 17.60 %                           | 0.190             |
 | Legendary | 4 032                       | 0.4032 %  | 2.00 %                            | 0.0202            |
 | Mythic    | 661                         | 0.0661 %  | 0.33 %                            | 0.0033            |
 
-The published per-pack figures are recomputed from the integers (`1 − (1 − n / 1 000 000)^5`, exactly in `BigInt` and rounded to parts per million: Rare 941 000, Epic 176 000, Legendary 19 998, Mythic 3 301), and they round to the owner's numbers. In plain words: about one Legendary in 50 packs, one Mythic in 300.
+The published per-pack figures are recomputed from the integers (`1 − (1 − n / 1 000 000)^5`, exactly in `BigInt` and rounded to parts per million: Rare 800 000, Epic 176 000, Legendary 19 998, Mythic 3 301), and they round to the owner's numbers. In plain words: about one Legendary in 50 packs, one Mythic in 300.
 
-- **Tier roll, per slot**: `r = randomInt(0, ODDS_SCALE)`; Mythic when `r < 661`, Legendary when `r < 661 + 4 032`, Epic when `r < 4 693 + 37 977`, Rare when `r < 42 670 + 432 233`, otherwise Common. Integers throughout, so the odds are exact.
+- **Tier roll, per slot**: `r = randomInt(0, ODDS_SCALE)`; Mythic when `r < 661`, Legendary when `r < 661 + 4 032`, Epic when `r < 4 693 + 37 977`, Rare when `r < 42 670 + 275 220`, otherwise Common. Integers throughout, so the odds are exact.
 - **Character pick**: uniform among the tier's characters in the snapshot (ordered by `character_id`) that this pack has not drawn yet: one partial Fisher–Yates shuffle per tier, `randomInt(i, n)` per draw. No pack repeats a character; every tier holds at least `PACK_SIZE` characters (§5.1.4), so a pick never runs out.
 - **Completion horizon**, for the record, at a pool of 2 000 (20 Mythic, 80 Legendary): collecting every Mythic takes about 20 × H(20) ≈ 72 Mythic cards, which is about 22 000 packs; every Legendary about 80 × H(80) ≈ 400 Legendary cards, about 20 000 packs. At the 144-pack daily ceiling that is about 150 days; at a casual nine packs a day, years. The market and recycling (`economy.md`) are how players close the gap.
 - **One source of truth**: `shared/src/rarity.ts` becomes integer (`RARITIES` with five values in rank order, `RARITY_LABEL` with `Common`, `Rare`, `Epic`, `Legendary`, `Mythic`, `ODDS_SCALE`, `SLOT_ODDS`, `SHARE_SCALE`, `TIER_SHARE`). The float `BASE_WEIGHTS` and `POPULARITY_INFLUENCE` stay until PR 2 deletes their last users; nothing on the server reads them. The UI shows the odds the server returns, never constants of its own: the `web/` block of the ESLint config forbids importing the number constants from `@anime-tcg/shared/rarity` and anything from `@anime-tcg/shared/economy` (`no-restricted-imports` with `importNames`).
@@ -476,7 +476,7 @@ Without `--confirm` it only prints what a reset would remove (`Would reset <logi
 **Unit** (`api/src/**/*.test.ts`, `shared/`):
 
 - Allowance: a new account has `C`; opening from full leaves `C − 1` with `nextPackInSeconds` of one interval; `C` openings back to back leave 0; one interval later 1; a week later `C`; opening while the timer runs keeps the countdown; a clock set back an hour gives 0, never negative, and `nextPackInSeconds` ≥ 1; set forward a year gives `C`; a fraction of a second rounds up.
-- Odds, exhaustively: every `r` from 0 to `ODDS_SCALE − 1` (one million values) through the tier function yields exactly `SLOT_ODDS`'s counts; `SLOT_ODDS` sums to `ODDS_SCALE`; the per-slot integers are the rounded `1 − (1 − P)^(1/5)` of the owner's per-pack figures; the published `perPack` figures, computed in `BigInt`, are 941 000, 176 000, 19 998 and 3 301 parts per million and round to 94.1 %, 17.6 %, 2 % and 0.33 %.
+- Odds, exhaustively: every `r` from 0 to `ODDS_SCALE − 1` (one million values) through the tier function yields exactly `SLOT_ODDS`'s counts; `SLOT_ODDS` sums to `ODDS_SCALE`; the per-slot integers are the rounded `1 − (1 − P)^(1/5)` of the owner's per-pack figures; the published `perPack` figures, computed in `BigInt`, are 800 000, 176 000, 19 998 and 3 301 parts per million and round to 80 %, 17.6 %, 2 % and 0.33 %; the per-character rates fall strictly from Common to Mythic for the fixture's split and for N = 500, 2 000 and 6 000.
 - Tiering: ranks by favourites with ties by id ascending, and a tie straddling a boundary puts the lower id in the higher tier; cumulative rounding at N = 500, 501, 2 000 and 6 000 sums to N; every tier ≥ `PACK_SIZE` at `SNAPSHOT_CHARACTERS_MIN`, and N = 499 is refused; equal favourites everywhere still give a deterministic split.
 - Franchises: SEQUEL, PREQUEL, SIDE_STORY and PARENT merge, in either direction; SPIN_OFF, ALTERNATIVE, CHARACTER, SUMMARY, COMPILATION, CONTAINS, ADAPTATION, SOURCE and OTHER do not; two top-100 entries joined through one and through two entries outside the top 100 merge, through three do not; a relation to a non-anime node is ignored; the franchise id is the smallest member id and its title that entry's; an entry with no merging relation is a franchise of one.
 - Memberships: a character in three entries of one franchise counts once in it; a character in two franchises counts once in each; a BACKGROUND appearance adds nothing; pool completion counts each character once.
@@ -543,24 +543,27 @@ Round 1 decisions 1, 5, 6 and 7 (recycle, the name Karma, the player market, the
 
 **Round 2** (answers to this spec's second open questions):
 
-| #   | Decision (Owner, 2026-10-29)                                                                                                                                             | Where          |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------- |
-| 1   | Five tiers: Common, Rare, Epic, Legendary, Mythic (the name "Mythic" is kept).                                                                                           | §4.1, §5.4     |
-| 2   | Tier split by AniList favourites rank: Mythic 1 %, Legendary 4 %, Epic 10 %, Rare 25 %, Common 60 % of the pool.                                                         | §5.1.4         |
-| 3   | Pack odds per pack, as the chance a 5-card pack contains at least one: Rare 94.1 %, Epic 17.6 %, Legendary 2 %, Mythic 0.33 %; Common fills the rest of each slot.       | §5.4           |
-| 4   | Series completion groups AniList entries into franchises via AniList relations (sequels, prequels, side stories); a character counts once per franchise.                 | §5.1.2, §5.1.3 |
-| 5   | After a snapshot update owned cards keep their granted rarity; names and images refresh from the newest snapshot.                                                        | §5.1.8         |
-| 6   | Reserve, do not build: "Masterwork" versions of cards (a variant of a character's card with increased rarity) and "Relics" (a separate collectible kind, details later). | §2, §4.1, §6.2 |
+| #   | Decision (Owner, 2026-10-29)                                                                                                                                                                           | Where          |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------- |
+| 1   | Five tiers: Common, Rare, Epic, Legendary, Mythic (the name "Mythic" is kept).                                                                                                                         | §4.1, §5.4     |
+| 2   | Tier split by AniList favourites rank: Mythic 1 %, Legendary 4 %, Epic 10 %, Rare 25 %, Common 60 % of the pool.                                                                                       | §5.1.4         |
+| 3   | Pack odds per pack, as the chance a 5-card pack contains at least one: Rare 94.1 % (superseded by round 3, decision 1), Epic 17.6 %, Legendary 2 %, Mythic 0.33 %; Common fills the rest of each slot. | §5.4           |
+| 4   | Series completion groups AniList entries into franchises via AniList relations (sequels, prequels, side stories); a character counts once per franchise.                                               | §5.1.2, §5.1.3 |
+| 5   | After a snapshot update owned cards keep their granted rarity; names and images refresh from the newest snapshot.                                                                                      | §5.1.8         |
+| 6   | Reserve, do not build: "Masterwork" versions of cards (a variant of a character's card with increased rarity) and "Relics" (a separate collectible kind, details later).                               | §2, §4.1, §6.2 |
 
 These answer and close the second round's three questions (tier split, odds per slot, what counts as one anime).
 
+**Round 3** (answer to this spec's last open question):
+
+| #   | Decision (Owner, 2026-10-29)                                                                                                                                                                                                                                                                               | Where              |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| 1   | Rare versus Common: lower the Rare odds so a given Rare character is rarer than a given Common one: Rare at least once per pack about 80 % (per slot about 27.5 %); Epic 17.6 %, Legendary 2 %, Mythic 0.33 % per pack unchanged; Common fills the rest. This supersedes round 2 decision 3's Rare 94.1 %. | §4.2, §5.1.4, §5.4 |
+
+The owner's economy answers of round 3 (no tier recycling, recycling duplicates for Karma, upgrades only through the mini-games) are `economy.md`'s; for 1c they change only the out-of-scope note on Masterworks (§2).
+
 ## 12. Open questions
 
-For the owner, none blocking; a choice of three, and this spec builds the recommended one.
+None. Every question of the three rounds is answered (§11).
 
-1. **A given Rare character turns up about twice as often as a given Common one** (§5.1.4). With the Rare tier a quarter of the pool and 43 % of the slots, each Rare character is drawn at `1.73/N` per card against `0.875/N` for each Common one, so Common characters are the slowest of the two lower tiers to complete. Above Rare the order is as expected.
-   - **A (recommended)**: accept it. Both tiers fill within the first weeks of play, and completion is decided by the Epic, Legendary and Mythic tiers, which keep their order.
-   - B: shift the split to Rare 45 %, Common 40 % (Epic, Legendary, Mythic unchanged), which with the same pack odds makes each Rare character about 1.4 times rarer than each Common one (`0.96/N` against `1.31/N`), but puts nearly half the pool in the Rare tier.
-   - C: keep the split and lower the Rare odds until a Rare character is rarer than a Common one: Rare at least once in at most about 80 % of packs (about 28 % per slot) instead of 94.1 %.
-
-ADRs: ADR 0011 records round 1's decisions 3 and 8 and round 2's tiers, Mythic and reserved Masterwork and Relics, together with the economy's reversals of ADR 0004. ADR 0009 says `shared/` holds the constants "the UI displays"; they still live there, and the UI now displays the server's copy of them.
+ADRs: ADR 0011 records round 1's decisions 3 and 8, round 2's tiers, Mythic and reserved Masterwork and Relics, and round 3's rule that upgrades come only from the mini-games, together with the economy's reversals of ADR 0004. ADR 0009 says `shared/` holds the constants "the UI displays"; they still live there, and the UI now displays the server's copy of them.
