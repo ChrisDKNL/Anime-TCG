@@ -1,8 +1,10 @@
 # Collection overview
 
-Roadmap item 3 · builds on 1c (server-side collection, `docs/design/collection-packs.md`) and item 2 (economy, `docs/design/economy.md`) · shows [ADR 0004](../adr/0004-economy-ground-rules.md) §4 as amended by [ADR 0011](../adr/0011-economy-revised-karma-market-snapshot.md) §3 (market, recycle) under [ADR 0008](../adr/0008-server-authoritative.md) · written 2026-10-29, revised the same day for the owner's decisions
+Roadmap item 3 · builds on 1c (server-side collection, `docs/design/collection-packs.md`, shipped in #28), the page addresses (`docs/design/navigation-and-landing.md`, shipped in #30) and item 2 (economy, `docs/design/economy.md`) · shows [ADR 0004](../adr/0004-economy-ground-rules.md) §4 as amended by [ADR 0011](../adr/0011-economy-revised-karma-market-snapshot.md) §3 (market, recycle) under [ADR 0008](../adr/0008-server-authoritative.md) · written 2026-10-29, revised the same day for the owner's decisions
 
-> **Revised 2026-10-29** to the owner's decisions (ADR 0011 and the owner's later answers the same day) and the server specs as revised for them (`collection-packs.md` at 0ce69bd, `economy.md` at 9a3e059): six rarity tiers (Common, Uncommon, Rare, Epic, Legendary, Mythic), fixed per character by popularity rank and drawn as the owner's frames with one to six stars (`docs/design/card-and-rarity.md`); one entry per character; completion per series, where a series is an AniList **franchise**, and for the whole pool; "Sell" becomes "List on the market", for every card including the last copy; **Recycle for Karma** turns duplicates into Karma at a set value per tier, and there is no recycling into a higher tier; the currency is Karma. The Karma balance in the header, the Shop tab and the Market tab are a companion spec, `docs/design/market-and-shop.md`, which says why it is separate. `economy.md` is being recomputed for the owner's final answers while this is written, so its amounts appear as placeholders (`<ref Epic>`, `<recycle Epic>`, `<min Epic>`, `<max Epic>`), and §3.9 lists the mismatches with it as it stands.
+> **Revised 2026-10-29** to the owner's decisions (ADR 0011 and the owner's later answers the same day) and the server specs as revised for them (`collection-packs.md` at 0ce69bd, `economy.md` at 9a3e059): six rarity tiers (Common, Uncommon, Rare, Epic, Legendary, Mythic), fixed per character by popularity rank and drawn as the owner's frames with one to six stars (`docs/design/card-and-rarity.md`); one entry per character; completion per series, where a series is an AniList **franchise**, and for the whole pool; "Sell" becomes "List on the market", for every card including the last copy; **Recycle for Karma** turns duplicates into Karma at a set value per tier, and there is no recycling into a higher tier; the currency is Karma. The Karma balance in the header, the Shop page and the Market page are a companion spec, `docs/design/market-and-shop.md`, which says why it is separate. `economy.md`'s amounts are still five-tier, so they appear as placeholders (`<ref Epic>`, `<recycle Epic>`, `<min Epic>`, `<max Epic>`), and §3.9 says what is settled with it and what is not.
+>
+> **Reconciled 2026-10-29** with what is on `main`: 1c's server as shipped in #28 (six tiers, the rank and the pool size in the contract), the page addresses of `navigation-and-landing.md` as shipped in #30 (its §10: the Collection tab is now the `/collection` page, reached by a header link, with its own title and a visible `h1` that takes focus), and `economy.md` as landed in 0562e10, which settles the five mismatches E1 to E5 of the previous revision (§3.9).
 
 ## 1. Goal
 
@@ -12,19 +14,19 @@ A signed-in player sees their whole collection on one screen and can find any ca
 
 - The API's shape beyond what §3.8 names: paths and fields are `collection-packs.md` §6 and `economy.md` §11; this spec only maps them to the screen.
 - Pack opening and the reveal grid (`collection-packs.md` §8 and the 1c web PR's UI spec). This view only learns that the collection changed.
-- The Karma balance in the header, the Shop tab, the market's browse and buy screens and My listings (`market-and-shop.md`). This view links to the market from a card (§3.5) and reads the balance the header holds.
+- The Karma balance in the header, the Shop page (`/shop`), the Market page's browse and buy screens and My listings (`/market`, `market-and-shop.md`). This view links to the market from a card (§3.5) and reads the balance the header holds.
 - Listing or recycling more than one entry per confirmation ("list all duplicates"). One listing is one card (`economy.md` §8.3); a bulk action is a later spec.
 - **Upgrading a card to a higher tier.** There is no tier recycling. Upgrades happen only in the mini-games (items 5 and 6, for example an ante of five Legendaries that can win a Mythic) and are specced with them.
 - Changing a listing's price. There is no route for it; a player cancels in My listings and lists again.
 - Card-for-card trade (roadmap 7); profile, showcase and favourite card (roadmap 4); collection download (roadmap 9).
 - Showing characters the player does not own (empty slots, the full pool). Completion is shown as numbers and bars only, including `0 of 12` for a series with no card yet.
 - Undo for a recycle or a sale. The confirmation says there is none. A listing can be cancelled until it sells.
-- Remembering search, filters, sort, view or page across reloads. Nothing is written to browser storage; they reset on reload and on log out, and survive switching tabs.
+- Remembering search, filters, sort, view or page across reloads, or keeping them in the address. Nothing is written to browser storage, and the app never reads or writes a query string or hash (`navigation-and-landing.md` §3.1 rule 2, owner decision 2 there). They reset on reload and on log out, and survive moving between pages, because they live in the signed-in layout (`navigation-and-landing.md` §3.10).
 - Arrow-key navigation inside the grid (§7 says why Tab is enough at 60 per page).
 - Previous/next navigation between cards inside the dialog.
 - **Collection reset.** It is an owner-only command (`collection-packs.md` §5.6, `reset-collection`), with no route and no player button anywhere. The proof of concept's `Reset` button and its copy go in the 1c web PR (`collection-packs.md` §8).
 - **The pack reveal's glowing frames.** They are replaced in the 1c web PR together with the card and rarity tokens of `card-and-rarity.md` §10 (`collection-packs.md` §8), not by this feature.
-- **Masterwork cards and Relics** (owner, 2026-10-29: reserved for later). A Masterwork is a variant of a card with increased rarity; a Relic is a separate kind of collectible. Neither is designed here and nothing in this view renders them. Room is left so that adding them later changes no layout: the card's stars line keeps room after the stars for a short variant marker (`card-and-rarity.md` §3.1); the dialog's facts list can take a further row; the Collection tab's view switch is a group that can take a further button, such as a Relics view (§5.2); and an entry, keyed today by character and granted rarity, can take a variant as a third key.
+- **Masterwork cards and Relics** (owner, 2026-10-29: reserved for later). A Masterwork is a variant of a card with increased rarity; a Relic is a separate kind of collectible. Neither is designed here and nothing in this view renders them. Room is left so that adding them later changes no layout: the card's stars line keeps room after the stars for a short variant marker (`card-and-rarity.md` §3.1); the dialog's facts list can take a further row; the Collection page's view switch is a group that can take a further button, such as a Relics view (§5.2); and an entry, keyed today by character and granted rarity, can take a variant as a third key.
 - Replacing the app's visual system. This view is drawn in the target style; what the rest of the app must change is listed in §10, not done here.
 
 ## 3. Flow
@@ -32,7 +34,7 @@ A signed-in player sees their whole collection on one screen and can find any ca
 Terms used below and in the copy.
 
 - A **card** is one owned copy.
-- An **entry** is every copy of one character at one **granted rarity** (the rarity the card was dealt with, which never changes); the grid shows one tile per entry. Each character has one **tier** per snapshot, so a collection normally holds **one entry per character**. A second entry for the same character appears only after a snapshot update moved that character's tier and the player then obtained it at the new tier (`collection-packs.md` §5.1.7). The entry's `rarity` is its granted rarity; `character.tier` is what packs deal the character as now (`null` when the character is not in the current snapshot). After a snapshot update, owned cards keep their granted rarity, while names and images follow the new snapshot.
+- An **entry** is every copy of one character at one **granted rarity** (the rarity the card was dealt with, which never changes); the grid shows one tile per entry. Each character has one **tier** per snapshot, so a collection normally holds **one entry per character**. A second entry for the same character appears only after a snapshot update moved that character's tier and the player then obtained it at the new tier (`collection-packs.md` §5.1.8). The entry's `rarity` is its granted rarity; `character.tier` is what packs deal the character as now (`null` when the character is not in the current snapshot). After a snapshot update, owned cards keep their granted rarity, while names and images follow the new snapshot.
 - The **tiers**, lowest to highest: Common, Uncommon, Rare, Epic, Legendary, Mythic, shown as one to six stars ("Owner, 2026-10-29"; `card-and-rarity.md` §5).
 - A **duplicate** is any copy beyond the first in an entry. Only duplicates can be recycled, never an entry's last copy; how many an entry offers is `recyclable` (§3.6, §3.9 E3).
 - A card is **listed** while it is on the market and **available** otherwise. A listed card is still owned: it counts in the copies, the totals and completion until it sells (`economy.md` §7). The server sends `listed` and `available` per entry.
@@ -40,9 +42,11 @@ Terms used below and in the copy.
 - A **series** in this spec's copy is a **franchise**: the AniList entries of the top 100 grouped through their relations (seasons, sequels and films of one story together). The player sees "series"; the contract says franchise (`collection-packs.md` §5.1.2, §6.2). A character can belong to more than one franchise (`franchiseIds`, primary first).
 - A **character** counts once for pool completion, whatever its entries, and **once per franchise** for series completion, however many of the franchise's entries it appears in.
 
-### 3.1 Entering the Collection tab
+### 3.1 Entering the Collection page (`/collection`)
 
-1. The view asks the server for the collection (`GET /api/collection`) and refetches the wallet (`GET /api/wallet`, `market-and-shop.md` §3.1). The tab reads `Collection (<N>)` with N = `totals.cards`, or `AccountPublic.cards` before the first collection answer.
+The page is `/collection` (`navigation-and-landing.md` §3.1), reached by the `Collection (<N>)` link in the header, by its address, or by Back and Forward. Arriving by a link, Back or Forward sets the title `Collection · Anime TCG` and then moves focus to the page's `h1` `Collection`, which is rendered from the start, in the loading, empty and error states too; a load or reload sets the title and moves no focus (`navigation-and-landing.md` §3.6). A signed-out visitor is sent to `/login` with `/collection` as the return path (`navigation-and-landing.md` §3.3). Activating the header link while on the page does nothing.
+
+1. The view asks the server for the collection (`GET /api/collection`) and, from `feat/economy-ui` on, refetches the wallet (`GET /api/wallet`, `market-and-shop.md` §3.1). The header link reads `Collection (<N>)` with N = `totals.cards`, or `AccountPublic.cards` before the first collection answer.
 2. Branch on what happens:
    - **First load, answered within 300 ms**: nothing renders in the main area until the answer (no skeleton flash).
    - **First load, slower than 300 ms**: the loading skeleton (§4.1) until the answer.
@@ -52,18 +56,18 @@ Terms used below and in the copy.
    - **Failure, nothing held**: the error state with `Try again`.
    - **Failure, data held**: the held data stays, marked with the stale note; listing and recycling wait.
    - **Wallet failure, collection loaded**: the grid and the Series view work; in the card dialog, listing and recycling wait (§4.5 stale) until a wallet answer arrives.
-   - **`unauthenticated`**: `accounts.md` §4.8 (session ended).
-3. The collection is fetched when the tab is shown and after every answer to a listing or a recycle (§3.5, §3.6). A pack opening, a shop pack, a market purchase and a cancel in My listings mark it stale, so the next visit refetches. It is never polled. A sale of one of the player's listings to another player is not pushed; it shows up at the next fetch.
+   - **`unauthenticated`**: `accounts.md` §4.8 (session ended: the page is replaced by `/login`, with `/collection` as the return path).
+3. The collection is fetched when the page is shown and after every answer to a listing or a recycle (§3.5, §3.6). A pack opening, a shop pack, a market purchase and a cancel in My listings mark it stale, so the next visit refetches. It is never polled. A sale of one of the player's listings to another player is not pushed; it shows up at the next fetch.
 
 ### 3.2 Completion, totals and the Series view
 
-1. **Pool completion**: `completion.pool`, the distinct characters of the current snapshot the player owns at least one card of, at any rarity, over the snapshot's character count: `412 of 2,143 characters`. A percentage, rounded down so `100%` appears only when it is true, and a bar sit beside it. Both figures are the server's.
+1. **Pool completion**: `completion.pool`, the distinct characters of the current snapshot the player owns at least one card of, at any rarity, over the snapshot's character count: `412 of 2,983 characters`. A percentage, rounded down so `100%` appears only when it is true, and a bar sit beside it. Both figures are the server's.
 2. **Series completion**: `completion.franchises`, one row for **every** franchise of the current snapshot, owned or not, in the server's order (most popular first). Each row is the franchise's characters the player owns at any rarity, each counted once, over the franchise's character count. A series with no card yet is `0 of 12`, shown like any other row, not hidden and not dimmed below the contrast floor. It appears in three places: the **Series view** (step 5), the series filter's option labels (§3.3), and, with a series filter active, a second stats line: `Cowboy Bebop: 3 of 4 characters`.
-3. **Dropped characters** (`inCurrentSnapshot: false`, `tier: null`) stay in the collection with their granted rarity, show the out-of-pool line in the dialog, count in the card totals and in no completion figure (`collection-packs.md` §5.1.7). A franchise that is no longer in the current snapshot has no completion row: it appears in the series filter while an owned entry names it, without a figure, and not in the Series view.
+3. **Dropped characters** (`inCurrentSnapshot: false`, `tier: null`, `rank: null`) stay in the collection with their granted rarity, show the out-of-pool line in the dialog and no rank chip on the card, count in the card totals and in no completion figure (`collection-packs.md` §5.1.8). A franchise that is no longer in the current snapshot has no completion row: it appears in the series filter while an owned entry names it, without a figure, and not in the Series view.
 4. **Totals**: `totals.cards`, `totals.duplicates` and `totals.byRarity` (cards per granted rarity, six tiers). No search, filter or view changes a stat; the stats always describe the whole collection.
 5. **Series view.** Under the stats, a view switch, `Cards` (default) and `Series`. The Series view lists every row of step 2: the series title, `<owned> of <total>`, and a bar. Sort: `Most popular first` (the server's order, default) or `Title, A to Z`. A row with at least one owned character has `Show cards`, which switches to the Cards view with that series as the series filter, clears the search, the rarity filter and Duplicates only, keeps the sort, and goes to page 1. A `0 of N` row has no button: there is nothing to show. Under the list, one line names the source: `<S> series from the 100 most popular anime on AniList, as of <D Mon YYYY>.` (S = the number of rows, the date `snapshot.takenAt`). The Series view has no paging (fewer than 100 rows: 100 anime grouped into franchises).
 6. With `snapshot: null` (a fresh install before the owner's first snapshot) there are no cards, so the empty state shows; nothing in this section renders.
-7. Nothing happens at a threshold. At 100% the line reads `2,143 of 2,143 characters` and `100%`, like any other number; a completed series reads `12 of 12`.
+7. Nothing happens at a threshold. At 100% the line reads `2,983 of 2,983 characters` and `100%`, like any other number; a completed series reads `12 of 12`.
 
 ### 3.3 Search, filters, sort and pages
 
@@ -122,7 +126,7 @@ All four run in the browser over the entries the server returned. They are displ
 
 One listing is one card (`economy.md` §8.3): there is no quantity. Any card can be listed, the last copy included.
 
-1. The section shows a `Price` field, a whole number of Karma, empty by default (decided, §9.1), with the hint `<min> to <max> Karma` (`rules.priceMin` and `rules.priceMax` for this entry's granted rarity: half to two and a half times the tier's reference value, so for an Epic card `<min Epic>` to `<max Epic>`). Beside it, `List…`. Under them, a text link `See <name> on the market`, which closes the dialog and opens the Market tab's browse view filtered to this character (`market-and-shop.md` §3.4), so the player can see what others ask before choosing a price.
+1. The section shows a `Price` field, a whole number of Karma, empty by default (decided, §9.1), with the hint `<min> to <max> Karma` (`rules.priceMin` and `rules.priceMax` for this entry's granted rarity: half to two and a half times the tier's reference value, so for an Epic card `<min Epic>` to `<max Epic>`). Beside it, `List…`. Under them, a text link `See <name> on the market`, which closes the dialog, sets the market's character filter in the signed-in layout's state (never in the address) and pushes `/market`, whose browse view then shows this character (`market-and-shop.md` §3.4), so the player can see what others ask before choosing a price. Back returns to `/collection` with the dialog closed (`navigation-and-landing.md` §3.10 item 4).
 2. While the field holds a whole number within the bounds, a line under it shows the fee and the net, updated as the player types: `Fee <fee> Karma (<feePct>). You get <net> Karma if it sells.` The fee is `max(feeMin, ceil(price × feeBps / 10 000))` with `feeBps` and `feeMin` from the wallet: 5 %, rounded up, at least 1 (owner, 2026-10-29; §3.9 E4). The net is price − fee. This is the one sum the UI works out before the server answers (`economy.md` §12); the receipt's `fee` is the one that counts. With the field empty or out of bounds the line is not shown, and the hint stays.
 3. `List…` is disabled, with the reason visible under it, when `available` is 0 (every copy is listed already), or when `Wallet.activeListings` has reached `rules.maxListings` (the reason is the listing-cap line of §8, with the `My listings` link). Neither check is authoritative; the server checks again.
 4. `List…` validates on submit, not per keystroke. Empty, not a whole number, or outside the bounds shows the field error, focus goes to the field, and nothing is sent.
@@ -156,6 +160,7 @@ The rule (owner, 2026-10-29): a player recycles **duplicates** of an entry, neve
 7. Branch on the answer:
    - **201, or 200 on a replay**: the dialog returns to the details with the refetched counts, the inline status line `Recycled <Q> <copy|copies> of <name> for <credited> Karma. You have <B> Karma.` (count, credit and balance from the receipt), and focus on the dialog heading. The header balance takes the receipt's `balance`. If the receipt's credit differs from the total the confirmation showed (the value changed between the wallet read and the request), the line states the server's amount and adds ` Each duplicate now recycles for <recycle T> Karma.` (§9.2 question 1).
    - **`not_enough_copies`** (fewer recyclable copies than asked) or **`request_id_reused`**: nothing was recycled. Refetch, return to the details, neutral `Something changed…` notice.
+   - **`balance_limit`** (the credit would take the balance past its ceiling, `economy.md` §12): nothing was recycled. The confirmation stays with the red line `Your Karma is at its ceiling, so nothing was recycled.`, and the confirm button is disabled.
    - **Rate limited, any other answer, no answer, `unauthenticated`**: exactly as §3.5 step 9. `Try again` after no answer resends the same `requestId`, so a lost answer never recycles twice.
 8. `Cancel`, or Escape on the confirmation, returns to the details with the number kept.
 9. There is no fee, no balance check, no draw and no reveal: a recycle for Karma cannot fail for lack of Karma, and its outcome is known before it is sent.
@@ -168,7 +173,7 @@ The rule (owner, 2026-10-29): a player recycles **duplicates** of an entry, neve
 
 ### 3.8 What the UI needs from the server
 
-Per screen, with the field that supplies it. ✓ means the server specs supply it as needed (`collection-packs.md` at 0ce69bd, `economy.md` at 9a3e059); Ex refers to §3.9.
+Per screen, with the field that supplies it. ✓ means the server supplies it as needed (`collection-packs.md` as shipped in #28, `economy.md` as landed in 0562e10); Ex refers to §3.9.
 
 **Cards view** (`GET /api/collection`, `CollectionResponse`, `collection-packs.md` §6.2 with `economy.md` §11.2's additions)
 
@@ -177,13 +182,14 @@ Per screen, with the field that supplies it. ✓ means the server specs supply i
 | One tile per entry, keyed by character and rarity            | `entries[].character.id`, `entries[].rarity` (six tiers)          | ✓      |
 | Reserved kind and variant (ignored while each has one value) | `entries[].kind` (`"card"`), `entries[].variant` (`"standard"`)   | ✓      |
 | Name, native name, art                                       | `character.name`, `character.nameNative`, `character.imageUrl`    | ✓      |
+| Rank chip on the card, and the pool size it is out of        | `character.rank`, `snapshot.characterCount`                       | ✓      |
 | Franchises per character, primary first                      | `character.franchiseIds`                                          | ✓      |
 | Franchise titles for tile, search, filter, disambiguation    | `franchises[]`: `id`, `title`, `titleNative`, `startYear`         | ✓      |
 | Copies, listed, available                                    | `count`, `listed`, `available`                                    | ✓      |
-| Recyclable duplicates                                        | —                                                                 | E3     |
+| Recyclable duplicates                                        | `recyclable` (`economy.md` §11.2)                                 | ✓      |
 | Sort and facts dates                                         | `firstObtainedAt`, `lastObtainedAt`                               | ✓      |
 | Current tier and snapshot membership                         | `character.tier`, `character.inCurrentSnapshot`                   | ✓      |
-| Totals line, tab label                                       | `totals.cards`, `totals.duplicates`, `totals.byRarity` (six keys) | ✓      |
+| Totals line, header link label                               | `totals.cards`, `totals.duplicates`, `totals.byRarity` (six keys) | ✓      |
 | Pool completion                                              | `completion.pool.owned`, `.total`                                 | ✓      |
 | Series option labels and the filtered series line            | `completion.franchises[]` by `franchiseId`                        | ✓      |
 
@@ -195,15 +201,15 @@ Per screen, with the field that supplies it. ✓ means the server specs supply i
 | ----------------------------------- | -------------------------------------------------- | ------ |
 | Other entries of the same character | the held `entries[]` (same `character.id`)         | ✓      |
 | Price bounds for this rarity        | `rules.priceMin[rarity]`, `rules.priceMax[rarity]` | ✓      |
-| Fee preview                         | `rules.feeBps`, `rules.feeMin`                     | ✓, E4  |
+| Fee preview                         | `rules.feeBps`, `rules.feeMin`                     | ✓      |
 | Listing time                        | `rules.listingTtlSeconds`                          | ✓      |
 | Listing cap, before a request       | `rules.maxListings`, `activeListings`              | ✓      |
-| Recycle value per tier              | — (today `recycle[]` holds the tier-recycle rules) | E1     |
+| Recycle value per tier              | `rules.recycleValues[rarity]`                      | ✓, E8  |
 | Balance                             | `balance`                                          | ✓      |
 
 **List on the market**: `POST /api/market/listings`, `ListBody` `{ requestId, characterId, rarity, price }`. Success `Listing` (201, 200 on a replay) with `price`, `fee`, `expiresAt`. Errors used: 400 `price_out_of_bounds`, 409 `not_enough_copies`, `listing_limit`, `request_id_reused`, 400 `validation_failed`, 401, 403 `bad_origin`, 429 `rate_limited` (all ✓). The `Listing` carries no updated entry or totals, so the view refetches the collection.
 
-**Recycle for Karma**: `POST /api/collection/recycle` with `{ requestId, characterId, rarity, count }`; success with `consumed` (`characterId`, `rarity`, `count`), `credited` and `balance`, and no card; errors `not_enough_copies`, `request_id_reused`, 400, 401, 403, 429. Today's contract is the tier recycle's (E1, E2). The view refetches the collection after the answer.
+**Recycle for Karma**: `POST /api/collection/recycle`, `RecycleBody` `{ requestId, characterId, rarity, count }` (`count` 1 to `rules.maxRecycleCount`); success `RecycleReceipt` (201, 200 on a replay) with `recycled` (`characterId`, `rarity`, `count`), `credited` and `balance`, and no card; errors 409 `not_enough_copies`, `balance_limit`, `request_id_reused`, 400 `validation_failed`, 401, 403 `bad_origin`, 429 `rate_limited` (all ✓, `economy.md` §11.2, §11.3). The view refetches the collection after the answer.
 
 **Request ids**: each confirmation creates `crypto.randomUUID()` when its confirm button is first pressed, keeps it while no answer has arrived (`Try again` resends the identical body with it), and discards it on any answer from the server and on `Cancel`. This is 1c's pack pattern (`collection-packs.md` §8).
 
@@ -211,48 +217,56 @@ Per screen, with the field that supplies it. ✓ means the server specs supply i
 
 ### 3.9 Mismatches and dependencies
 
-Against `collection-packs.md` at 0ce69bd (`origin/feat/collection-packs`) and `economy.md` at 9a3e059 (`origin/feat/economy`). Each is for the manager to settle; this spec designs around none of them silently, and says what it does meanwhile.
+Against `collection-packs.md` as shipped in #28 and `economy.md` as landed on `main` in 0562e10. Each open item is for the manager to settle; this spec designs around none of them silently, and says what it does meanwhile.
 
-**Resolved since this spec's first revision.** `collection-packs.md` now carries tiers in the contract (five there; the owner's six tiers are pending, `card-and-rarity.md` §12), franchises (`franchiseIds`, `FranchiseRef`, `completion.franchises`), the reserved `kind` and `variant`, and all four token lines in its web PR. `economy.md` now carries `feeMin`, the balance on `insufficient_funds`, native names and titles in the market's search, and `Wallet.activeListings`; and, for `market-and-shop.md`, `closedAt`, the `limit` on `market_limit`, `ThemeOffer.cards`, `ThemeOffer.franchiseIds` for both kinds, `filterFranchiseIds`, and an `active` list without expired listings. The owner's decided build order (§9.1) settles the delivery-order mismatch. Two notes stand with no change asked: the listing time arrives in seconds and is shown in days (whole days when divisible by 86 400, else hours), and listing and recycle answers carry no updated entry, so the view refetches.
+**Settled.** `collection-packs.md` carries six tiers in the contract, the rank and the pool size (`card-and-rarity.md` §12), franchises (`franchiseIds`, `FranchiseRef`, `completion.franchises`), the reserved `kind` and `variant`, and the card tokens in its web PR. `economy.md` carries `feeMin`, the balance on `insufficient_funds`, native names and titles in the market's search, and `Wallet.activeListings`; and, for `market-and-shop.md`, `closedAt`, the `limit` on `market_limit`, `ThemeOffer.cards`, `ThemeOffer.franchiseIds` for both kinds, `filterFranchiseIds`, and an `active` list without expired listings. The owner's decided build order (§9.1) settles the delivery order. Two notes stand with no change asked: the listing time arrives in seconds and is shown in days (whole days when divisible by 86 400, else hours), and listing and recycle answers carry no updated entry, so the view refetches.
 
-**Mismatches with `economy.md` as it stands** (written before the owner's final answers of 2026-10-29)
+**The previous revision's mismatches, all settled in `economy.md` as landed**
 
-| #   | Mismatch                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | This spec meanwhile                                                                       | Asked of `economy.md`                                                                                                                                                                                                                                                                                               |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| E1  | **Recycle is still the tier recycle**: five copies become a random character of the next tier for a fee (§5 `RECYCLE_INPUT`, `RECYCLE_FEE`; §8.7; §11.2 `RecycleRule`, `RecycleBody`, `RecycleReceipt` with a card; §12's Recycle bullet; §14's statistical recycle test; open questions 9 and 10). The owner's rule is duplicates for Karma at 25 % of the reference value, and no tier recycle. Recycle for Karma also **creates** Karma, which §2 ("no buyback at any price"), §6 (its option C, rejected) and ADR 0011 §2 ("there is no sale to the system") rule out today | §3.6 designs Recycle for Karma                                                            | A recycle value per tier in `Wallet` (for example `rules.recycleValue: PerRarity`) with the rounding of a quarter (`<ref Common>` 10 gives 2.5); a ledger credit kind; the faucet model (§6, §9) and the anti-farming bounds (§10) re-derived with the new source; the tier-recycle rules removed; ADR 0011 amended |
-| E2  | **Request and receipt of a recycle for Karma.** The body needs a count; the receipt needs the credit and no card; `insufficient_funds` and `pool_unavailable` no longer apply                                                                                                                                                                                                                                                                                                                                                                                                   | Expects `{ requestId, characterId, rarity, count }` and `{ consumed, credited, balance }` | `RecycleBody` with `count: integer ≥ 1`, the only number the body carries (never a Karma amount), and the new receipt                                                                                                                                                                                               |
-| E3  | **Which copies are recyclable.** "Never the last copy" meets listings: a listed card is still owned and may sell. The UI should not hold that rule                                                                                                                                                                                                                                                                                                                                                                                                                              | Reads `recyclable`; until it exists, shows `min(count − 1, available)` as display only    | `CollectionEntry` gains `recyclable: integer ≥ 0`, the server's rule (§9.2 question 2)                                                                                                                                                                                                                              |
-| E4  | **Market fee**: `MARKET_FEE_BPS` is 1 000 (10 %, open question 3 B); the owner chose 5 %, at least 1, rounded up                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Reads `feeBps`; copy shows `<feePct>`                                                     | `MARKET_FEE_BPS` 500, and §9 and §10 re-derived                                                                                                                                                                                                                                                                     |
-| E5  | **Decided questions still open there**: bounds 0.5 × to 2.5 × (open question 4 B) and limits per rolling 7 days (open question 5 B) match the owner's answers; open question 11 (who builds the card dialog) is decided as A                                                                                                                                                                                                                                                                                                                                                    | —                                                                                         | Move them to the decision record                                                                                                                                                                                                                                                                                    |
+| #   | Was                                                                                                             | Settled by                                                                                                                                                                                                                                  |
+| --- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| E1  | Recycle was still the tier recycle (five copies into a random character of the next tier), and created no Karma | §8.2, §8.7, §11.2: duplicates recycle for `rules.recycleValues[rarity]`, a quarter of the reference value rounded down and at least 1, as a ledger credit; no tier recycle; ADR 0011 §2 and §4 amended                                      |
+| E2  | The request and receipt of a recycle for Karma                                                                  | §11.2: `RecycleBody` with `count` (1 to `maxRecycleCount`) and no Karma amount; `RecycleReceipt` with `recycled`, `credited` and `balance`, no card; no `insufficient_funds` or `pool_unavailable`, and a new `balance_limit` (§3.6 step 7) |
+| E3  | Which copies are recyclable                                                                                     | §11.2: `CollectionEntry.recyclable` = `min(count − 1, available)`, the server's number                                                                                                                                                      |
+| E4  | The market fee was 10 %                                                                                         | §5: `MARKET_FEE_BPS` 500 (5 %), `MARKET_FEE_MIN` 1, rounded up                                                                                                                                                                              |
+| E5  | Decided questions still open there                                                                              | §16 round 3, decisions 7, 8 and 12; §17 has no open question                                                                                                                                                                                |
 
-The shop's mismatches (genre packs automatic, the pack price) are in `market-and-shop.md` §3.8.
+E2 and E3 also answer this spec's two open questions (§9.2) with their recommended options: the recycle request carries only the count, and `recyclable` counts unlisted copies. The owner's answer is not recorded in either spec's decision record, so §9.2 keeps them, marked as such.
+
+**Still open**
+
+| #   | Mismatch                                                                                                                                                                                                                                                                                                                                                                                             | This spec meanwhile                                 | Asked of `economy.md`                                                                                       |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| E8  | **Five-tier numbers.** `economy.md` says itself that it is not buildable yet: `REFERENCE_VALUE`, `RECYCLE_VALUE`, `MARKET_PRICE_MIN` and `MARKET_PRICE_MAX` have no Uncommon, are derived from the five-tier per-slot odds (§5.1, §5.2), and §11.2 and §12 still say `PerRarity` has five tiers. 1c shipped six tiers with five different slot tables, so there is no single per-slot rate to invert | Placeholders for every amount; six tiers everywhere | Re-derive §5, §5.1, §5.2 and §9 for six tiers on 1c's shipped tables (`collection-packs.md` §5.4.1, §5.4.6) |
+
+The shop's open items (its odds fields and the rank chip on the market) are in `market-and-shop.md` §3.8.
 
 **Dependencies: placeholders for numbers being recomputed in `economy.md`**
 
-| Placeholder          | Meaning                                                                               | Used in    |
-| -------------------- | ------------------------------------------------------------------------------------- | ---------- |
-| `<ref T>`            | reference value of tier T, six tiers with Uncommon (being recomputed)                 | §3.5, §3.6 |
-| `<recycle T>`        | Karma per recycled duplicate of tier T: a quarter of `<ref T>`, rounded as E1 settles | §3.6, §8   |
-| `<min T>`, `<max T>` | market bounds of tier T: half and two and a half times `<ref T>`                      | §3.5, §8   |
-| `<feePct>`           | the market fee, 5 % once E4 lands                                                     | §3.5, §8   |
+| Placeholder          | Meaning                                                                                     | Used in    |
+| -------------------- | ------------------------------------------------------------------------------------------- | ---------- |
+| `<ref T>`            | reference value of tier T, six tiers with Uncommon (five-tier in `economy.md` §5 today, E8) | §3.5, §3.6 |
+| `<recycle T>`        | Karma per recycled duplicate of tier T: a quarter of `<ref T>`, rounded down, at least 1    | §3.6, §8   |
+| `<min T>`, `<max T>` | market bounds of tier T: half and two and a half times `<ref T>`                            | §3.5, §8   |
+| `<feePct>`           | the market fee, `feeBps` as a percentage (5 %, `economy.md` §5)                             | §3.5, §8   |
 
-The UI reads every one of them from `GET /api/wallet`; none is written into a string or a constant. The card itself depends on `collection-packs.md` gaining six tiers, the popularity rank on every character and the pool size (`card-and-rarity.md` §12, R1 and R2).
+The UI reads every one of them from `GET /api/wallet`; none is written into a string or a constant. The card's six tiers, its rank and the pool size are in 1c's shipped contract (`card-and-rarity.md` §12, R1 and R2).
 
 ## 4. States
 
 ### 4.1 Collection view
 
-| State                             | User sees                                                                                                                                                                                                                            | User can do                                                |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------- |
-| first load, within 300 ms         | Nothing in the main area                                                                                                                                                                                                             | Wait                                                       |
-| loading (after 300 ms)            | Stats skeleton (two bars), the view switch and toolbar rendered and disabled, 12 skeleton tiles; visually hidden `Loading your collection…` in a `role="status"`                                                                     | Wait                                                       |
-| empty                             | Heading `No cards yet` and `Open a pack`; no stats, no view switch, no toolbar                                                                                                                                                       | Open a pack (switches to Booster, focuses the pack button) |
-| loaded, Cards view                | Stats, view switch, toolbar, results line, grid, pages when there are more than 60 results                                                                                                                                           | Everything                                                 |
-| loaded, Series view               | Stats, view switch, the series sort, every series row, the source line                                                                                                                                                               | Sort, Show cards, switch back                              |
-| refreshing (data held)            | The held data, unchanged; nothing marks the refetch                                                                                                                                                                                  | Everything                                                 |
-| stale (refetch failed, data held) | The held data; under the totals the note `Showing your collection as of <HH:MM>.` (the time the held data arrived); the app-level unreachable banner when the network is the cause; listing and recycling disabled with their reason | Browse, open cards, `Try again` in the banner              |
-| error (nothing held)              | `Couldn't load your collection.` and `Try again` in place of stats and grid; the app-level unreachable banner as well when the network is the cause                                                                                  | Try again                                                  |
-| session ended                     | `accounts.md` §4.8                                                                                                                                                                                                                   | Log in                                                     |
+| State                             | User sees                                                                                                                                                                                                                            | User can do                                                         |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------- |
+| first load, within 300 ms         | Nothing in the main area                                                                                                                                                                                                             | Wait                                                                |
+| loading (after 300 ms)            | Stats skeleton (two bars), the view switch and toolbar rendered and disabled, 12 skeleton tiles; visually hidden `Loading your collection…` in a `role="status"`                                                                     | Wait                                                                |
+| empty                             | Heading `No cards yet` and `Open a pack`; no stats, no view switch, no toolbar                                                                                                                                                       | Open a pack (a link to `/packs`; focus goes to its `Packs` heading) |
+| loaded, Cards view                | Stats, view switch, toolbar, results line, grid, pages when there are more than 60 results                                                                                                                                           | Everything                                                          |
+| loaded, Series view               | Stats, view switch, the series sort, every series row, the source line                                                                                                                                                               | Sort, Show cards, switch back                                       |
+| refreshing (data held)            | The held data, unchanged; nothing marks the refetch                                                                                                                                                                                  | Everything                                                          |
+| stale (refetch failed, data held) | The held data; under the totals the note `Showing your collection as of <HH:MM>.` (the time the held data arrived); the app-level unreachable banner when the network is the cause; listing and recycling disabled with their reason | Browse, open cards, `Try again` in the banner                       |
+| error (nothing held)              | `Couldn't load your collection.` and `Try again` in place of stats and grid; the app-level unreachable banner as well when the network is the cause                                                                                  | Try again                                                           |
+| session ended                     | `accounts.md` §4.8                                                                                                                                                                                                                   | Log in                                                              |
 
 ### 4.2 Toolbar and results (Cards view)
 
@@ -337,7 +351,7 @@ The UI reads every one of them from `GET /api/wallet`; none is written into a st
 
 ### 4.8 Cross-cutting
 
-Session ended and server unreachable behave as in `accounts.md` §4.8. Any `unauthenticated` answer closes the dialog and drops to the Account screen. An unreachable server shows the app-level banner, and this view keeps whatever the server last returned (the stale state).
+Session ended and server unreachable behave as in `accounts.md` §4.8. Any `unauthenticated` answer closes the dialog and replaces the page with `/login`, `/collection` held as the return path (`navigation-and-landing.md` §3.5 step 8); after logging in the player is back on `/collection` with search, filters, sort, view and page at their defaults, since they went with the account state. An unreachable server shows the app-level banner, and this view keeps whatever the server last returned (the stale state).
 
 ## 5. Layout
 
@@ -367,7 +381,7 @@ Top to bottom inside `<main>`: stats, view switch, then the Cards view (toolbar,
 
 **Stats**
 
-- Line 1: `412 of 2,143 characters` and `19%`, one row, wrapping on a phone.
+- Line 1: `412 of 2,983 characters` and `13%`, one row, wrapping on a phone.
 - Series line, only with a series filter in the Cards view: under line 1, truncated to the line.
 - Bar under them: full width up to `max-w-md`.
 - Totals line: `214 cards · 153 duplicates`, then the six tiers lowest first, `Common 120`, `Uncommon 58`, `Rare 27`, `Epic 7`, `Legendary 2`, `Mythic 0`, each shown even at 0, wrapping as needed (a phone wraps after the duplicates).
@@ -408,7 +422,7 @@ Select widths are fixed so the row does not shift when a long series title is ch
 
 ### 5.5 Large collections: one response, paged in the browser
 
-The pool is about 2,000 characters (2,143 in `collection-packs.md` §7.1's example), but the read is bounded by what the account **owns**, not by the pool: one entry per owned character, plus one per tier move (§3 terms). A new player's answer is a few kilobytes. A complete collection of today's pool is about 2,000 entries and some 450 KB of JSON (`collection-packs.md` §5.5); the hard ceiling is one snapshot's `SNAPSHOT_CHARACTERS_MAX` (6,000) plus the entries that snapshot updates add.
+The pool is 2,983 characters (the first real snapshot after the franchise cap, `collection-packs.md` §5.1.10), but the read is bounded by what the account **owns**, not by the pool: one entry per owned character, plus one per tier move (§3 terms). A new player's answer is a few kilobytes. A complete collection of today's pool is about 3,000 entries and some 700 KB of JSON (`collection-packs.md` §5.5); the hard ceiling is one snapshot's `SNAPSHOT_CHARACTERS_MAX` (6,000) plus the entries that snapshot updates add.
 
 **Decision: keep one response, and page in the browser.**
 
@@ -416,7 +430,7 @@ The pool is about 2,000 characters (2,143 in `collection-packs.md` §7.1's examp
 - **Why it stays fast.** Normalised search fields are built once per answer (§3.3 step 5), so a keystroke is a substring scan over at most a few thousand short strings: well under a frame. The Series view is under 100 rows.
 - **Why pagination.** What thousands of tiles cost is DOM and images. The grid shows **60 entries per page**. Every rendered tile is a real element, so Tab order, screen-reader browse mode and find-in-page work. At most 60 images load per page, lazily. "Page 2 of 34" is a position a player can get back to, and the page select reaches page 34 without 33 clicks. 60 fills whole rows at every column count (§5.1). It needs no dependency.
 - **Why not virtualisation.** It adds a dependency (a T2 review). It removes off-screen tiles, which breaks find-in-page and screen-reader browsing and can drop the focused tile. A responsive auto-fill grid also needs measured rows before it can be virtualised. At 60 tiles a page it buys nothing.
-- **When to revisit** (any one): a collection answer passes 1 MB (about 4,500 entries); `SNAPSHOT_CHARACTERS_MAX` is raised; the build PR's measurement of a keystroke over 2,000 fixture entries on the CI runner, with CPU throttled 4×, exceeds 16 ms. Then the read moves to server-side paging with search, filters and sort as request parameters, like the market's, and this section is rewritten. The build PR's unit test renders 2,000 fixture entries and asserts that at most 60 tiles are in the DOM.
+- **When to revisit** (any one): a collection answer passes 1 MB (about 4,300 entries); `SNAPSHOT_CHARACTERS_MAX` is raised; the build PR's measurement of a keystroke over 3,000 fixture entries on the CI runner, with CPU throttled 4×, exceeds 16 ms. Then the read moves to server-side paging with search, filters and sort as request parameters, like the market's, and this section is rewritten. The build PR's unit test renders 3,000 fixture entries and asserts that at most 60 tiles are in the DOM.
 
 ### 5.6 Truncation and AniList text (T1)
 
@@ -464,7 +478,7 @@ The tile is the card (`card-and-rarity.md` §3) at tile size, inside a button, w
 - Bars (pool and every Series row): track `h-1 rounded-full bg-zinc-800`, fill `bg-zinc-300`. A `0 of N` row shows the track alone. Not the accent and not a rarity colour; violet stays for primary actions and focus. The pool bar is `w-full max-w-md`.
 - Totals line: `text-xs text-zinc-400`, `flex flex-wrap gap-x-4 gap-y-1`; each tier word in `text-rarity-<tier>-text`, its number in `text-zinc-200 tabular-nums`.
 - Stale note: `text-xs text-zinc-400`.
-- View switch: `inline-flex gap-1 rounded-lg bg-zinc-900 p-1`; each button `rounded-md px-3 py-1.5 text-sm font-medium`, pressed `bg-zinc-700 text-white`, not pressed `text-zinc-400 hover:text-zinc-200`, the violet focus ring. The header tabs' look at a smaller radius.
+- View switch: `inline-flex gap-1 rounded-lg bg-zinc-900 p-1`; each button `rounded-md px-3 py-1.5 text-sm font-medium`, pressed `bg-zinc-700 text-white`, not pressed `text-zinc-400 hover:text-zinc-200`, the violet focus ring. The header links' look at a smaller radius.
 - **Rarity chips**: `rounded-md border px-2.5 py-2.5 sm:py-1.5 text-[11px] font-semibold tracking-wider uppercase`, the violet focus ring. A tier chip not pressed: `border-zinc-800 bg-transparent`, the word in `text-rarity-<tier>-text`, hover `border-rarity-<tier>/40`. Pressed: `border-rarity-<tier>/80 bg-rarity-<tier>/15`, the word in `text-rarity-<tier>-text`. Chips sit on `zinc-950` only (`card-and-rarity.md` §4.2). `All`: not pressed `border-zinc-800 text-zinc-300`, pressed `border-zinc-600 bg-zinc-800 text-zinc-100`. The fill is the pressed cue, so it does not rest on hue alone. No glow, no shadow; nothing moves when pressed.
 - Toolbar labels: `text-xs text-zinc-400`, above the control. Not the accounts hint colour (`zinc-500`): these labels are the controls' names and must reach 4.5:1 on `zinc-950`.
 - Search, selects and the price field: the accounts `INPUT` classes (`rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100`, violet focus ring).
@@ -473,7 +487,8 @@ The tile is the card (`card-and-rarity.md` §3) at tile size, inside a button, w
 - Results line: `text-sm text-zinc-400 tabular-nums`.
 - Pages: `BUTTON.secondary` for Previous and Next; the page select `INPUT` at `w-20`; `of <pages>` `text-sm text-zinc-400 tabular-nums`.
 - Series rows: title `text-sm text-zinc-200`, figure `text-sm text-zinc-300 tabular-nums`; source line `text-xs text-zinc-400`.
-- Empty state: `No cards yet` in `text-lg font-bold text-zinc-100`, `Open a pack` as `BUTTON.primary`, centred, `py-16`. No dashed box, no illustration.
+- Page heading: the `h1` `Collection` as every account page's (`navigation-and-landing.md` §5.2 and §6.3: left-aligned, `mb-6`, `text-xl font-bold text-zinc-100`, `focus:outline-none`), above the stats in every state.
+- Empty state: `No cards yet` in `text-lg font-bold text-zinc-100`, `Open a pack` as a link with `BUTTON.primary`'s classes, centred, `py-16`. No dashed box, no illustration.
 - No matches: the message in `text-sm text-zinc-400 break-words`, `Clear filters` as `BUTTON.secondary`, centred, `py-12`.
 - Error: `Couldn't load your collection.` in `text-sm text-zinc-300`, `Try again` as `BUTTON.secondary`.
 
@@ -506,8 +521,8 @@ No gradients, glows, glass (backdrop blur), drop shadows, hover lift or zoom, em
 
 ## 7. Accessibility
 
-- **Region**: `<main>` holds `<section aria-labelledby="collection-heading">` with a visually hidden `h2` `Collection`.
-- **View switch**: `<div role="group" aria-label="View">` with `<button aria-pressed>` per view. Switching keeps focus on the pressed button. The Series view is a `<section>` with a visually hidden `h3` `Series completion`.
+- **Page and heading** (`navigation-and-landing.md` §3.6, §7): `<main>` starts with the visible `h1` `Collection` (`id="collection-heading"`, `tabindex="-1"`), the focus target of every navigation to the page after the first render and of the `Skip to content` link; the title `Collection · Anime TCG` is set before focus moves. `<main>` holds `<section aria-labelledby="collection-heading">`; the visually hidden `h2` `Collection` of the previous revision is gone, and headings below the `h1` start at `h2`. When the page is left with the card dialog open, the dialog closes with it and focus goes to the new page's `h1`.
+- **View switch**: `<div role="group" aria-label="View">` with `<button aria-pressed>` per view. Switching keeps focus on the pressed button. The Series view is a `<section>` with a visually hidden `h2` `Series completion`.
 - **Toolbar**: a `<search>` element labelled `Collection filters`. Every control has a visible label. Changes apply at once; Enter in the search field does nothing more (no submit, no reload). Escape in a non-empty search field clears it and keeps focus there.
 - **Rarity chips**: `<div role="group" aria-labelledby>` pointing at the visible `Rarity` label, holding seven `<button type="button" aria-pressed>`. Each chip is one Tab stop; Space and Enter toggle it. Pressing `All` or releasing the last tier moves `aria-pressed` accordingly; focus stays on the chip pressed.
 - **Controls and their names**:
@@ -525,7 +540,7 @@ No gradients, glows, glass (backdrop blur), drop shadows, hover lift or zoom, em
 | Show cards        | `<button>`                                                                            | `Show cards from <title>`                                                            |
 | Previous, Next    | `<button>`                                                                            | `Previous page`, `Next page`                                                         |
 | Page select       | `<select>`                                                                            | `Page`, described by `of <pages>`                                                    |
-| Open a pack       | `<button>`                                                                            | `Open a pack`                                                                        |
+| Open a pack       | `<a href="/packs">`, a real link the router intercepts                                | `Open a pack`                                                                        |
 | Try again (view)  | `<button>`                                                                            | `Try again`                                                                          |
 | Card dialog       | `<dialog aria-labelledby>`                                                            | the name heading; on a confirmation or the result, its heading                       |
 | Close             | `<button>`                                                                            | `Close`                                                                              |
@@ -546,7 +561,7 @@ No gradients, glows, glass (backdrop blur), drop shadows, hover lift or zoom, em
 - **Disabled reasons** are visible text linked with `aria-describedby`, never tooltips.
 - **Countdown**: as `accounts.md` §7 "Wait": the number lives in the button's text, which is not a live region; the status line is read once; `You can try again now.` goes to the live region when the wait ends.
 - **Announcements**: the app-level live region (`role="status"`) receives the results line (debounced) and wait-over. Status lines inside the open dialog are `role="status"`; red banners are `role="alert"`.
-- **Keyboard path, end to end**: Tab to the `Collection` tab, Enter. Tab through the view switch, Search, Series, Sort, the rarity chips, Duplicates only and Clear filters (when shown), then into the tiles. Enter opens the dialog. Tab to `Price`, type, Tab to `List…`, Enter. The confirmation heading has focus; Tab to `List for …`, Enter. The status line is read. Tab to `Duplicates`, then `Recycle…`, Enter, Tab to `Recycle for …`, Enter; the status line is read. Escape closes; focus returns per §3.7. In the Series view, Tab moves through the sort and the `Show cards` buttons only. No step needs a pointer.
+- **Keyboard path, end to end**: Tab to the `Collection (<N>)` link in the header, Enter; focus moves to the `Collection` heading. Tab through the view switch, Search, Series, Sort, the rarity chips, Duplicates only and Clear filters (when shown), then into the tiles. Enter opens the dialog. Tab to `Price`, type, Tab to `List…`, Enter. The confirmation heading has focus; Tab to `List for …`, Enter. The status line is read. Tab to `Duplicates`, then `Recycle…`, Enter, Tab to `Recycle for …`, Enter; the status line is read. Escape closes; focus returns per §3.7. In the Series view, Tab moves through the sort and the `Show cards` buttons only. No step needs a pointer.
 - **No arrow-key grid**: a page holds at most 60 tiles, one Tab stop each. A roving-tabindex grid would need the column count measured from the layout and adds a pattern screen-reader users must learn, for little gain at this size.
 - **Contrast**: everything that must be read is `zinc-400` or lighter, or a tier text colour (`--color-rarity-<tier>-text`), on `zinc-900` or `zinc-950` (and on a pressed chip's `/15` fill over `zinc-950`): all at least 4.5:1, as `card-and-rarity.md` §4.2 computes; the card's own text pairs are checked there too. This view uses no `zinc-500` text. Frames are decorative; rarity is always also the stars or the word (WCAG 1.4.1).
 - **Touch targets**: every control is at least 40 px tall on a phone, the chips and the `BUTTON.text` links included (`py-2.5` and `py-2` on a phone); tiles are far larger.
@@ -558,14 +573,15 @@ Exact strings. Placeholders: `<name>` the character name; `<series>` and `<title
 
 **Words.** The words "secure", "verified", "protected", "safe", "private", "attempt", "locked" and "blocked" do not appear in any string below and must not be added (`accounts.md` §8). The market and shop words this feature needs are allowed: `Karma`, `price`, `fee`, `list`, `listed`, `listing`, `market`, `sell`, `sells`, `sold`, `buy`, `bought`, `cost`, `costs`. No other money words: no "pay", "paid", "cash", "money", "coins", "earn", "profit", "worth", "value", "balance", "wallet", "store", "checkout", "purchase", and no currency symbol. "Franchise" is not a player-facing word. **No casino nudges**: no exclamation marks; no urgency ("hurry", "ending soon", "last chance", "before it's gone", "don't miss"); no streaks; no "deal", "bargain", "discount", "save", "cheap", "steal"; no fake scarcity ("only <N> left", "rare find", "few on the market", "selling fast"); no "lucky", "jackpot", "win", "you could get", "try your luck"; no prompt near a completion threshold or after a recycle; nothing that comments on a balance going up. The copy test scans every string for these.
 
-**Tab and region**
+**Header link and page**
 
-| Element                          | Copy                                                      |
-| -------------------------------- | --------------------------------------------------------- |
-| Tab label                        | `Collection (<N>)` / before the first answer `Collection` |
-| Region heading (visually hidden) | `Collection`                                              |
-| Toolbar landmark label           | `Collection filters`                                      |
-| Loading (visually hidden)        | `Loading your collection…`                                |
+| Element                   | Copy                                                      |
+| ------------------------- | --------------------------------------------------------- |
+| Header link label         | `Collection (<N>)` / before the first answer `Collection` |
+| Document title            | `Collection · Anime TCG`                                  |
+| Page heading (`h1`)       | `Collection`                                              |
+| Toolbar landmark label    | `Collection filters`                                      |
+| Loading (visually hidden) | `Loading your collection…`                                |
 
 **Stats and view switch**
 
@@ -706,6 +722,7 @@ Here `<max>` is `rules.maxListings`.
 | Cancel                           | `Cancel`                                                                                    |
 | Success (inline status)          | `Recycled <Q> <copy\|copies> of <name> for <credited> Karma. You have <B> Karma.`           |
 | Success, value changed (added)   | ` Each duplicate now recycles for <V> Karma.`                                               |
+| Karma at its ceiling (red)       | `Your Karma is at its ceiling, so nothing was recycled.`                                    |
 
 **Failures, for listing and recycling**
 
@@ -738,7 +755,7 @@ The Inventory `Reset` button and its confirmation are deleted by the 1c web PR (
 | Who builds the card dialog            | The collection overview is built right after 1c with a details-only dialog; `feat/economy-ui` adds Recycle for Karma and `feat/market-ui` adds List on the market | §3.4                       |
 | A Karma icon                          | None: every amount reads `<n> Karma`                                                                                                                              | §6.4                       |
 | The list price field's starting value | Empty, with the bounds as the hint and `See <name> on the market` beside it                                                                                       | §3.5                       |
-| Where the Karma shop lives            | Its own Shop tab                                                                                                                                                  | `market-and-shop.md` §3.2  |
+| Where the Karma shop lives            | Its own Shop tab, which is now the `/shop` page (`navigation-and-landing.md` §3.1)                                                                                | `market-and-shop.md` §3.2  |
 | Recycling                             | Duplicates only, never the last copy, for Karma at a quarter of the tier's reference value; no tier recycle                                                       | §3.6                       |
 | Upgrades                              | Only in the mini-games (items 5, 6)                                                                                                                               | §2                         |
 | Selling                               | Every card, the last copy included, on the player market; fee 5 %, at least 1, rounded up; bounds 0.5 × to 2.5 × the reference value; limits per rolling 7 days   | §3.5, `market-and-shop.md` |
@@ -746,7 +763,7 @@ The Inventory `Reset` button and its confirmation are deleted by the 1c web PR (
 
 ### 9.2 Open
 
-For the owner; each is a choice of three, and this spec is drawn for the recommended one.
+For the owner; each is a choice of three, and this spec is drawn for the recommended one. `economy.md` as landed already specifies option A for both (§3.9, under E2 and E3); the owner's answer is still to be recorded.
 
 1. **If the recycle value changes between the confirmation and the server's answer** (a deploy changes `<recycle T>`: rare, but the player confirmed a number).
    - **A (recommended)**: the request carries only the count; the server credits its current value, and the success line states it and says the value changed. No Karma amount travels in a request, as `economy.md` §11.2 holds for every route but the seller's asking price.
@@ -765,6 +782,6 @@ The collection overview can be built within the current tokens plus `card-and-ra
 2. **`CharacterCard` hover lift and image zoom** (`hover:-translate-y-1`, `group-hover:scale-105`): hover-lift on everything. Remove.
 3. **`RarityBadge` and the `×N` and `NEW` chips over the art**: drop shadow plus backdrop blur, which reads as glass. Move rarity and count under the art as in §6.2, or make them flat chips without blur or shadow; `NEW` as §6.4's flat marker.
 4. **The gradient over the bottom of the art**: only there so overlaid text stays legible; it goes with item 3.
-5. **Header and page**: gradient title text, the violet radial page background, the three-colour gradient pack button with an emoji, and the explanatory subtitle "Open packs, collect characters." These belong to `docs/design/visual-system.md`, which does not exist yet. The header's new layout (tabs, Karma, Account control) is `market-and-shop.md` §5.1.
+5. **Header and page**: the gradient title text and the explanatory subtitle "Open packs, collect characters." went with the navigation PR (#30: a plain wordmark, `navigation-and-landing.md` §6.1). The violet radial page background and the three-colour gradient pack button with an emoji remain, and belong to `docs/design/visual-system.md`, which does not exist yet. The header's layout with Karma (page links, balance, Account control) is `navigation-and-landing.md` §5.1 and `market-and-shop.md` §5.1.
 6. **`rounded-2xl` on panels, dialogs and cards**: this view uses it only through the shared dialog shell; the radius scale is a visual-system decision.
 7. **The avatar placeholder's gradient** (`accounts.md` §6): the pack button's gradient reused; replaced by card art in roadmap 4.
