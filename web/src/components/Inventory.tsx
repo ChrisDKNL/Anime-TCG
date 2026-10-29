@@ -1,11 +1,14 @@
 import { useMemo, useState } from "react";
 import { RARITIES, RARITY_LABEL, type Rarity } from "@anime-tcg/shared/rarity";
+import { inventoryCopy } from "../lib/copy";
 import type { Card } from "../types";
 import { CharacterCard } from "./CharacterCard";
 
 interface Props {
   cards: Card[];
   stats: { total: number; unique: number; byRarity: Record<Rarity, number> };
+  /** Whose collection this is; the Reset confirm names it (accounts.md §8). */
+  login: string;
   onClear: () => void;
 }
 
@@ -18,7 +21,7 @@ const RARITY_RANK: Record<Rarity, number> = { legendary: 0, rare: 1, common: 2 }
  * pulled three times as Common shows once with "×3", but a Legendary pull of
  * the same character is its own card.
  */
-export function Inventory({ cards, stats, onClear }: Props) {
+export function Inventory({ cards, stats, login, onClear }: Props) {
   const [filter, setFilter] = useState<Filter>("all");
 
   const grouped = useMemo(() => {
@@ -78,7 +81,7 @@ export function Inventory({ cards, stats, onClear }: Props) {
           <button
             type="button"
             onClick={() => {
-              if (window.confirm("Delete your entire collection? This cannot be undone.")) onClear();
+              if (window.confirm(inventoryCopy.resetConfirm(login))) onClear();
             }}
             className="rounded-lg border border-red-900/60 px-3 py-1 text-sm text-red-300 transition hover:bg-red-950/50"
           >

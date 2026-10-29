@@ -1,0 +1,184 @@
+import { useState, type ComponentPropsWithoutRef, type Ref } from "react";
+import type { FieldState } from "../../lib/fieldState";
+import { common, manageCopy } from "../../lib/copy";
+import { LoginText } from "./LoginText";
+import { BUTTON, ERROR_TEXT, HINT_TEXT, INPUT, INPUT_BORDER } from "./styles";
+
+interface FieldShellProps {
+  id: string;
+  label: string;
+  /** `sr-only` for the Manage dialog's `New login` field, whose section heading already says "Login". */
+  labelHidden?: boolean;
+  hint?: string;
+  state: FieldState;
+  children: (describedBy: string | undefined) => React.ReactNode;
+}
+
+interface SubmitButtonProps extends Omit<
+  ComponentPropsWithoutRef<"button">,
+  "type" | "onClick" | "aria-disabled"
+> {
+  /** In flight, waiting, or nothing to submit: looks and is announced as disabled, but keeps focus. */
+  blocked: boolean;
+}
+
+/**
+ * A form's submit button that never takes the `disabled` attribute while it
+ * is blocked, because Chrome drops focus to <body> when the focused button
+ * becomes disabled (accounts.md §7 "Forms"). `aria-disabled` plus a cancelled
+ * click (which also stops Enter's implicit submission) do the job instead; the
+ * form hook's single-flight guard covers activations React has not re-rendered for.
+ */
+export function SubmitButton({ blocked, ...attributes }: SubmitButtonProps) {
+  return (
+    <button
+      {...attributes}
+      type="submit"
+      aria-disabled={blocked || undefined}
+      onClick={blocked ? (event) => event.preventDefault() : undefined}
+    />
+  );
+}
+
+/** Label, optional hint, the control, and the error line, wired with `aria-describedby`. */
+function FieldShell({ id, label, labelHidden = false, hint, state, children }: FieldShellProps) {
+  const hintId = hint === undefined ? null : `${id}-hint`;
+  const errorId = state.message === null ? null : `${id}-error`;
+  const describedBy = [hintId, errorId].filter((part) => part !== null).join(" ") || undefined;
+  return (
+    <div className="flex flex-col gap-1">
+      <label htmlFor={id} className={labelHidden ? "sr-only" : "text-sm text-zinc-200"}>
+        {label}
+      </label>
+      {children(describedBy)}
+      {hint !== undefined && (
+        <p id={hintId ?? undefined} className={HINT_TEXT}>
+          {hint}
+        </p>
+      )}
+      {state.message !== null && (
+        <p id={errorId ?? undefined} role="alert" className={ERROR_TEXT}>
+          <LoginText text={state.message} />
+        </p>
+      )}
+    </div>
+  );
+}
+
+type InputAttributes = Omit<
+  ComponentPropsWithoutRef<"input">,
+  "id" | "value" | "onChange" | "className" | "type"
+>;
+
+interface TextFieldProps extends InputAttributes {
+  id: string;
+  label: string;
+  labelHidden?: boolean;
+  hint?: string;
+  value: string;
+  onChange: (value: string) => void;
+  state: FieldState;
+  /** Extra classes for the control, e.g. `font-mono tracking-wide` on the invite code. */
+  inputClassName?: string;
+  ref?: Ref<HTMLInputElement>;
+}
+
+export function TextField({
+  id,
+  label,
+  labelHidden,
+  hint,
+  value,
+  onChange,
+  state,
+  inputClassName = "",
+  ref,
+  ...attributes
+}: TextFieldProps) {
+  return (
+    <FieldShell id={id} label={label} labelHidden={labelHidden} hint={hint} state={state}>
+      {(describedBy) => (
+        <input
+          {...attributes}
+          ref={ref}
+          id={id}
+          type="text"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          aria-invalid={state.invalid || undefined}
+          aria-describedby={describedBy}
+          className={`${INPUT} ${INPUT_BORDER[state.invalid ? "invalid" : "valid"]} ${inputClassName}`}
+        />
+      )}
+    </FieldShell>
+  );
+}
+
+/** `current` and `new` tell the Manage dialog's two password toggles apart; Register and Log in use `password`. */
+type ToggleKind = "password" | "confirmation" | "current" | "new";
+
+const TOGGLE_NAME: Record<ToggleKind, Record<"show" | "hide", string>> = {
+  password: { show: common.showPassword, hide: common.hidePassword },
+  confirmation: { show: common.showConfirmation, hide: common.hideConfirmation },
+  current: { show: manageCopy.showCurrentPassword, hide: manageCopy.hideCurrentPassword },
+  new: { show: manageCopy.showNewPassword, hide: manageCopy.hideNewPassword },
+};
+
+interface PasswordFieldProps extends Omit<TextFieldProps, "inputClassName"> {
+  /** Names the Show/Hide toggle for assistive tech (§7 "Password fields"). */
+  toggle?: ToggleKind;
+}
+
+/**
+ * A password input with its own Show/Hide text toggle inside the right edge.
+ * Never `font-mono`, never `maxLength` (§6, §7): the value is validated on
+ * submit, not cut off while typing.
+ */
+export function PasswordField({
+  id,
+  label,
+  labelHidden,
+  hint,
+  value,
+  onChange,
+  state,
+  toggle = "password",
+  disabled,
+  ref,
+  ...attributes
+}: PasswordFieldProps) {
+  const [shown, setShown] = useState(false);
+  const names = TOGGLE_NAME[toggle];
+  return (
+    <FieldShell id={id} label={label} labelHidden={labelHidden} hint={hint} state={state}>
+      {(describedBy) => (
+        <div className="relative">
+          <input
+            {...attributes}
+            ref={ref}
+            id={id}
+            type={shown ? "text" : "password"}
+            value={value}
+            onChange={(event) => onChange(event.target.value)}
+            disabled={disabled}
+            autoCapitalize="off"
+            spellCheck={false}
+            aria-invalid={state.invalid || undefined}
+            aria-describedby={describedBy}
+            className={`${INPUT} ${INPUT_BORDER[state.invalid ? "invalid" : "valid"]} pr-16`}
+          />
+          <button
+            type="button"
+            onClick={() => setShown((previous) => !previous)}
+            disabled={disabled}
+            aria-pressed={shown}
+            aria-label={shown ? names.hide : names.show}
+            className={`absolute inset-y-0 right-2 my-auto ${BUTTON.text}`}
+          >
+            {shown ? common.hide : common.show}
+          </button>
+        </div>
+      )}
+    </FieldShell>
+  );
+}

@@ -29,6 +29,36 @@ export default tseslint.config(
       jsxA11y.flatConfigs.recommended,
     ],
     languageOptions: { globals: { ...globals.browser, ...globals.node } },
+    rules: {
+      // C9 (docs/05-security.md): the UI renders every string as text and never injects HTML, through
+      // React or straight into the DOM. Flat config replaces a rule's options instead of merging them:
+      // a later block that sets no-restricted-syntax for web files would silently drop every selector
+      // here, so add new web selectors to this list.
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "JSXAttribute[name.name='dangerouslySetInnerHTML']",
+          message: "Render strings as text; the UI never injects HTML (docs/05-security.md C9).",
+        },
+        {
+          selector: "Property[key.name='dangerouslySetInnerHTML']",
+          message: "Render strings as text; the UI never injects HTML (docs/05-security.md C9).",
+        },
+        {
+          selector: "AssignmentExpression > MemberExpression[property.name=/^(inner|outer)HTML$/]",
+          message:
+            "Set textContent or render with React; never assign innerHTML/outerHTML (docs/05-security.md C9).",
+        },
+        {
+          selector: "CallExpression[callee.property.name='insertAdjacentHTML']",
+          message: "Insert nodes or text, never an HTML string (docs/05-security.md C9).",
+        },
+        {
+          selector: "MemberExpression[object.name='document'][property.name=/^write(ln)?$/]",
+          message: "document.write parses HTML; render with React instead (docs/05-security.md C9).",
+        },
+      ],
+    },
   },
   {
     // The api is server-side only: structured logs, server RNG, env read in one place (ADR 0008 §5).

@@ -50,9 +50,26 @@ body {
   animation: legendary-pulse 2s ease-in-out infinite;
 }
 
+/* Menu and dialog enter (accounts.md §6): fade and scale over 150 ms, nothing that loops. */
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.pop-in {
+  animation: pop-in 150ms ease-out both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .card-reveal,
-  .glow-legendary {
+  .glow-legendary,
+  .pop-in {
     animation: none;
   }
 }

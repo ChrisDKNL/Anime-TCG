@@ -23,13 +23,13 @@ describe("Inventory", () => {
   afterEach(() => vi.restoreAllMocks());
 
   it("shows an empty state when there are no cards", () => {
-    render(<Inventory cards={[]} stats={statsFor([])} onClear={() => undefined} />);
+    render(<Inventory cards={[]} stats={statsFor([])} login="Chris" onClear={() => undefined} />);
     expect(screen.getByText(/collection is empty/i)).toBeInTheDocument();
     expect(screen.queryByRole("article")).not.toBeInTheDocument();
   });
 
   it("groups duplicates by character and rarity, sorted rarest first", () => {
-    render(<Inventory cards={cards} stats={statsFor(cards)} onClear={() => undefined} />);
+    render(<Inventory cards={cards} stats={statsFor(cards)} login="Chris" onClear={() => undefined} />);
     const articles = screen.getAllByRole("article");
     expect(articles).toHaveLength(3);
     expect(articles[0]).toHaveAccessibleName(/Alpha, legendary/);
@@ -42,22 +42,23 @@ describe("Inventory", () => {
 
   it("filters by rarity", async () => {
     const user = userEvent.setup();
-    render(<Inventory cards={cards} stats={statsFor(cards)} onClear={() => undefined} />);
+    render(<Inventory cards={cards} stats={statsFor(cards)} login="Chris" onClear={() => undefined} />);
     await user.selectOptions(screen.getByLabelText(/filter by rarity/i), "rare");
     const articles = screen.getAllByRole("article");
     expect(articles).toHaveLength(1);
     expect(articles[0]).toHaveAccessibleName(/Beta, rare/);
   });
 
-  it("only clears after the user confirms", async () => {
+  it("only clears after the user confirms, and the confirm names the login", async () => {
     const user = userEvent.setup();
     const onClear = vi.fn();
     const confirm = vi.spyOn(window, "confirm");
-    render(<Inventory cards={cards} stats={statsFor(cards)} onClear={onClear} />);
+    render(<Inventory cards={cards} stats={statsFor(cards)} login="Chris" onClear={onClear} />);
 
     confirm.mockReturnValueOnce(false);
     await user.click(screen.getByRole("button", { name: /reset/i }));
     expect(onClear).not.toHaveBeenCalled();
+    expect(confirm).toHaveBeenCalledWith("Delete every card in \u2068Chris\u2069? This cannot be undone.");
 
     confirm.mockReturnValueOnce(true);
     await user.click(screen.getByRole("button", { name: /reset/i }));
