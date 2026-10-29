@@ -316,3 +316,13 @@ export function validate(input: SnapshotInput): Validated {
     differingAppearances,
   };
 }
+
+/** The valid entries and their edges from the series pages alone: what the fetch plans its next requests from. */
+export function entriesOf(series: readonly SeriesPage[]): { entries: Entry[]; edges: Edge[] } {
+  return readEntries({ series, relations: [], characters: new Map() }, new SkipTally());
+}
+
+/** The valid edges of the hop pages. */
+export function hopEdgesOf(relations: readonly RelationsPage[]): Edge[] {
+  return readHopEdges({ series: [], relations, characters: new Map() }, new SkipTally());
+}
