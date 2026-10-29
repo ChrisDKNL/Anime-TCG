@@ -1,6 +1,9 @@
 import { defineConfig, devices } from "@playwright/test";
 
-const PORT = 5173;
+// Vite's default port. Override it with E2E_PORT when something else already answers on it: with
+// reuseExistingServer, Playwright would otherwise run the whole suite against that other server. On the
+// owner's station a homelab container holds 127.0.0.1:5173, so run e.g. `E2E_PORT=5174 npm run test:e2e -w web`.
+const PORT = Number(process.env.E2E_PORT ?? 5173);
 
 export default defineConfig({
   testDir: "./e2e",
