@@ -19,5 +19,6 @@
     "e2e/**/*.ts",
     "src/test/fixtures.ts",
     "src/types.ts"
-  ]
+  ],
+  "references": [{ "path": "../shared" }]
 }
