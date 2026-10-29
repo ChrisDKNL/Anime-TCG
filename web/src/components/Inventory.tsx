@@ -5,7 +5,7 @@ import type { Card } from "../types";
 import { CharacterCard } from "./CharacterCard";
 
 interface Props {
-  cards: Card[];
+  cards: readonly Card[];
   stats: { total: number; unique: number; byRarity: Record<Rarity, number> };
   /** Whose collection this is; the Reset confirm names it (accounts.md §8). */
   login: string;

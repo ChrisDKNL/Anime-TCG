@@ -3,8 +3,9 @@ import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from "re
 /**
  * A button that opens a `role="menu"` with roving tabindex (accounts.md §7):
  * Enter/Space/ArrowDown open on the first item, ArrowUp on the last; arrows
- * move and wrap; Home/End; Escape closes and returns focus to the button; Tab
- * closes and lets focus move on from the button; clicking outside closes.
+ * move and wrap; Home/End; Enter and Space activate an item, link or button;
+ * Escape closes and returns focus to the button; Tab closes and lets focus move
+ * on from the button; clicking outside closes.
  */
 export function useMenu(itemCount: number) {
   const [open, setOpen] = useState(false);
@@ -82,6 +83,13 @@ export function useMenu(itemCount: number) {
         case "Tab":
           // Focus goes back to the button first so the browser's Tab moves on from there.
           close(true);
+          break;
+        case " ":
+          // A button item activates on Space by itself; a link item (Manage account) needs it done.
+          if (event.target instanceof HTMLAnchorElement) {
+            event.preventDefault();
+            event.target.click();
+          }
           break;
       }
     },

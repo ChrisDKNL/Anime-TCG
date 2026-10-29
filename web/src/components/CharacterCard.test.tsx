@@ -33,4 +33,12 @@ describe("CharacterCard", () => {
     rerender(<CharacterCard card={makeCard()} copies={1} />);
     expect(screen.queryByText(/×/)).not.toBeInTheDocument();
   });
+
+  it("runs the entrance unless the card is a reveal found on returning to the page", () => {
+    const { rerender } = render(<CharacterCard card={makeCard()} />);
+    expect(screen.getByRole("article")).toHaveClass("card-reveal");
+    rerender(<CharacterCard card={makeCard()} animate={false} />);
+    expect(screen.getByRole("article")).not.toHaveClass("card-reveal");
+    expect(screen.getByRole("article")).toHaveClass("group");
+  });
 });

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { fetchCharacterPool } from "../lib/anilist";
 import type { Character } from "../types";
 
@@ -53,4 +53,19 @@ export function useCharacterPool() {
   }, []);
 
   return { ...state, reload };
+}
+
+export type CharacterPool = ReturnType<typeof useCharacterPool>;
+
+/**
+ * The pool loads once, alongside the session check (App.tsx), and every page
+ * reads that one load through this context, so moving between pages never
+ * fetches it again.
+ */
+export const PoolContext = createContext<CharacterPool | null>(null);
+
+export function usePool(): CharacterPool {
+  const pool = useContext(PoolContext);
+  if (pool === null) throw new Error("usePool needs a PoolContext provider");
+  return pool;
 }

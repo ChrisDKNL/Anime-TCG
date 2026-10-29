@@ -1,29 +1,22 @@
-import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SESSION_QUERY_KEY } from "../../hooks/useAccountSession";
 import { envelope, makeAccount, mockFetch, noContent, sentBody } from "../../test/api";
 import { renderWithProviders } from "../../test/render";
-import { ManageAccountDialog } from "./ManageAccountDialog";
+import { ManageAccount } from "./ManageAccount";
 import { fill } from "../../test/user";
 
 const account = makeAccount({ login: "Chris", cards: 0, createdAt: "2026-10-28T09:30:00.000Z" });
 
 function setup(routes: Parameters<typeof mockFetch>[0], overrides: Partial<typeof account> = {}) {
   const fetchMock = mockFetch(routes);
-  const onClose = vi.fn();
   const onRenamed = vi.fn();
   const onDeleted = vi.fn();
   const rendered = renderWithProviders(
-    <ManageAccountDialog
-      open
-      account={{ ...account, ...overrides }}
-      onClose={onClose}
-      onRenamed={onRenamed}
-      onDeleted={onDeleted}
-    />,
+    <ManageAccount account={{ ...account, ...overrides }} onRenamed={onRenamed} onDeleted={onDeleted} />,
   );
-  return { fetchMock, onClose, onRenamed, onDeleted, user: userEvent.setup(), ...rendered };
+  return { fetchMock, onRenamed, onDeleted, user: userEvent.setup(), ...rendered };
 }
 
 function liveRegion() {
@@ -41,7 +34,7 @@ async function fillPasswords(user: ReturnType<typeof userEvent.setup>) {
 
 async function submitDelete(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole("button", { name: "Delete account…" }));
-  await fill(user, screen.getByLabelText("Password"), "a password");
+  await fill(user, within(screen.getByRole("dialog")).getByLabelText("Password"), "a password");
   await user.click(screen.getByRole("button", { name: "Delete Chris" }));
 }
 
@@ -50,31 +43,25 @@ async function rename(user: ReturnType<typeof userEvent.setup>) {
   await user.click(screen.getByRole("button", { name: "Save" }));
 }
 
-describe("ManageAccountDialog", () => {
+describe("ManageAccount", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.useRealTimers();
   });
 
-  it("opens as a modal labelled by its heading, with the account header and three sections", () => {
+  it("is a page: the h1, the account header and three h2 sections, with no Close and no dialog", () => {
     setup({});
-    const dialog = screen.getByRole("dialog", { name: "Manage account" });
-    expect(dialog).toHaveAttribute("open");
-    expect(dialog).toHaveFocus();
-    expect(within(dialog).getByText("Chris")).toHaveAttribute("title", "Chris");
+    const heading = screen.getByRole("heading", { level: 1, name: "Manage account" });
+    expect(heading).toHaveAttribute("tabindex", "-1");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(screen.getByText("Chris")).toHaveAttribute("title", "Chris");
     expect(screen.getByText("No cards yet · Created 28 Oct 2026")).toBeInTheDocument();
-    expect(screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent)).toEqual([
+    expect(screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent)).toEqual([
       "Login",
       "Password",
       "Delete account",
     ]);
-    expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument();
-  });
-
-  it("close button closes the dialog and reports it", async () => {
-    const { user, onClose } = setup({});
-    await user.click(screen.getByRole("button", { name: "Close" }));
-    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: "Close" })).not.toBeInTheDocument();
   });
 
   describe("Login section", () => {
@@ -274,16 +261,17 @@ describe("ManageAccountDialog", () => {
   });
 
   describe("Delete section", () => {
-    it("replaces the body with the confirm panel; the delete button needs a password", async () => {
+    it("opens the confirmation as a modal dialog over the page; the delete button needs a password", async () => {
       const { user } = setup({}, { cards: 3 });
       await user.click(screen.getByRole("button", { name: "Delete account…" }));
 
       const dialog = screen.getByRole("dialog", { name: "Delete Chris?" });
+      expect(dialog).toHaveAttribute("open");
       expect(dialog).toHaveAccessibleDescription(
         "This permanently deletes Chris and its 3 cards. There is no undo.",
       );
-      expect(screen.queryByRole("heading", { name: "Manage account" })).not.toBeInTheDocument();
-      const password = screen.getByLabelText("Password");
+      expect(screen.getByRole("heading", { level: 1, name: "Manage account" })).toBeInTheDocument();
+      const password = within(screen.getByRole("dialog")).getByLabelText("Password");
       expect(password).toHaveFocus();
       expect(password).toHaveAttribute("autocomplete", "current-password");
       const del = screen.getByRole("button", { name: "Delete Chris" });
@@ -292,8 +280,17 @@ describe("ManageAccountDialog", () => {
       expect(del).toBeEnabled();
 
       await user.click(screen.getByRole("button", { name: "Cancel" }));
-      expect(screen.getByRole("heading", { name: "Manage account" })).toBeInTheDocument();
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Delete account…" })).toHaveFocus();
+    });
+
+    it("reopening starts the password field empty", async () => {
+      const { user } = setup({});
+      await user.click(screen.getByRole("button", { name: "Delete account…" }));
+      await user.type(within(screen.getByRole("dialog")).getByLabelText("Password"), "typed");
+      await user.click(screen.getByRole("button", { name: "Cancel" }));
+      await user.click(screen.getByRole("button", { name: "Delete account…" }));
+      expect(within(screen.getByRole("dialog")).getByLabelText("Password")).toHaveValue("");
     });
 
     it("with no cards the body does not mention any", async () => {
@@ -312,14 +309,15 @@ describe("ManageAccountDialog", () => {
       );
     });
 
-    it("Escape on the confirm panel goes back to the sections instead of closing", async () => {
-      const { user, onClose } = setup({});
+    it("closing the dialog the way Escape does returns focus to Delete account…", async () => {
+      const { user } = setup({});
       await user.click(screen.getByRole("button", { name: "Delete account…" }));
+      // jsdom has no modal Escape; the browser's Escape closes the dialog, which is this close (e2e presses the key).
       const dialog = screen.getByRole("dialog");
-      fireEvent(dialog, new Event("cancel", { cancelable: true }));
-      expect(screen.getByRole("heading", { name: "Manage account" })).toBeInTheDocument();
+      if (!(dialog instanceof HTMLDialogElement)) throw new Error("the confirmation is not a <dialog>");
+      act(() => dialog.close());
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Delete account…" })).toHaveFocus();
-      expect(onClose).not.toHaveBeenCalled();
     });
 
     it("a wrong password is inline and cleared; success signs out and reports the login", async () => {
@@ -328,14 +326,14 @@ describe("ManageAccountDialog", () => {
       });
       queryClient.setQueryData(SESSION_QUERY_KEY, { signedIn: true, account });
       await user.click(screen.getByRole("button", { name: "Delete account…" }));
-      await fill(user, screen.getByLabelText("Password"), "wrong");
+      await fill(user, within(screen.getByRole("dialog")).getByLabelText("Password"), "wrong");
       await user.click(screen.getByRole("button", { name: "Delete Chris" }));
       expect(await screen.findByRole("alert")).toHaveTextContent("That password is incorrect.");
-      expect(screen.getByLabelText("Password")).toHaveValue("");
-      expect(screen.getByLabelText("Password")).toHaveFocus();
+      expect(within(screen.getByRole("dialog")).getByLabelText("Password")).toHaveValue("");
+      expect(within(screen.getByRole("dialog")).getByLabelText("Password")).toHaveFocus();
 
       fetchMock.mockImplementation(() => Promise.resolve(new Response(null, { status: 204 })));
-      await fill(user, screen.getByLabelText("Password"), "right");
+      await fill(user, within(screen.getByRole("dialog")).getByLabelText("Password"), "right");
       await user.click(screen.getByRole("button", { name: "Delete Chris" }));
       await waitFor(() => expect(onDeleted).toHaveBeenCalledWith("Chris"));
       expect(queryClient.getQueryData(SESSION_QUERY_KEY)).toEqual({ signedIn: false });
@@ -344,12 +342,12 @@ describe("ManageAccountDialog", () => {
     it("unreachable keeps the confirm panel with the in-form banner", async () => {
       const { user } = setup({ "POST /api/account/delete": { status: 502, raw: "" } });
       await user.click(screen.getByRole("button", { name: "Delete account…" }));
-      await fill(user, screen.getByLabelText("Password"), "pw");
+      await fill(user, within(screen.getByRole("dialog")).getByLabelText("Password"), "pw");
       await user.click(screen.getByRole("button", { name: "Delete Chris" }));
       expect(await screen.findByRole("alert")).toHaveTextContent(
         "Couldn't reach the game server. Nothing was changed. Try again.",
       );
-      expect(screen.getByRole("heading", { name: "Delete Chris?" })).toBeInTheDocument();
+      expect(screen.getByRole("dialog", { name: "Delete Chris?" })).toBeInTheDocument();
     });
 
     it("the server's wait counts down on the delete button, sends nothing meanwhile and announces the end", async () => {
@@ -381,8 +379,8 @@ describe("ManageAccountDialog", () => {
       const { user } = setup({ "POST /api/account/delete": envelope(400, "validation_failed") });
       await submitDelete(user);
       expect(await screen.findByRole("alert")).toHaveTextContent("That password is incorrect.");
-      expect(screen.getByLabelText("Password")).toHaveValue("");
-      expect(screen.getByLabelText("Password")).toHaveFocus();
+      expect(within(screen.getByRole("dialog")).getByLabelText("Password")).toHaveValue("");
+      expect(within(screen.getByRole("dialog")).getByLabelText("Password")).toHaveFocus();
     });
 
     it("an unauthenticated answer ends the session without an in-form message", async () => {

@@ -1,72 +1,37 @@
 import { act, screen } from "@testing-library/react";
-import { useRef } from "react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { renderWithProviders } from "../test/render";
+import { LiveRegion } from "../components/LiveRegion";
 import { SESSION_QUERY_KEY } from "./useAccountSession";
-import { useFocusTarget, useShellContext, type FocusTarget } from "./useShell";
-
-function Target({ target, label }: { target: FocusTarget; label: string }) {
-  const ref = useRef<HTMLHeadingElement>(null);
-  useFocusTarget(target, ref);
-  return (
-    <h2 ref={ref} tabIndex={-1}>
-      {label}
-    </h2>
-  );
-}
+import { ShellContext, useShell, useShellContext } from "./useShell";
 
 function Controls() {
   const shell = useShellContext();
   return (
     <>
-      <button type="button" onClick={() => shell.requestFocus("accountHeading")}>
-        focus heading
-      </button>
       <button type="button" onClick={() => shell.announce("Hello")}>
         announce
       </button>
       <button type="button" onClick={() => shell.sessionEnded()}>
         end session
       </button>
+      <p>notice: {shell.notice}</p>
     </>
   );
 }
 
+/** A shell of its own, so the test can hand it the session-ended navigation. */
+function Shell({ onSessionEnded }: { onSessionEnded: () => void }) {
+  const { state, context } = useShell({ onSessionEnded });
+  return (
+    <ShellContext value={context}>
+      <LiveRegion announcement={state.announcement} />
+      <Controls />
+    </ShellContext>
+  );
+}
+
 describe("useShell", () => {
-  it("focuses a mounted target immediately", () => {
-    renderWithProviders(
-      <>
-        <Target target="accountHeading" label="Heading" />
-        <Controls />
-      </>,
-    );
-    act(() => screen.getByRole("button", { name: "focus heading" }).click());
-    expect(screen.getByRole("heading", { name: "Heading" })).toHaveFocus();
-  });
-
-  it("holds a request for a target that mounts later and honours it once", () => {
-    const { rerender } = renderWithProviders(<Controls />);
-    act(() => screen.getByRole("button", { name: "focus heading" }).click());
-
-    rerender(
-      <>
-        <Controls />
-        <Target target="accountHeading" label="Heading" />
-      </>,
-    );
-    expect(screen.getByRole("heading", { name: "Heading" })).toHaveFocus();
-
-    // A remount of the same target does not steal focus again.
-    rerender(<Controls />);
-    rerender(
-      <>
-        <Controls />
-        <Target target="accountHeading" label="Heading" />
-      </>,
-    );
-    expect(screen.getByRole("heading", { name: "Heading" })).not.toHaveFocus();
-  });
-
   it("announces into the live region", () => {
     renderWithProviders(<Controls />);
     act(() => screen.getByRole("button", { name: "announce" }).click());
@@ -92,17 +57,18 @@ describe("useShell", () => {
     expect(region.firstChild).not.toBe(first);
   });
 
-  it("sessionEnded signs the query out, sets the notice and requests the heading", () => {
-    const { queryClient } = renderWithProviders(
-      <>
-        <Controls />
-        <Target target="accountHeading" label="Heading" />
-      </>,
-    );
+  it("sessionEnded signs the query out first, then sets the notice and hands over to the navigation", () => {
+    let sessionWhenNavigating: unknown;
+    const onSessionEnded = vi.fn(() => {
+      sessionWhenNavigating = queryClient.getQueryData(SESSION_QUERY_KEY);
+    });
+    const { queryClient } = renderWithProviders(<Shell onSessionEnded={onSessionEnded} />);
     queryClient.setQueryData(SESSION_QUERY_KEY, { signedIn: true });
-    act(() => screen.getByRole("button", { name: "end session" }).click());
+    act(() => screen.getAllByRole("button", { name: "end session" })[0]?.click());
     expect(queryClient.getQueryData(SESSION_QUERY_KEY)).toEqual({ signedIn: false });
-    expect(screen.getByRole("status")).toHaveAttribute("data-notice", "sessionEnded");
-    expect(screen.getByRole("heading", { name: "Heading" })).toHaveFocus();
+    // The /login guard must already see a signed-out visitor when the navigation runs.
+    expect(sessionWhenNavigating).toEqual({ signedIn: false });
+    expect(onSessionEnded).toHaveBeenCalledTimes(1);
+    expect(screen.getAllByText("notice: sessionEnded")).toHaveLength(1);
   });
 });

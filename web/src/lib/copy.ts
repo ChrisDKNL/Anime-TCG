@@ -2,29 +2,19 @@
  * Every user-facing string of the accounts feature, verbatim from
  * docs/design/accounts.md §8. Functions take the login, a count phrase or the
  * seconds they interpolate; the copy test renders all of them and scans for the
- * words §8 forbids. The plain strings that embed a login (an aria-label, the
- * title bar, a confirm dialog) wrap it in directional isolates, since <bdi>
- * cannot go there.
+ * words §8 forbids. The plain strings that embed a login (an aria-label, a
+ * confirm dialog) wrap it in directional isolates, since <bdi> cannot go there.
+ * Page headings and titles live in the route list (routes.ts): the navigation
+ * spec moved them there and took the login out of the title bar.
  */
 
 import { isolateLogin } from "./loginText";
 
+/** `Manage account` has no ellipsis: it goes to a page (navigation-and-landing.md §3.4). */
 export const header = {
-  accountSignedOut: "Account",
   accountMenuLabel: (login: string) => `Account menu. Signed in as ${isolateLogin(login)}`,
-  manage: "Manage account…",
+  manage: "Manage account",
   logOut: "Log out",
-} as const;
-
-export function documentTitle(login: string | null): string {
-  return login === null ? "Anime TCG" : `${isolateLogin(login)} · Anime TCG`;
-}
-
-export const accountScreen = {
-  heading: "Your account",
-  intro: "Log in to your collection, or register a new one with an invite code.",
-  logIn: "Log in",
-  register: "Register",
 } as const;
 
 export const common = {
@@ -49,7 +39,6 @@ export const common = {
 } as const;
 
 export const registerCopy = {
-  heading: "Register",
   step1: "Step 1 of 2",
   step2: "Step 2 of 2",
   inviteLabel: "Invite code",
@@ -72,7 +61,6 @@ export const registerCopy = {
 } as const;
 
 export const loginCopy = {
-  heading: "Log in",
   loginLabel: "Login",
   passwordLabel: "Password",
   submit: "Log in",
@@ -89,7 +77,6 @@ export const menuCopy = {
 } as const;
 
 export const manageCopy = {
-  heading: "Manage account",
   loginSection: "Login",
   newLoginLabel: "New login",
   save: "Save",

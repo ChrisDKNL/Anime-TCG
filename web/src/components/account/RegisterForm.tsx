@@ -1,26 +1,29 @@
 import type { AccountPublic } from "@anime-tcg/shared/api";
-import { useEffect, useRef } from "react";
+import type { ReactNode } from "react";
 import { useRegisterForm, type RegisterStep } from "../../hooks/useRegisterForm";
 import { common, registerCopy } from "../../lib/copy";
+import { pageHeading } from "../../lib/routes";
+import { PageHeading } from "../layout/PageHeading";
 import { FormBanner } from "./FormBanner";
 import { PasswordField, SubmitButton, TextField } from "./fields";
 import { BODY_TEXT, BUTTON, HINT_TEXT, PANEL_HEADING } from "./styles";
 
 interface Props {
-  onBack: () => void;
   onRegistered: (account: AccountPublic) => void;
+  /** `Already registered?` and its `Log in` link, under the form in every state (navigation-and-landing.md §3.5 step 6). */
+  crossLink?: ReactNode;
 }
 
 const STEP_LABEL: Record<RegisterStep, string> = { 1: registerCopy.step1, 2: registerCopy.step2 };
 
-export function RegisterForm({ onBack, onRegistered }: Props) {
+/**
+ * The `/register` page's panel (accounts.md §3.3 as amended by
+ * navigation-and-landing.md §3.5): both steps are one page and one history
+ * entry. Step 1 and the cap message have no `Back` (the browser's Back leaves
+ * the page); step 2 keeps its `Back` to step 1.
+ */
+export function RegisterForm({ onRegistered, crossLink }: Props) {
   const form = useRegisterForm({ onRegistered });
-  const headingRef = useRef<HTMLHeadingElement>(null);
-
-  // The sub-step's heading takes focus on entry (§7 "Account screen").
-  useEffect(() => {
-    headingRef.current?.focus();
-  }, []);
 
   const busy = form.checking || form.submitting;
 
@@ -30,26 +33,17 @@ export function RegisterForm({ onBack, onRegistered }: Props) {
         <p id="register-step" className={HINT_TEXT}>
           {STEP_LABEL[form.step]}
         </p>
-        <h2
-          id="account-heading"
-          ref={headingRef}
-          tabIndex={-1}
-          aria-describedby="register-step"
+        <PageHeading
+          text={pageHeading("/register")}
+          describedBy="register-step"
           className={`${PANEL_HEADING} focus:outline-none`}
-        >
-          {registerCopy.heading}
-        </h2>
+        />
       </div>
 
       {form.capReached ? (
-        <div className="flex flex-col gap-4">
-          <p role="alert" className={BODY_TEXT}>
-            {registerCopy.capReached}
-          </p>
-          <button type="button" onClick={onBack} className={`${BUTTON.secondary} w-full sm:w-auto`}>
-            {common.back}
-          </button>
-        </div>
+        <p role="alert" className={BODY_TEXT}>
+          {registerCopy.capReached}
+        </p>
       ) : form.step === 1 ? (
         <form noValidate onSubmit={(event) => void form.submitStep1(event)} className="flex flex-col gap-4">
           {form.unreachable && <FormBanner />}
@@ -68,19 +62,9 @@ export function RegisterForm({ onBack, onRegistered }: Props) {
             inputMode="text"
             inputClassName="font-mono tracking-wide"
           />
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <SubmitButton blocked={busy} className={`${BUTTON.primary} w-full sm:w-auto`}>
-              {form.checking ? registerCopy.checking : registerCopy.continue}
-            </SubmitButton>
-            <button
-              type="button"
-              onClick={onBack}
-              disabled={busy}
-              className={`${BUTTON.secondary} w-full sm:w-auto`}
-            >
-              {common.back}
-            </button>
-          </div>
+          <SubmitButton blocked={busy} className={`${BUTTON.primary} w-full sm:w-auto sm:self-start`}>
+            {form.checking ? registerCopy.checking : registerCopy.continue}
+          </SubmitButton>
         </form>
       ) : (
         <form noValidate onSubmit={(event) => void form.submitStep2(event)} className="flex flex-col gap-4">
@@ -137,6 +121,7 @@ export function RegisterForm({ onBack, onRegistered }: Props) {
           </div>
         </form>
       )}
+      {crossLink}
     </div>
   );
 }

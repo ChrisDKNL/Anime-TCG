@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createQueryClient } from "../lib/queryClient";
 import { envelope, makeAccount, mockFetch } from "../test/api";
-import { useAccountSession, useSetSession } from "./useAccountSession";
+import { isSignedIn, SESSION_QUERY_KEY, useAccountSession, useSetSession } from "./useAccountSession";
 
 function withClient() {
   const queryClient = createQueryClient();
@@ -36,16 +36,40 @@ describe("useAccountSession", () => {
     const { result } = renderHook(() => useAccountSession(), withClient());
     await waitFor(() => expect(result.current.session).toEqual({ status: "unreachable", retrying: false }));
 
-    fetchMock.mockImplementation(() =>
-      Promise.resolve(
-        new Response(JSON.stringify({ signedIn: false }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
+    let answer: (response: Response) => void = () => undefined;
+    fetchMock.mockImplementation(
+      () =>
+        new Promise<Response>((resolve) => {
+          answer = resolve;
         }),
-      ),
     );
-    act(() => result.current.retry());
+    // The retry hands back the answer, so `Try again` can act on a session it finds (navigation spec §3.2 step 4).
+    let retried: Promise<unknown> = Promise.resolve();
+    act(() => {
+      retried = result.current.retry();
+    });
+    // While it runs the session is still unreachable, retrying: the page does not drop back to boot.
+    await waitFor(() => expect(result.current.session).toEqual({ status: "unreachable", retrying: true }));
+    answer(
+      new Response(JSON.stringify({ signedIn: false }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+    );
+    await act(async () => {
+      expect(await retried).toEqual({ signedIn: false });
+    });
     await waitFor(() => expect(result.current.session).toEqual({ status: "signedOut" }));
+  });
+
+  it("a second component asking for the session does not ask the server again, even after a failure", async () => {
+    const fetchMock = mockFetch({ "GET /api/session": { status: 502, raw: "bad gateway" } });
+    const { wrapper } = withClient();
+    const first = renderHook(() => useAccountSession(), { wrapper });
+    await waitFor(() => expect(first.result.current.session.status).toBe("unreachable"));
+    renderHook(() => useAccountSession(), { wrapper });
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("treats an api error envelope on the session check as unreachable too", async () => {
@@ -64,5 +88,14 @@ describe("useAccountSession", () => {
     await waitFor(() => expect(result.current.session.session.status).toBe("signedOut"));
     act(() => result.current.set({ signedIn: true, account }));
     await waitFor(() => expect(result.current.session.session).toEqual({ status: "signedIn", account }));
+  });
+
+  it("isSignedIn reads the last answer: only a session naming an account counts", () => {
+    const { queryClient } = withClient();
+    expect(isSignedIn(queryClient)).toBe(false);
+    queryClient.setQueryData(SESSION_QUERY_KEY, { signedIn: false });
+    expect(isSignedIn(queryClient)).toBe(false);
+    queryClient.setQueryData(SESSION_QUERY_KEY, { signedIn: true, account: makeAccount() });
+    expect(isSignedIn(queryClient)).toBe(true);
   });
 });

@@ -1,21 +1,25 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { QueryClientProvider } from "@tanstack/react-query";
+import { createMemoryHistory } from "@tanstack/react-router";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import { SESSION_QUERY_KEY } from "./hooks/useAccountSession";
 import { createQueryClient } from "./lib/queryClient";
+import { createAppRouter } from "./router";
 import { envelope, makeAccount, noContent } from "./test/api";
-import { ANILIST, liveRegion, renderApp, signedOutSession } from "./test/app";
+import { ANILIST, liveRegion, pageHeading, renderApp, signedOutSession } from "./test/app";
 import { fill } from "./test/user";
 
 /**
  * Budget for async queries that race real timers (the 350 ms pack-reveal delay
- * in Game.tsx) or React's passive-effect flush under parallel-file load.
+ * in useGame) or React's passive-effect flush under parallel-file load.
  */
 const ASYNC_TIMEOUT = 5_000;
 
 const account = makeAccount({ login: "Chris" });
+const CONTROL = "Account menu. Signed in as \u2068Chris\u2069";
+const mainNav = () => screen.getByRole("navigation", { name: "Main" });
 
 describe("App boot", () => {
   afterEach(() => {
@@ -23,31 +27,42 @@ describe("App boot", () => {
     vi.useRealTimers();
   });
 
-  it("signed out: the Account screen, no tabs, no account data, title reset", async () => {
+  it("signed out at /: the landing page, the Log in and Register links, no account data, the start title", async () => {
     renderApp({ "GET /api/session": signedOutSession });
-    expect(await screen.findByRole("heading", { name: "Your account" })).toBeInTheDocument();
+    expect(await pageHeading("Anime TCG")).toBeInTheDocument();
     expect(screen.queryByText("Loading…")).not.toBeInTheDocument();
-    expect(screen.queryByRole("navigation", { name: "Views" })).not.toBeInTheDocument();
+    expect(
+      within(mainNav())
+        .getAllByRole("link")
+        .map((link) => link.textContent),
+    ).toEqual(["Log in", "Register"]);
+    expect(screen.queryByRole("link", { name: "Packs" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /open booster pack/i })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Account" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Account menu/ })).not.toBeInTheDocument();
     expect(document.title).toBe("Anime TCG");
   });
 
-  it("shows Loading… only once the session check has taken 300 ms, with the title block alone", () => {
+  it("shows Loading… only once the session check has taken 300 ms, with the wordmark alone", () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     vi.stubGlobal(
       "fetch",
       vi.fn(() => new Promise<Response>(() => undefined)),
     );
+    const queryClient = createQueryClient();
+    const router = createAppRouter({ queryClient, history: createMemoryHistory({ initialEntries: ["/"] }) });
     render(
-      <QueryClientProvider client={createQueryClient()}>
-        <App />
+      <QueryClientProvider client={queryClient}>
+        <App router={router} />
       </QueryClientProvider>,
     );
-    expect(screen.getByRole("heading", { name: "Anime TCG" })).toBeInTheDocument();
+    // No page renders before the answer, the landing page included (§3.2 step 1).
+    expect(screen.getByText("Anime TCG")).toBeInTheDocument();
+    expect(screen.queryByRole("heading")).not.toBeInTheDocument();
+    // The footer's AniList credit is the only link; the header has no page links yet.
+    expect(screen.getAllByRole("link").map((link) => link.textContent)).toEqual(["AniList"]);
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
     expect(screen.queryByText("Loading…")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Account" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Your account" })).not.toBeInTheDocument();
 
     act(() => {
       vi.advanceTimersByTime(299);
@@ -56,15 +71,15 @@ describe("App boot", () => {
     act(() => {
       vi.advanceTimersByTime(1);
     });
-    expect(screen.getByText("Loading…")).toHaveAttribute("aria-live", "polite");
+    expect(screen.getByRole("status")).toHaveTextContent("Loading…");
   });
 
-  it("unreachable: red banner with Try again above a usable Account screen; Try again recovers", async () => {
+  it("unreachable: red banner with Try again above a usable landing page; Try again recovers", async () => {
     const { fetchMock } = renderApp({ "GET /api/session": { status: 502, raw: "bad gateway" } });
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("Couldn't reach the game server. Check your connection and try again.");
-    expect(screen.getByRole("heading", { name: "Your account" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Log in" })).toBeEnabled();
+    expect(screen.getByRole("heading", { level: 1, name: "Anime TCG" })).toBeInTheDocument();
+    expect(within(mainNav()).getByRole("link", { name: "Log in" })).toBeInTheDocument();
 
     fetchMock.mockImplementation(() =>
       Promise.resolve(
@@ -76,59 +91,126 @@ describe("App boot", () => {
     );
     await userEvent.setup().click(screen.getByRole("button", { name: "Try again" }));
     await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
-    expect(screen.getByRole("heading", { name: "Your account" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Anime TCG" })).toBeInTheDocument();
   });
 
-  it("signed in: the game with the Account control, tabs and the login in the title", async () => {
-    renderApp({}, account);
-    expect(
-      await screen.findByRole("button", { name: "Account menu. Signed in as \u2068Chris\u2069" }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("navigation", { name: "Views" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /collection \(0\)/i })).toBeInTheDocument();
+  it("unreachable: the page stays up while Try again runs, and nothing asks the server on its own", async () => {
+    let answer: (response: Response) => void = () => undefined;
+    const { fetchMock } = renderApp(
+      { "GET /api/session": { status: 502, raw: "bad gateway" } },
+      account,
+      "/login",
+    );
+    await pageHeading("Log in");
+    const user = userEvent.setup();
+    await fill(user, screen.getByLabelText("Login"), "typed before the retry");
+    const sessionChecks = () => fetchMock.mock.calls.filter(([url]) => url === "/api/session").length;
+    // The router's root layout mounted after the failure; it must not repeat the check by itself.
+    expect(sessionChecks()).toBe(1);
+
+    fetchMock.mockImplementation(
+      () =>
+        new Promise<Response>((resolve) => {
+          answer = resolve;
+        }),
+    );
+    await user.click(screen.getByRole("button", { name: "Try again" }));
+    expect(await screen.findByRole("button", { name: "Try again" })).toBeDisabled();
+    // Still the page, not the boot screen: what was typed is still there.
+    expect(screen.getByLabelText("Login")).toHaveValue("typed before the retry");
+    act(() =>
+      answer(
+        new Response(JSON.stringify({ signedIn: false }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    );
+    await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
+    expect(screen.getByLabelText("Login")).toHaveValue("typed before the retry");
+    expect(sessionChecks()).toBe(2);
+  });
+
+  it("unreachable on an account page: /login with the guard line; Try again that finds a session returns there", async () => {
+    const { fetchMock, history } = renderApp(
+      { "GET /api/session": { status: 502, raw: "bad gateway" } },
+      account,
+      "/collection",
+    );
+    expect(await pageHeading("Log in")).toBeInTheDocument();
+    expect(history.location.pathname).toBe("/login");
+    expect(screen.getByText("Log in to see your collection.")).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("Couldn't reach the game server.");
+
+    fetchMock.mockImplementation(() =>
+      Promise.resolve(
+        new Response(JSON.stringify({ signedIn: true, account }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    );
+    await userEvent.setup().click(screen.getByRole("button", { name: "Try again" }));
+    expect(await pageHeading("Collection")).toBeInTheDocument();
+    expect(history.location.pathname).toBe("/collection");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("signed in at /: replaced by /packs with the Account control and the page links, and no login in the title", async () => {
+    const { history } = renderApp({}, account);
+    expect(await screen.findByRole("button", { name: CONTROL })).toBeInTheDocument();
+    expect(history.location.pathname).toBe("/packs");
+    expect(within(mainNav()).getByRole("link", { name: "Packs" })).toHaveAttribute("aria-current", "page");
+    expect(within(mainNav()).getByRole("link", { name: "Collection (0)" })).not.toHaveAttribute(
+      "aria-current",
+    );
     expect(screen.getByRole("button", { name: /open booster pack/i })).toBeInTheDocument();
-    expect(screen.queryByRole("heading", { name: "Your account" })).not.toBeInTheDocument();
-    expect(document.title).toBe("\u2068Chris\u2069 · Anime TCG");
+    expect(screen.queryByRole("heading", { name: "Anime TCG" })).not.toBeInTheDocument();
+    await waitFor(() => expect(document.title).toBe("Packs · Anime TCG"));
   });
 });
 
 describe("App account flows", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it("logging in lands on the Booster tab, shows the login, announces and focuses the pack button", async () => {
-    renderApp({
-      "GET /api/session": signedOutSession,
-      "POST /api/session/login": { status: 200, body: { signedIn: true, account } },
-    });
+  it("logging in replaces /login with /packs, shows the login, announces and focuses the Packs heading", async () => {
+    const { history } = renderApp(
+      {
+        "GET /api/session": signedOutSession,
+        "POST /api/session/login": { status: 200, body: { signedIn: true, account } },
+      },
+      account,
+      "/login",
+    );
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("button", { name: "Log in" }));
+    await pageHeading("Log in");
     await fill(user, screen.getByLabelText("Login"), "chris");
     await fill(user, screen.getByLabelText("Password"), "a password");
     await user.click(screen.getByRole("button", { name: "Log in" }));
 
     expect(
-      await screen.findByRole(
-        "button",
-        { name: "Account menu. Signed in as \u2068Chris\u2069" },
-        { timeout: ASYNC_TIMEOUT },
-      ),
+      await screen.findByRole("button", { name: CONTROL }, { timeout: ASYNC_TIMEOUT }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Booster" })).toHaveAttribute("aria-pressed", "true");
+    const heading = await pageHeading("Packs");
+    await waitFor(() => expect(heading).toHaveFocus());
+    expect(history.location.pathname).toBe("/packs");
+    expect(history.length).toBe(1);
     expect(liveRegion()).toHaveTextContent("Logged in. You're now on Chris.");
-    const pack = screen.getByRole("button", { name: /open booster pack/i });
-    await waitFor(() => expect(pack).toBeEnabled(), { timeout: ASYNC_TIMEOUT });
-    expect(pack).toHaveFocus();
-    expect(document.title).toBe("\u2068Chris\u2069 · Anime TCG");
+    expect(document.title).toBe("Packs · Anime TCG");
   });
 
   it("the live region is one node for the app's lifetime; log in and log out write into it", async () => {
-    renderApp({
-      "GET /api/session": signedOutSession,
-      "POST /api/session/login": { status: 200, body: { signedIn: true, account } },
-      "POST /api/session/logout": noContent,
-    });
+    renderApp(
+      {
+        "GET /api/session": signedOutSession,
+        "POST /api/session/login": { status: 200, body: { signedIn: true, account } },
+        "POST /api/session/logout": noContent,
+      },
+      account,
+      "/login",
+    );
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("button", { name: "Log in" }));
+    await pageHeading("Log in");
     const region = liveRegion();
     expect(region).toBeEmptyDOMElement();
     const written: Node[] = [];
@@ -140,92 +222,88 @@ describe("App account flows", () => {
     await fill(user, screen.getByLabelText("Login"), "chris");
     await fill(user, screen.getByLabelText("Password"), "a password");
     await user.click(screen.getByRole("button", { name: "Log in" }));
-    await screen.findByRole(
-      "button",
-      { name: "Account menu. Signed in as \u2068Chris\u2069" },
-      { timeout: ASYNC_TIMEOUT },
-    );
+    await screen.findByRole("button", { name: CONTROL }, { timeout: ASYNC_TIMEOUT });
     expect(liveRegion()).toBe(region);
     expect(region).toHaveTextContent("Logged in. You're now on Chris.");
     expect(written.length).toBeGreaterThan(0);
 
-    await user.click(screen.getByRole("button", { name: "Account menu. Signed in as \u2068Chris\u2069" }));
+    await user.click(screen.getByRole("button", { name: CONTROL }));
     await user.click(screen.getByRole("menuitem", { name: "Log out" }));
-    await screen.findByRole("heading", { name: "Your account" });
+    await pageHeading("Anime TCG");
     expect(liveRegion()).toBe(region);
     expect(region).toHaveTextContent("Logged out.");
     expect(region.isConnected).toBe(true);
     observer.disconnect();
   });
 
-  it("the Account button brings the choice back and focuses its heading", async () => {
-    renderApp({ "GET /api/session": signedOutSession });
+  it("Log out replaces the page with /, resets the title, announces and focuses the landing heading", async () => {
+    const { history } = renderApp({ "POST /api/session/logout": noContent }, account, "/collection");
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("button", { name: "Register" }));
-    expect(screen.getByRole("heading", { name: "Register" })).toHaveFocus();
-    await user.click(screen.getByRole("button", { name: "Account" }));
-    expect(screen.getByRole("heading", { name: "Your account" })).toHaveFocus();
-  });
-
-  it("Log out returns to the Account screen, resets the title, announces and focuses the heading", async () => {
-    renderApp({ "POST /api/session/logout": noContent }, account);
-    const user = userEvent.setup();
-    await user.click(
-      await screen.findByRole("button", { name: "Account menu. Signed in as \u2068Chris\u2069" }),
-    );
+    await user.click(await screen.findByRole("button", { name: CONTROL }));
     await user.click(screen.getByRole("menuitem", { name: "Log out" }));
 
-    const heading = await screen.findByRole("heading", { name: "Your account" });
-    expect(heading).toHaveFocus();
+    const heading = await pageHeading("Anime TCG");
+    await waitFor(() => expect(heading).toHaveFocus());
+    expect(history.location.pathname).toBe("/");
+    expect(history.length).toBe(1);
     expect(document.title).toBe("Anime TCG");
     expect(liveRegion()).toHaveTextContent("Logged out.");
     expect(screen.queryByText("Chris")).not.toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
-  it("a log-out the server does not answer still drops to the Account screen, with the banner", async () => {
+  it("a log-out the server does not answer still signs out to /, with the banner", async () => {
     renderApp({ "POST /api/session/logout": { status: 502, raw: "" } }, account);
     const user = userEvent.setup();
-    await user.click(
-      await screen.findByRole("button", { name: "Account menu. Signed in as \u2068Chris\u2069" }),
-    );
+    await user.click(await screen.findByRole("button", { name: CONTROL }));
     await user.click(screen.getByRole("menuitem", { name: "Log out" }));
-    expect(await screen.findByRole("heading", { name: "Your account" })).toBeInTheDocument();
+    expect(await pageHeading("Anime TCG")).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("Couldn't reach the game server.");
   });
 
-  it("an unauthenticated answer mid-session closes the dialog and shows the session-ended banner", async () => {
-    renderApp({ "PATCH /api/account/login": envelope(401, "unauthenticated") }, account);
-    const user = userEvent.setup();
-    await user.click(
-      await screen.findByRole("button", { name: "Account menu. Signed in as \u2068Chris\u2069" }),
+  it("an unauthenticated answer mid-session replaces the page with /login, the banner and focus; logging in returns", async () => {
+    const { history } = renderApp(
+      {
+        "PATCH /api/account/login": envelope(401, "unauthenticated"),
+        "POST /api/session/login": { status: 200, body: { signedIn: true, account } },
+      },
+      account,
+      "/account",
     );
-    await user.click(screen.getByRole("menuitem", { name: "Manage account…" }));
-    expect(screen.getByRole("dialog", { name: "Manage account" })).toBeInTheDocument();
+    const user = userEvent.setup();
+    await pageHeading("Manage account");
     await user.type(screen.getByLabelText("New login"), "2");
     await user.click(screen.getByRole("button", { name: "Save" }));
 
-    const heading = await screen.findByRole("heading", { name: "Your account" });
-    expect(heading).toHaveFocus();
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    const heading = await pageHeading("Log in");
+    await waitFor(() => expect(heading).toHaveFocus());
+    expect(history.location.pathname).toBe("/login");
+    expect(history.location.state).toMatchObject({ returnTo: "/account" });
     const banner = screen.getByText("You were logged out. Log in again to continue.");
     expect(banner).toHaveAttribute("role", "status");
+    // The banner says it; the guard line would say it twice (§3.3 step 4).
+    expect(screen.queryByText("Log in to manage your account.")).not.toBeInTheDocument();
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    expect(screen.queryByRole("navigation", { name: "Views" })).not.toBeInTheDocument();
-    expect(document.title).toBe("Anime TCG");
+    expect(screen.queryByRole("link", { name: "Packs" })).not.toBeInTheDocument();
+    expect(document.title).toBe("Log in · Anime TCG");
 
-    // Logging in again clears the notice.
-    expect(screen.getByRole("button", { name: "Log in" })).toBeInTheDocument();
+    await fill(user, screen.getByLabelText("Login"), "chris");
+    await fill(user, screen.getByLabelText("Password"), "a password");
+    await user.click(screen.getByRole("button", { name: "Log in" }));
+    expect(await pageHeading("Manage account")).toBeInTheDocument();
+    expect(history.location.pathname).toBe("/account");
+    expect(screen.queryByText("You were logged out. Log in again to continue.")).not.toBeInTheDocument();
   });
 
-  it("renaming through the dialog updates the header and the title", async () => {
+  it("renaming on /account updates the header and announces; the title stays the page's", async () => {
     const renamed = makeAccount({ login: "Chris2" });
-    renderApp({ "PATCH /api/account/login": { status: 200, body: { account: renamed } } }, account);
-    const user = userEvent.setup();
-    await user.click(
-      await screen.findByRole("button", { name: "Account menu. Signed in as \u2068Chris\u2069" }),
+    renderApp(
+      { "PATCH /api/account/login": { status: 200, body: { account: renamed } } },
+      account,
+      "/account",
     );
-    await user.click(screen.getByRole("menuitem", { name: "Manage account…" }));
+    const user = userEvent.setup();
+    await pageHeading("Manage account");
     await user.type(screen.getByLabelText("New login"), "2");
     await user.click(screen.getByRole("button", { name: "Save" }));
 
@@ -233,23 +311,38 @@ describe("App account flows", () => {
       await screen.findByRole("button", { name: "Account menu. Signed in as \u2068Chris2\u2069" }),
     ).toBeInTheDocument();
     expect(liveRegion()).toHaveTextContent("Login changed to Chris2.");
-    expect(document.title).toBe("\u2068Chris2\u2069 · Anime TCG");
-    expect(screen.getByRole("dialog", { name: "Manage account" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Close" }));
-    expect(
-      screen.getByRole("button", { name: "Account menu. Signed in as \u2068Chris2\u2069" }),
-    ).toHaveFocus();
+    expect(document.title).toBe("Manage account · Anime TCG");
+  });
+
+  it("deleting replaces /account with /, announces and focuses the landing heading", async () => {
+    const { history } = renderApp({ "POST /api/account/delete": noContent }, account, "/account");
+    const user = userEvent.setup();
+    await pageHeading("Manage account");
+    await user.click(screen.getByRole("button", { name: "Delete account…" }));
+    const dialog = screen.getByRole("dialog", { name: "Delete Chris?" });
+    await fill(user, within(dialog).getByLabelText("Password"), "correct horse");
+    await user.click(within(dialog).getByRole("button", { name: "Delete Chris" }));
+
+    const heading = await pageHeading("Anime TCG");
+    await waitFor(() => expect(heading).toHaveFocus());
+    expect(history.location.pathname).toBe("/");
+    expect(liveRegion()).toHaveTextContent("Deleted Chris.");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });
 
 describe("App account switch", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it("a session naming a different account starts that account's game from scratch", async () => {
-    const { queryClient } = renderApp({}, account);
+  it("a session naming a different account starts that account's game from scratch, on the same page", async () => {
+    const { queryClient, history } = renderApp({}, account);
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("button", { name: /collection \(0\)/i }));
-    expect(screen.getByRole("button", { name: /collection/i })).toHaveAttribute("aria-pressed", "true");
+    const button = await screen.findByRole("button", { name: /open booster pack/i });
+    await waitFor(() => expect(button).toBeEnabled(), { timeout: ASYNC_TIMEOUT });
+    await user.click(button);
+    expect(
+      await screen.findByRole("link", { name: "Collection (5)" }, { timeout: ASYNC_TIMEOUT }),
+    ).toBeInTheDocument();
 
     const other = makeAccount({ id: "9b2d7c1e-0000-4000-8000-000000000002", login: "Kris" });
     act(() => {
@@ -259,7 +352,9 @@ describe("App account switch", () => {
     expect(
       await screen.findByRole("button", { name: "Account menu. Signed in as \u2068Kris\u2069" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Booster" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("link", { name: "Collection (0)" })).toBeInTheDocument();
+    expect(screen.queryAllByRole("article")).toHaveLength(0);
+    expect(history.location.pathname).toBe("/packs");
   });
 });
 
@@ -273,18 +368,49 @@ describe("App game", () => {
     await waitFor(() => expect(button).toBeEnabled(), { timeout: ASYNC_TIMEOUT });
 
     await user.click(button);
-    expect(
-      screen.getByRole("button", { name: "Account menu. Signed in as \u2068Chris\u2069" }),
-    ).toBeDisabled();
+    expect(screen.getByRole("button", { name: CONTROL })).toBeDisabled();
 
     const cards = await screen.findAllByRole("article", {}, { timeout: ASYNC_TIMEOUT });
     expect(cards).toHaveLength(5);
     expect(screen.getAllByText("New")).toHaveLength(5);
-    expect(screen.getByRole("button", { name: /collection \(5\)/i })).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Account menu. Signed in as \u2068Chris\u2069" }),
-    ).toBeEnabled();
+    expect(screen.getByRole("link", { name: "Collection (5)" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: CONTROL })).toBeEnabled();
     expect(localStorage.getItem("anime-tcg:inventory:v1")).toBeNull();
+  });
+
+  it("the collection and the last reveal survive a page change; the reveal comes back without its entrance", async () => {
+    renderApp({}, account);
+    const user = userEvent.setup();
+    const button = await screen.findByRole("button", { name: /open booster pack/i });
+    await waitFor(() => expect(button).toBeEnabled(), { timeout: ASYNC_TIMEOUT });
+    await user.click(button);
+    const revealed = await screen.findAllByRole("article", {}, { timeout: ASYNC_TIMEOUT });
+    expect(revealed[0]).toHaveClass("card-reveal");
+
+    await user.click(screen.getByRole("link", { name: "Collection (5)" }));
+    await pageHeading("Collection");
+    expect(screen.getByText("5 cards")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("link", { name: "Packs" }));
+    await pageHeading("Packs");
+    const returned = screen.getAllByRole("article");
+    expect(returned).toHaveLength(5);
+    for (const card of returned) expect(card).not.toHaveClass("card-reveal");
+  });
+
+  it("a pack opened on /packs lands while the player is on another page", async () => {
+    renderApp({}, account);
+    const user = userEvent.setup();
+    const button = await screen.findByRole("button", { name: /open booster pack/i });
+    await waitFor(() => expect(button).toBeEnabled(), { timeout: ASYNC_TIMEOUT });
+    await user.click(button);
+    // The links stay usable while the pack opens (§3.5 step 4).
+    await user.click(screen.getByRole("link", { name: "Collection (0)" }));
+    await pageHeading("Collection");
+    expect(
+      await screen.findByRole("link", { name: "Collection (5)" }, { timeout: ASYNC_TIMEOUT }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: CONTROL })).toBeEnabled();
   });
 
   it("shows the AniList error with a retry button when signed in", async () => {

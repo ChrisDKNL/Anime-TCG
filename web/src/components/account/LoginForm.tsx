@@ -1,23 +1,29 @@
 import type { AccountPublic } from "@anime-tcg/shared/api";
-import { useEffect, useRef } from "react";
+import type { ReactNode } from "react";
 import { useLoginForm } from "../../hooks/useLoginForm";
 import { common, loginCopy } from "../../lib/copy";
+import { pageHeading } from "../../lib/routes";
+import { PageHeading } from "../layout/PageHeading";
 import { FormBanner } from "./FormBanner";
 import { PasswordField, SubmitButton, TextField } from "./fields";
-import { BUTTON, HINT_TEXT, PANEL_HEADING } from "./styles";
+import { BODY_TEXT, BUTTON, HINT_TEXT, PANEL_HEADING } from "./styles";
 
 interface Props {
-  onBack: () => void;
   onLoggedIn: (account: AccountPublic) => void;
+  /** Where the guard sent the visitor from, as a sentence (navigation-and-landing.md §3.3 step 4). */
+  guardLine?: string | null;
+  /** `No account yet?` and its `Register` link, between the form and the forgotten-password line (§3.5 step 5). */
+  crossLink?: ReactNode;
 }
 
-export function LoginForm({ onBack, onLoggedIn }: Props) {
+/**
+ * The `/login` page's panel (accounts.md §3.4 as amended by
+ * navigation-and-landing.md §3.5): no `Back`, the browser's Back and the header
+ * links go everywhere it went. Its `h1` takes focus from the page change, not
+ * from the form.
+ */
+export function LoginForm({ onLoggedIn, guardLine = null, crossLink }: Props) {
   const form = useLoginForm({ onLoggedIn });
-  const headingRef = useRef<HTMLHeadingElement>(null);
-
-  useEffect(() => {
-    headingRef.current?.focus();
-  }, []);
 
   const waiting = form.waitRemaining !== null;
   const submitLabel =
@@ -29,14 +35,10 @@ export function LoginForm({ onBack, onLoggedIn }: Props) {
 
   return (
     <div className="flex flex-col gap-4">
-      <h2
-        id="account-heading"
-        ref={headingRef}
-        tabIndex={-1}
-        className={`${PANEL_HEADING} focus:outline-none`}
-      >
-        {loginCopy.heading}
-      </h2>
+      <div>
+        <PageHeading text={pageHeading("/login")} className={`${PANEL_HEADING} focus:outline-none`} />
+        {guardLine !== null && <p className={`mt-1 ${BODY_TEXT}`}>{guardLine}</p>}
+      </div>
       <form noValidate onSubmit={(event) => void form.submit(event)} className="flex flex-col gap-4">
         {form.unreachable && <FormBanner />}
         <TextField
@@ -62,28 +64,19 @@ export function LoginForm({ onBack, onLoggedIn }: Props) {
           disabled={form.submitting}
           autoComplete="current-password"
         />
-        <div className="flex flex-col gap-2 sm:flex-row">
-          <SubmitButton
-            blocked={form.submitting || waiting}
-            className={`${BUTTON.primary} w-full sm:w-auto ${waiting ? "tabular-nums" : ""}`}
-          >
-            {submitLabel}
-          </SubmitButton>
-          <button
-            type="button"
-            onClick={onBack}
-            disabled={form.submitting}
-            className={`${BUTTON.secondary} w-full sm:w-auto`}
-          >
-            {common.back}
-          </button>
-        </div>
+        <SubmitButton
+          blocked={form.submitting || waiting}
+          className={`${BUTTON.primary} w-full sm:w-auto sm:self-start ${waiting ? "tabular-nums" : ""}`}
+        >
+          {submitLabel}
+        </SubmitButton>
         {form.breather && (
           <p role="status" className={HINT_TEXT}>
             {common.breather}
           </p>
         )}
       </form>
+      {crossLink}
       <p className={HINT_TEXT}>{loginCopy.forgotten}</p>
     </div>
   );

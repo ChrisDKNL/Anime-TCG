@@ -7,8 +7,8 @@ function tokens(classes: string): string[] {
 }
 
 /**
- * accounts.md §7: buttons, menu items, toggles and the Close button are at
- * least 40 px tall on phone; from `sm` up §6's sizes apply again. Layout is not
+ * accounts.md §7: buttons, menu items and toggles are at least 40 px tall on
+ * phone; from `sm` up §6's sizes apply again. Layout is not
  * measurable in jsdom, so this pins the utilities that give those heights.
  */
 describe("touch targets", () => {
@@ -18,7 +18,7 @@ describe("touch targets", () => {
     ["danger outline button", BUTTON.dangerOutline],
     ["danger solid button", BUTTON.dangerSolid],
     ["menu item", MENU_ITEM],
-    ["Account control and signed-out Account button", ACCOUNT_CONTROL],
+    ["Account control", ACCOUNT_CONTROL],
     ["text field, which holds the Show/Hide toggle", INPUT],
   ];
 
@@ -26,7 +26,7 @@ describe("touch targets", () => {
     expect(tokens(classes)).toEqual(expect.arrayContaining(["min-h-10", "sm:min-h-0"]));
   });
 
-  it("text buttons (Show/Hide, Close) are 40 px tall below sm and 28 px from sm up", () => {
+  it("text buttons (Show/Hide) are 40 px tall below sm and 28 px from sm up", () => {
     expect(tokens(BUTTON.text)).toEqual(expect.arrayContaining(["h-10", "sm:h-7"]));
   });
 });
