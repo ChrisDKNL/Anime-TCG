@@ -43,13 +43,18 @@ describe("copy", () => {
     expect(copy.cardCount(12)).toBe("12 cards");
   });
 
+  // The date is the viewer's local calendar day, so the instants are built from local parts. A fixed
+  // UTC instant names another day somewhere: 2025-01-02T00:00Z is 1 Jan in New York, and even
+  // midday 2026-09-05T12:00Z is 6 Sep in Kiritimati (UTC+14).
   it("formats the Manage account meta line with a short date", () => {
-    expect(copy.metaLine(0, "2026-10-28T09:30:00.000Z")).toBe("No cards yet · Created 28 Oct 2026");
-    expect(copy.metaLine(3, "2025-01-02T00:00:00.000Z")).toBe("3 cards · Created 2 Jan 2025");
+    expect(copy.metaLine(0, new Date(2026, 9, 28, 9, 30).toISOString())).toBe(
+      "No cards yet · Created 28 Oct 2026",
+    );
+    expect(copy.metaLine(3, new Date(2025, 0, 2, 0, 0).toISOString())).toBe("3 cards · Created 2 Jan 2025");
   });
 
   it("writes every month in three letters, September as Sep (§8 `D Mon YYYY`)", () => {
-    expect(copy.metaLine(1, "2026-09-05T12:00:00.000Z")).toBe("1 card · Created 5 Sep 2026");
+    expect(copy.metaLine(1, new Date(2026, 8, 5, 12).toISOString())).toBe("1 card · Created 5 Sep 2026");
     const months = Array.from({ length: 12 }, (_, month) =>
       copy
         .metaLine(0, new Date(2026, month, 15, 12).toISOString())
