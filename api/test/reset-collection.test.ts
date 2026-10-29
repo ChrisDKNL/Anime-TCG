@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import type { PacksResponse, SessionResponse } from "@anime-tcg/shared/api";
 import { PACK_CAP, PACK_SIZE } from "@anime-tcg/shared/economy";
+import { PITY_PACKS } from "@anime-tcg/shared/rarity";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { App } from "../src/app.js";
@@ -45,6 +46,13 @@ describe("reset-collection", () => {
     (
       await app.db.select({ anchor: accounts.packsAnchorAt }).from(accounts).where(eq(accounts.id, accountId))
     )[0]?.anchor;
+  const countersOf = async (accountId: string) =>
+    (
+      await app.db
+        .select({ packsSinceMythic: accounts.packsSinceMythic, freePacksOpened: accounts.freePacksOpened })
+        .from(accounts)
+        .where(eq(accounts.id, accountId))
+    )[0];
   async function playerWithPacks(opened: number): Promise<SignedInClient> {
     const client = await player();
     for (let i = 0; i < opened; i += 1) expect((await openPack(app, client.cookie)).statusCode).toBe(201);
@@ -76,11 +84,14 @@ describe("reset-collection", () => {
     });
     expect(await holdings(account.id)).toEqual({ cards: 2 * PACK_SIZE, openings: 2 });
     expect(await anchorOf(account.id)).toEqual(anchor);
+    expect((await countersOf(account.id))?.freePacksOpened).toBe(2);
   });
 
-  it("with --confirm removes the cards and openings and fills the allowance, touching nobody else", async () => {
+  it("with --confirm removes the cards and openings, fills the allowance and zeroes both counters, touching nobody else", async () => {
     const target = await playerWithPacks(PACK_CAP);
     const bystander = await playerWithPacks(1);
+    await app.db.update(accounts).set({ packsSinceMythic: 123 }).where(eq(accounts.id, target.account.id));
+    const bystanderCounters = await countersOf(bystander.account.id);
     expect(await resetCollection(app.db, target.account.login, { confirm: true })).toMatchObject({
       cards: PACK_CAP * PACK_SIZE,
       openings: PACK_CAP,
@@ -88,8 +99,12 @@ describe("reset-collection", () => {
     });
     expect(await holdings(target.account.id)).toEqual({ cards: 0, openings: 0 });
     expect(await anchorOf(target.account.id)).toBeNull();
-    expect(body<PacksResponse>(await getPacks(app, target.cookie)).allowance.available).toBe(PACK_CAP);
+    expect(await countersOf(target.account.id)).toEqual({ packsSinceMythic: 0, freePacksOpened: 0 });
+    const packs = body<PacksResponse>(await getPacks(app, target.cookie));
+    expect(packs.allowance.available).toBe(PACK_CAP);
+    expect(packs.packsUntilGuarantee).toBe(PITY_PACKS);
     expect(await holdings(bystander.account.id)).toEqual({ cards: PACK_SIZE, openings: 1 });
+    expect(await countersOf(bystander.account.id)).toEqual(bystanderCounters);
 
     // The session survives: the player sees the empty collection on the next fetch.
     const session = body<SessionResponse>(
@@ -119,6 +134,8 @@ describe("reset-collection", () => {
       // The reset ran first (the new pack survives) or second (nothing survives).
       expect([0, 1]).toContain(after.openings);
       expect(after.cards).toBe(after.openings * PACK_SIZE);
+      // The counters are 0 or match the surviving opening.
+      expect((await countersOf(account.id))?.freePacksOpened).toBe(after.openings);
     }
   });
 
@@ -139,12 +156,12 @@ describe("reset-collection", () => {
       const { account } = await playerWithPacks(2);
       expect(await run([account.login])).toEqual({
         code: 0,
-        stdout: `Would reset ${account.login}: 10 cards, 2 openings.\n`,
+        stdout: `Would reset ${account.login}: 10 cards, 2 openings; pity and Enchanted counters to zero.\n`,
         stderr: "",
       });
       expect(await run([account.login, "--confirm"])).toEqual({
         code: 0,
-        stdout: `Collection reset for ${account.login}: 10 cards and 2 openings removed; packs full.\n`,
+        stdout: `Collection reset for ${account.login}: 10 cards and 2 openings removed; packs full; counters reset.\n`,
         stderr: "",
       });
       expect(await holdings(account.id)).toEqual({ cards: 0, openings: 0 });

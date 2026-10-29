@@ -77,7 +77,11 @@ describe("GET /api/collection (collection-packs.md §5.5)", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({
       snapshot: null,
-      totals: { cards: 0, duplicates: 0, byRarity: { common: 0, rare: 0, epic: 0, legendary: 0, mythic: 0 } },
+      totals: {
+        cards: 0,
+        duplicates: 0,
+        byRarity: { common: 0, uncommon: 0, rare: 0, epic: 0, legendary: 0, mythic: 0 },
+      },
       completion: { pool: { owned: 0, total: 0 }, franchises: [] },
       franchises: [],
       entries: [],
@@ -94,7 +98,11 @@ describe("GET /api/collection (collection-packs.md §5.5)", () => {
     it("lists every franchise of the snapshot for a new player, owned or not", async () => {
       const { cookie } = await player();
       const collection = body<CollectionResponse>(await getCollection(app, cookie));
-      expect(collection.snapshot).toEqual({ version, takenAt: "2026-10-29T09:00:00.000Z" });
+      expect(collection.snapshot).toEqual({
+        version,
+        takenAt: "2026-10-29T09:00:00.000Z",
+        characterCount: 600,
+      });
       expect(collection.entries).toEqual([]);
       expect(collection.completion.pool).toEqual({ owned: 0, total: 600 });
       expect(collection.completion.franchises).toHaveLength(98);
@@ -113,12 +121,13 @@ describe("GET /api/collection (collection-packs.md §5.5)", () => {
     it("groups cards into entries with counts and dates, totals them, and counts completion once per character", async () => {
       const { cookie } = await player();
       const first = now;
-      await forceNextPack(app.db, rng, version, [C1, C2, C3, BASE + 241, BASE + 242]);
+      // A Radiant pack (five Epic or better, Mythic last), then a standard one whose fifth card is C1 again.
+      await forceNextPack(app.db, rng, version, [C2, C3, BASE + 49, BASE + 50, C1]);
       expect((await openPack(app, cookie)).statusCode).toBe(201);
       const second = new Date(first.getTime() + 60_000);
       now = second;
       try {
-        await forceNextPack(app.db, rng, version, [C1, BASE + 243, BASE + 244, BASE + 245, BASE + 246]);
+        await forceNextPack(app.db, rng, version, [BASE + 391, BASE + 392, BASE + 393, BASE + 241, C1]);
         expect((await openPack(app, cookie)).statusCode).toBe(201);
       } finally {
         now = first;
@@ -128,18 +137,18 @@ describe("GET /api/collection (collection-packs.md §5.5)", () => {
       expect(collection.totals).toEqual({
         cards: 10,
         duplicates: 1,
-        byRarity: { common: 6, rare: 0, epic: 0, legendary: 2, mythic: 2 },
+        byRarity: { common: 3, uncommon: 1, rare: 0, epic: 2, legendary: 1, mythic: 3 },
       });
       expect(collection.entries.map((entry) => [entry.character.id, entry.rarity, entry.count])).toEqual([
         [C1, "mythic", 2],
-        [C2, "legendary", 1],
+        [C2, "mythic", 1],
         [C3, "legendary", 1],
-        [BASE + 241, "common", 1],
-        [BASE + 242, "common", 1],
-        [BASE + 243, "common", 1],
-        [BASE + 244, "common", 1],
-        [BASE + 245, "common", 1],
-        [BASE + 246, "common", 1],
+        [BASE + 49, "epic", 1],
+        [BASE + 50, "epic", 1],
+        [BASE + 241, "uncommon", 1],
+        [BASE + 391, "common", 1],
+        [BASE + 392, "common", 1],
+        [BASE + 393, "common", 1],
       ]);
       expect(collection.entries[0]).toEqual({
         kind: "card",
@@ -150,6 +159,7 @@ describe("GET /api/collection (collection-packs.md §5.5)", () => {
           imageUrl: `https://s4.anilist.co/file/anilistcdn/character/large/b${C1}.png`,
           franchiseIds: [900_001],
           tier: "mythic",
+          rank: 1,
           inCurrentSnapshot: true,
         },
         rarity: "mythic",
@@ -172,6 +182,11 @@ describe("GET /api/collection (collection-packs.md §5.5)", () => {
       expect(completion.get(900_030)).toEqual({ franchiseId: 900_030, owned: 0, total: 5 });
       expect(completion.get(900_040)).toEqual({ franchiseId: 900_040, owned: 1, total: 7 });
       expect(completion.get(900_041)).toEqual({ franchiseId: 900_041, owned: 1, total: 6 });
+      expect(completion.get(900_049)).toEqual({ franchiseId: 900_049, owned: 1, total: 6 });
+      expect(completion.get(900_091)).toEqual({ franchiseId: 900_091, owned: 1, total: 6 });
+      expect(collection.entries.map((entry) => entry.character.rank)).toEqual([
+        1, 10, 30, 49, 50, 241, 391, 392, 393,
+      ]);
     });
 
     it("shows an account only its own cards", async () => {

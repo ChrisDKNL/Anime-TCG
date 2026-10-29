@@ -1,5 +1,14 @@
 import { randomUUID } from "node:crypto";
-import { RARITIES, type Rarity } from "@anime-tcg/shared/rarity";
+import { PACK_SIZE } from "@anime-tcg/shared/economy";
+import {
+  ENCHANTED_SLOT_ODDS,
+  ODDS_SCALE,
+  type OddsTable,
+  RADIANT_SLOT_ODDS,
+  RARITIES,
+  type Rarity,
+  SLOT_ODDS,
+} from "@anime-tcg/shared/rarity";
 import { and, eq, inArray, notExists, sql } from "drizzle-orm";
 import type { LightMyRequestResponse } from "fastify";
 import type { App } from "../src/app.js";
@@ -114,8 +123,19 @@ export function body<T>(res: LightMyRequestResponse): T {
   return res.json<T>();
 }
 
-/** Tier rolls that force a tier: the smallest roll each tier is dealt at (collection-packs.md §5.4). */
-export const ROLL = { mythic: 0, legendary: 661, epic: 4_693, rare: 42_670, common: 999_999 } as const;
+/** Plan rolls (the first generator call of every opening, §5.4.4): Radiant below `RADIANT_ODDS`. */
+export const PLAN = { standard: ODDS_SCALE - 1, radiant: 0 } as const;
+
+/** The smallest roll that lands on `tier` in `table` (rarest first by running sums), or null when the table cannot. */
+export function rollFor(table: OddsTable, tier: Rarity): number | null {
+  if (table[tier] === 0) return null;
+  let threshold = 0;
+  for (const candidate of [...RARITIES].reverse()) {
+    if (candidate === tier) return threshold;
+    threshold += table[candidate];
+  }
+  return null;
+}
 
 /**
  * A generator that answers from `script` while it lasts and from
@@ -133,16 +153,56 @@ export function scriptedRng(): Rng & { script: number[] } {
   return Object.assign(rng, { script });
 }
 
+/** What the counters make of the next free pack: its fifth slot Enchanted, forced by pity, or neither. */
+export interface ForcedPackOptions {
+  enchanted?: boolean;
+  pity?: boolean;
+}
+
 /**
- * The generator values that make `drawPack` deal exactly `ids`, in slot
- * order, from `pool`: each slot's smallest tier roll, then the position the
- * partial Fisher–Yates shuffle has the character at by then.
+ * The generator values that make an opening deal exactly `ids`, in slot
+ * order, from `pool`: the plan roll (Radiant only when a standard pack
+ * cannot hold them), then per slot the smallest roll of that slot's table
+ * that lands on the character's tier (none for a forced slot) and the
+ * position the partial Fisher–Yates shuffle has the character at by then.
+ * Throws when no pack of that kind can deal them: the slot floors hold.
  */
-export function scriptFor(pool: TierPool, ids: readonly number[]): number[] {
-  const decks = new Map<Rarity, { order: number[]; drawn: number }>();
-  return ids.flatMap((id) => {
+export function scriptFor(pool: TierPool, ids: readonly number[], options: ForcedPackOptions = {}): number[] {
+  const tiers = ids.map((id) => {
     const tier = RARITIES.find((candidate) => pool[candidate].includes(id));
     if (tier === undefined) throw new Error(`character ${id} is not in the pool`);
+    return tier;
+  });
+  const last = PACK_SIZE - 1;
+  const standard: (OddsTable | "mythic")[] = SLOT_ODDS.map((table, slot) =>
+    slot !== last
+      ? table
+      : options.pity === true
+        ? "mythic"
+        : options.enchanted === true
+          ? ENCHANTED_SLOT_ODDS
+          : table,
+  );
+  const radiant: (OddsTable | "mythic")[] = SLOT_ODDS.map((_, slot) =>
+    slot === last ? "mythic" : RADIANT_SLOT_ODDS,
+  );
+  const fits = (rules: (OddsTable | "mythic")[]) =>
+    tiers.every((tier, slot) => {
+      const rule = rules[slot];
+      return rule === "mythic" ? tier === "mythic" : rule !== undefined && rollFor(rule, tier) !== null;
+    });
+  const [plan, rules] = fits(standard)
+    ? [PLAN.standard, standard]
+    : fits(radiant)
+      ? [PLAN.radiant, radiant]
+      : [null, []];
+  if (plan === null) throw new Error(`no pack can deal ${tiers.join(", ")} in that order`);
+
+  const decks = new Map<Rarity, { order: number[]; drawn: number }>();
+  const picks = ids.flatMap((id, slot) => {
+    const tier = tiers[slot];
+    const rule = rules[slot];
+    if (tier === undefined || rule === undefined) throw new Error("one tier and one rule per card");
     const deck = decks.get(tier) ?? { order: [...pool[tier]], drawn: 0 };
     decks.set(tier, deck);
     const position = deck.order.indexOf(id);
@@ -152,8 +212,9 @@ export function scriptFor(pool: TierPool, ids: readonly number[]): number[] {
     deck.order[position] = displaced;
     deck.order[deck.drawn] = id;
     deck.drawn += 1;
-    return [ROLL[tier], position];
+    return rule === "mythic" ? [position] : [rollFor(rule, tier) ?? 0, position];
   });
+  return [plan, ...picks];
 }
 
 /** Scripts the next opening to deal `ids` from the given snapshot's pool. */
@@ -162,6 +223,7 @@ export async function forceNextPack(
   rng: { script: number[] },
   snapshotId: number,
   ids: readonly number[],
+  options: ForcedPackOptions = {},
 ) {
-  rng.script.push(...scriptFor(await tierPool(db, snapshotId), ids));
+  rng.script.push(...scriptFor(await tierPool(db, snapshotId), ids, options));
 }

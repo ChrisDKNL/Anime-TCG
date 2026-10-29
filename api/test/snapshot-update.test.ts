@@ -4,7 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { App } from "../src/app.js";
-import { cards } from "../src/db/schema.js";
+import { accounts, cards } from "../src/db/schema.js";
 import type { ActivationSummary } from "../src/domain/pool/activate.js";
 import { tierPool } from "../src/domain/pool/catalog.js";
 import { type FixturePool, imageUrl, standardPool } from "./fixtures/pool.js";
@@ -23,9 +23,9 @@ import {
 import { createTestApp, type SignedInClient, testConfig, testDatabaseUrl } from "./support.js";
 
 const BASE = 800_000;
-/** Epic in snapshot 1 (rank 31 of 600), Legendary in snapshot 2. */
-const A = BASE + 31;
-/** In entry 100, which snapshot 2 drops with all its characters. */
+/** Epic in snapshot 1 (rank 49 of 600, the first Epic), Legendary in snapshot 2 (rank 48, the last). */
+const A = BASE + 49;
+/** In entry 100, which snapshot 2 drops with all its characters; Epic (rank 100). */
 const B = BASE + 100;
 /** Also dropped by snapshot 2; the character the racing opening is held on. */
 const X = BASE + 200;
@@ -50,7 +50,8 @@ function secondPool(): FixturePool {
       if (character.id === A) {
         return {
           ...character,
-          favourites: 5_915,
+          // Above BASE + 48's 5 530: rank 48, the last Legendary.
+          favourites: 5_535,
           name: "A renamed",
           image: imageUrl(A).replace(".png", "-v2.png"),
         };
@@ -71,6 +72,13 @@ describe("a snapshot update under existing collections", () => {
   let first: number;
   let second: ActivationSummary;
   let holder: SignedInClient;
+  const countersOf = async (accountId: string) =>
+    (
+      await app.db
+        .select({ packsSinceMythic: accounts.packsSinceMythic, freePacksOpened: accounts.freePacksOpened })
+        .from(accounts)
+        .where(eq(accounts.id, accountId))
+    )[0];
 
   beforeAll(async () => {
     app = await createTestApp({ config: testConfig({ ACCOUNT_CAP: "1000" }), rng });
@@ -89,15 +97,18 @@ describe("a snapshot update under existing collections", () => {
   });
 
   it("deals A as Epic and B while snapshot 1 is current", async () => {
-    await forceNextPack(app.db, rng, first, [A, B, SHARED, BASE + 241, BASE + 242]);
+    await forceNextPack(app.db, rng, first, [BASE + 391, BASE + 392, SHARED, BASE + 241, A]);
     const opened = body<PackOpened>(await openPack(app, holder.cookie));
     expect(opened.cards.map((card) => [card.character.id, card.rarity])).toEqual([
+      [BASE + 391, "common"],
+      [BASE + 392, "common"],
+      [SHARED, "uncommon"],
+      [BASE + 241, "uncommon"],
       [A, "epic"],
-      [B, "rare"],
-      [SHARED, "common"],
-      [BASE + 241, "common"],
-      [BASE + 242, "common"],
     ]);
+    await forceNextPack(app.db, rng, first, [BASE + 393, BASE + 394, BASE + 395, BASE + 242, B]);
+    const again = body<PackOpened>(await openPack(app, holder.cookie));
+    expect(again.cards[4]).toMatchObject({ rarity: "epic", character: { id: B, rank: 100 } });
   });
 
   it("finishes an opening that read snapshot 1 before snapshot 2 committed from snapshot 1 only", async () => {
@@ -109,7 +120,7 @@ describe("a snapshot update under existing collections", () => {
     try {
       await blocker.query("begin");
       await blocker.query("select id from characters where id = $1 for update", [X]);
-      await forceNextPack(app.db, rng, first, [X, BASE + 243, BASE + 244, BASE + 245, BASE + 246]);
+      await forceNextPack(app.db, rng, first, [BASE + 396, BASE + 397, BASE + 398, BASE + 243, X]);
       const opening = openPack(app, racer.cookie);
       await vi.waitFor(
         async () => {
@@ -121,8 +132,11 @@ describe("a snapshot update under existing collections", () => {
         },
         { timeout: 10_000, interval: 25 },
       );
+      const countersBefore = await countersOf(holder.account.id);
       second = await loadSnapshot(app.db, secondPool());
       snapshots.push(second.version);
+      // The pack counters count packs and Mythic cards, not characters: an activation leaves them alone.
+      expect(await countersOf(holder.account.id)).toEqual(countersBefore);
       expect(await currentSnapshotId(app.db)).toBe(second.version);
       await blocker.query("rollback");
       const res = await opening;
@@ -145,6 +159,8 @@ describe("a snapshot update under existing collections", () => {
       franchisesMerged: 1,
       franchisesSplit: 0,
       characters: 600,
+      capped: 0,
+      cappedFranchises: 0,
     });
     expect(second.changedTier).toBeGreaterThanOrEqual(1);
   });
@@ -161,6 +177,7 @@ describe("a snapshot update under existing collections", () => {
         name: "A renamed",
         imageUrl: imageUrl(A).replace(".png", "-v2.png"),
         tier: "legendary",
+        rank: 48,
         inCurrentSnapshot: true,
       },
     });
@@ -169,9 +186,13 @@ describe("a snapshot update under existing collections", () => {
   it("deals A only as Legendary from the activation on; holding both is two entries and one completion", async () => {
     const pool = await tierPool(app.db, second.version);
     expect(RARITIES.filter((tier) => pool[tier].includes(A))).toEqual(["legendary"]);
-    await forceNextPack(app.db, rng, second.version, [A, BASE + 247, BASE + 248, BASE + 249, BASE + 250]);
+    await forceNextPack(app.db, rng, second.version, [BASE + 403, BASE + 404, BASE + 405, BASE + 244, A]);
     const opened = body<PackOpened>(await openPack(app, holder.cookie));
-    expect(opened.cards[0]).toMatchObject({ rarity: "legendary", isNew: false, character: { id: A } });
+    expect(opened.cards[4]).toMatchObject({
+      rarity: "legendary",
+      isNew: false,
+      character: { id: A, rank: 48 },
+    });
 
     const collection = body<CollectionResponse>(await getCollection(app, holder.cookie));
     expect(
@@ -182,19 +203,19 @@ describe("a snapshot update under existing collections", () => {
       ["legendary", 1],
       ["epic", 1],
     ]);
-    // A, SHARED, 241, 242 and 247 to 250 are in snapshot 2; B is not.
-    expect(collection.completion.pool).toEqual({ owned: 8, total: 600 });
+    // Of the 14 characters held, all but B are in snapshot 2.
+    expect(collection.completion.pool).toEqual({ owned: 13, total: 600 });
   });
 
   it("keeps B, which snapshot 2 dropped, in the collection and totals, out of completion and out of packs", async () => {
     const collection = body<CollectionResponse>(await getCollection(app, holder.cookie));
     const b = collection.entries.find((entry) => entry.character.id === B);
     expect(b).toMatchObject({
-      rarity: "rare",
+      rarity: "epic",
       count: 1,
-      character: { tier: null, inCurrentSnapshot: false, franchiseIds: [F] },
+      character: { tier: null, rank: null, inCurrentSnapshot: false, franchiseIds: [F] },
     });
-    expect(collection.totals.cards).toBe(10);
+    expect(collection.totals.cards).toBe(15);
     const pool = await tierPool(app.db, second.version);
     expect(RARITIES.some((tier) => pool[tier].includes(B))).toBe(false);
   });
