@@ -71,6 +71,8 @@ describe("shared schemas refuse unknown fields", () => {
         "api.ts.HealthResponse",
         "api.ts.PerRarity",
         "api.ts.SnapshotInfo",
+        "api.ts.PackKind",
+        "api.ts.SlotOdds",
         "api.ts.PublishedOdds",
         "api.ts.PackAllowance",
         "api.ts.PacksResponse",

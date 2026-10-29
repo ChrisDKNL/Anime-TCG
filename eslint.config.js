@@ -37,7 +37,18 @@ export default tseslint.config(
           paths: [
             {
               name: "@anime-tcg/shared/rarity",
-              importNames: ["ODDS_SCALE", "SLOT_ODDS", "SHARE_SCALE", "TIER_SHARE"],
+              importNames: [
+                "ODDS_SCALE",
+                "SLOT_FLOOR",
+                "SLOT_ODDS",
+                "ENCHANTED_INTERVAL",
+                "ENCHANTED_SLOT_ODDS",
+                "RADIANT_ODDS",
+                "RADIANT_SLOT_ODDS",
+                "PITY_PACKS",
+                "SHARE_SCALE",
+                "TIER_BAND",
+              ],
               message: "Show the odds GET /api/packs returns; the server's numbers are the only ones.",
             },
             {

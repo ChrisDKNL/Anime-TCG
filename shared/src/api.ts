@@ -1,5 +1,6 @@
 import { type Static, Type } from "@sinclair/typebox";
 import { PACK_CAP, PACK_SIZE } from "./economy.js";
+import { PITY_PACKS } from "./rarity.js";
 
 /**
  * Length limits as character counts (TypeBox `minLength`/`maxLength` count
@@ -97,6 +98,7 @@ const AniListId = Type.Integer({ minimum: 1 });
  */
 export const Rarity = Type.Union([
   Type.Literal("common"),
+  Type.Literal("uncommon"),
   Type.Literal("rare"),
   Type.Literal("epic"),
   Type.Literal("legendary"),
@@ -108,38 +110,87 @@ export type Rarity = Static<typeof Rarity>;
 export const CardVariant = Type.Union([Type.Literal("standard")]);
 export type CardVariant = Static<typeof CardVariant>;
 
+/** Which rules a pack was dealt under (collection-packs.md §5.4.3). */
+export const PackKind = Type.Union([
+  Type.Literal("standard"),
+  Type.Literal("enchanted"),
+  Type.Literal("radiant"),
+]);
+export type PackKind = Static<typeof PackKind>;
+
 /** One integer per tier. */
 export const PerRarity = Type.Object(
-  { common: Count, rare: Count, epic: Count, legendary: Count, mythic: Count },
+  { common: Count, uncommon: Count, rare: Count, epic: Count, legendary: Count, mythic: Count },
   { additionalProperties: false },
 );
 export type PerRarity = Static<typeof PerRarity>;
 
-/** The pool snapshot an answer was computed against: its version and when AniList was read. */
+/**
+ * The pool snapshot an answer was computed against: its version, when
+ * AniList was read, and its character count, the pool size a card's rank
+ * is shown against (`#0012 / 2983`).
+ */
 export const SnapshotInfo = Type.Object(
-  { version: Type.Integer({ minimum: 1 }), takenAt: DateTime },
+  { version: Type.Integer({ minimum: 1 }), takenAt: DateTime, characterCount: Type.Integer({ minimum: 1 }) },
   { additionalProperties: false },
 );
 export type SnapshotInfo = Static<typeof SnapshotInfo>;
 
+/** One slot's table out of `scale`: zero below `floor`, summing to the scale. */
+export const SlotOdds = Type.Object({ floor: Rarity, odds: PerRarity }, { additionalProperties: false });
+export type SlotOdds = Static<typeof SlotOdds>;
+
 /**
- * The odds the server applies, published as it applies them: `perSlot` out
- * of `scale`; `perPack` the chance of at least one card of the tier in a
- * pack, in parts per million; `tierSizes` the current snapshot's characters
- * per tier, so one given character's chance per card is
- * `perSlot[tier] / scale / tierSizes[tier]`.
+ * The rules and tables the server applies, published as it applies them
+ * (collection-packs.md §5.4.8): every chance is an integer out of `scale`.
+ * `slots` are a standard pack's tables in slot order; `share` is the share
+ * of a standard pack's cards per tier and `perPack` the chance of at least
+ * one per standard pack, both in parts per million; `enchanted` replaces
+ * slot `slot`'s table every `every`th free pack; a Radiant pack (`chance`
+ * of any pack) rolls `odds` in every slot but the last, which is
+ * `lastSlot`; `pity` guarantees a Mythic in the last slot of the
+ * `packs`th pack in a row without one. `tierBands` out of `bandScale` is
+ * the pool share of each tier by favourites rank, `tierSizes` the current
+ * snapshot's characters per tier.
  */
 export const PublishedOdds = Type.Object(
   {
     scale: Type.Integer({ minimum: 1 }),
-    perSlot: PerRarity,
+    slots: Type.Array(SlotOdds, { minItems: PACK_SIZE, maxItems: PACK_SIZE }),
+    share: PerRarity,
     perPack: PerRarity,
+    enchanted: Type.Object(
+      {
+        every: Type.Integer({ minimum: 1 }),
+        slot: Type.Integer({ minimum: 0, maximum: PACK_SIZE - 1 }),
+        floor: Rarity,
+        odds: PerRarity,
+      },
+      { additionalProperties: false },
+    ),
+    radiant: Type.Object(
+      { chance: Count, odds: PerRarity, lastSlot: Rarity },
+      { additionalProperties: false },
+    ),
+    pity: Type.Object(
+      { packs: Type.Integer({ minimum: 1 }), freePacksOnly: Type.Boolean() },
+      { additionalProperties: false },
+    ),
+    bandScale: Type.Integer({ minimum: 1 }),
+    tierBands: PerRarity,
     tierSizes: PerRarity,
     snapshot: SnapshotInfo,
   },
   { additionalProperties: false },
 );
 export type PublishedOdds = Static<typeof PublishedOdds>;
+
+/**
+ * Free packs until the guarantee: the free pack that many openings from now
+ * holds a Mythic at the latest (1 means the next one does). Null only while
+ * there is no current snapshot.
+ */
+const PacksUntilGuarantee = Type.Union([Type.Integer({ minimum: 1, maximum: PITY_PACKS }), Type.Null()]);
 
 /** `nextPackInSeconds` is null when the allowance is full, else rounded up so a countdown that ends finds the pack there. */
 export const PackAllowance = Type.Object(
@@ -153,9 +204,13 @@ export const PackAllowance = Type.Object(
 );
 export type PackAllowance = Static<typeof PackAllowance>;
 
-/** `GET /api/packs`; `odds` is null while there is no snapshot (cards unavailable). */
+/** `GET /api/packs`; `odds` and `packsUntilGuarantee` are null while there is no snapshot (cards unavailable). */
 export const PacksResponse = Type.Object(
-  { allowance: PackAllowance, odds: Type.Union([PublishedOdds, Type.Null()]) },
+  {
+    allowance: PackAllowance,
+    odds: Type.Union([PublishedOdds, Type.Null()]),
+    packsUntilGuarantee: PacksUntilGuarantee,
+  },
   { additionalProperties: false },
 );
 export type PacksResponse = Static<typeof PacksResponse>;
@@ -174,9 +229,10 @@ export type FranchiseRef = Static<typeof FranchiseRef>;
 
 /**
  * A character as the game shows it now: the newest name and image, its
- * franchises with the primary one first, and the tier packs deal it as in
- * the current snapshot (null, with `inCurrentSnapshot: false`, once a
- * snapshot dropped it). Strings are AniList's and are rendered as text.
+ * franchises with the primary one first, and the tier packs deal it as and
+ * its favourites rank in the current snapshot (both null, with
+ * `inCurrentSnapshot: false`, once a snapshot dropped it). Strings are
+ * AniList's and are rendered as text.
  */
 export const CharacterPublic = Type.Object(
   {
@@ -186,6 +242,7 @@ export const CharacterPublic = Type.Object(
     imageUrl: Type.String(),
     franchiseIds: Type.Array(AniListId, { minItems: 1 }),
     tier: Type.Union([Rarity, Type.Null()]),
+    rank: Type.Union([Type.Integer({ minimum: 1 }), Type.Null()]),
     inCurrentSnapshot: Type.Boolean(),
   },
   { additionalProperties: false },
@@ -213,14 +270,22 @@ export const OpenedCard = Type.Object(
 );
 export type OpenedCard = Static<typeof OpenedCard>;
 
-/** 201 for a new opening, 200 with the same body for a replay of its `requestId`. */
+/**
+ * 201 for a new opening, 200 with the same body for a replay of its
+ * `requestId`. `packKind` and `pityMythic` (the last card's Mythic was
+ * forced by pity) are as stored; `packsUntilGuarantee` is the count after
+ * this opening, or the current one on a replay.
+ */
 export const PackOpened = Type.Object(
   {
     openingId: Type.String({ format: "uuid" }),
     openedAt: DateTime,
+    packKind: PackKind,
+    pityMythic: Type.Boolean(),
     cards: Type.Array(OpenedCard, { minItems: PACK_SIZE, maxItems: PACK_SIZE }),
     franchises: Type.Array(FranchiseRef),
     allowance: PackAllowance,
+    packsUntilGuarantee: PacksUntilGuarantee,
   },
   { additionalProperties: false },
 );
