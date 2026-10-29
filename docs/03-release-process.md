@@ -4,13 +4,25 @@ How finished work gets in front of the owner for approval and then into producti
 
 ## Environments
 
-| Environment | Where                             | Runs                           | Who updates it    |
-| ----------- | --------------------------------- | ------------------------------ | ----------------- |
-| Preview     | Vite dev server / CI              | any branch                     | anyone            |
-| Acceptance  | Docker on the dev station         | the sprint's release candidate | local Claude Code |
-| Production  | Docker on the dev station, public | the last approved release tag  | local Claude Code |
+| Environment | Where                             | Runs                            | Who updates it                 |
+| ----------- | --------------------------------- | ------------------------------- | ------------------------------ |
+| Preview     | Vite dev server / CI              | any branch                      | anyone                         |
+| Acceptance  | Docker on the dev station         | the newest app change on `main` | the acceptance watcher (below) |
+| Production  | Docker on the dev station, public | the last approved release tag   | local Claude Code              |
 
 Deployment files (`Dockerfile`, `compose.yml`, proxy config without secrets) must live in this repo (roadmap item 0.2). Until they do, the first handoff asks the local session to commit them on a branch and open a PR.
+
+## Automatic acceptance
+
+Since 2026-10-29 (owner's request) acceptance follows `main` on its own; the local session no longer deploys it by hand. A scheduled task on the dev station, `AnimeTCG-AcceptanceWatch`, runs `ops/acceptance-watch.sh` through `ops/acceptance-watch.ps1` every 10 minutes while the owner is logged on. Both are installed by hand in `C:\ProgramData\AnimeTCG\`; the watcher never updates itself from the repo, so a change to it reaches the dev station only when the owner (or the local session at the owner's request) copies it there. When `origin/main` has a commit that changes what the images or the database are built from (`web/`, `api/`, `shared/`, `db/`, `Caddyfile`, a Dockerfile, `compose.yml`, `package.json`, the lockfile, `tsconfig.base.json` or `.dockerignore`) since the last deployment, it:
+
+1. checks the commit out in the acceptance checkout with git hooks disabled, builds it as `acceptance-<12-character sha>` (the tag is passed in the environment; the env file with the secrets is never edited) and starts the stack with `--wait` (the api applies pending migrations at start), then checks that the running containers carry the new tag;
+2. loads the newest card snapshot file from the owner's snapshot folder if acceptance has no current snapshot;
+3. smoke-tests `/` (title and script bundle), `/api/session` and the api's own health probe;
+4. on success, closes the previous `Acceptance ready: <sha>` issue and opens a new one listing the merged changes, locked to collaborators. The watcher opens issues with the owner's own token, and GitHub does not notify anyone of their own activity, so the owner has **Include your own updates** turned on in GitHub's email notification settings; that email is the notification. Only the owner's reply counts: `acceptance ok <sha>` or what is wrong. The verdict is recorded in a `docs/releases/` note as before;
+5. on failure, rolls back the images and the code (not the database: the older build then runs on the newer schema) and smoke-tests the rollback, then opens `Acceptance deploy failed: <sha>` with the reason. It does not retry that commit, or a later one with the same app content; the next app change is tried. If Docker or the network (GitHub, the npm registry) stops answering during a deploy, the run counts as an outage, not a failure, and the next run tries again.
+
+Docs-only merges are not deployed and notify nobody. While the newest of Dependabot's auto-merged app commits in a range is under 72 hours old, the whole range waits, even when it also holds the owner's own merges. An issue that GitHub refuses (offline, an expired token) is retried on the next run. It keeps the current and previous acceptance images and removes older `anime-tcg-(web|api):acceptance-*` tags only. Production is untouched: it still runs only an owner-approved tag, deployed through the handoff below.
 
 ## Sprint
 
@@ -28,8 +40,9 @@ Release handoff: <sprint name> — candidate <tag> (<sha>)
 You are the local Claude Code session on the dev station. Do the following in order and stop at every "WAIT".
 
 1. Fetch and check out the candidate: git fetch --tags origin && git checkout <tag>
-2. Build the acceptance image from the repo's Dockerfile and start the acceptance stack
-   (compose profile "acceptance", separate port/hostname from production, separate data volume).
+2. Acceptance follows main automatically ("Automatic acceptance"). If it already runs the candidate's sha,
+   use it; otherwise disable the task AnimeTCG-AcceptanceWatch first, deploy the candidate to acceptance
+   (compose profile "acceptance") with TAG set in the environment, and re-enable the task after the owner's verdict (step 5 or 6), so a merge to main does not replace the candidate during the check. After step 6 stops the stack, the watcher brings acceptance back only with the next app change.
    Report the acceptance URL.
 3. Run the smoke checks below against acceptance and paste the results.
 4. WAIT: ask the owner to verify the acceptance checklist below in the browser and to reply
