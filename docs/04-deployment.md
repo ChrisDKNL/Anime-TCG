@@ -168,11 +168,14 @@ It prints one line, for example `Snapshot 2 active: 100 entries in 77 franchises
 - **Updating later**: run the same command whenever you choose. Cards players already own keep the rarity they were granted with; names, images and the rank shown on the card refresh from the new snapshot; tier changes apply to packs opened from the activation on; a character the new snapshot drops stays in collections and is never dealt again. Players' pity and Enchanted counters are not touched by an activation. A dry run takes a version number that the next real activation does not reuse.
 - **From a file** (an offline install, AniList down, or seeding a test stack): `--stdin` loads a snapshot file through the same validation, cap and refusals and records it as source `file`; `--export` prints the current snapshot as such a file (the capped pool, so loading it again builds the same pool), so one install can seed another. Files are at most 64 MB. The owner's real snapshot of 2026-10-29 (`snapshot-2026-10-29.json`, kept outside the repository) loads as 2 983 characters, 2 190 capped in 18 franchises; with `REAL_SNAPSHOT_FILE` set to its path, `npm run test:routes -w api` checks those figures (CI never has the file and skips that test).
 
+A snapshot file is AniList's content and is never committed: keep it outside the repository, in `~/.anime-tcg/snapshots/` (`.gitignore` also ignores `snapshot*.json` as a backstop).
+
 ```bash
+mkdir -p ~/.anime-tcg/snapshots
 docker compose --env-file .env.production.local --profile production exec -T api-production \
-  node api/dist/cli/snapshot-pool.js --export > snapshot.json
+  node api/dist/cli/snapshot-pool.js --export > ~/.anime-tcg/snapshots/snapshot-$(date +%F).json
 docker compose --env-file .env.acceptance.local --profile acceptance exec -T api-acceptance \
-  node api/dist/cli/snapshot-pool.js --stdin < snapshot.json
+  node api/dist/cli/snapshot-pool.js --stdin < ~/.anime-tcg/snapshots/snapshot-2026-10-29.json
 ```
 
 ### Reset a player's collection
