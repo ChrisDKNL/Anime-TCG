@@ -1,6 +1,7 @@
 import { Writable } from "node:stream";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../src/app.js";
+import { createDb } from "../src/db/client.js";
 import { accounts } from "../src/db/schema.js";
 import { createLogger } from "../src/plugins/logging.js";
 import {
@@ -137,6 +138,40 @@ describe("account logging", () => {
     });
     for (const secret of [PASSWORD, NEW_PASSWORD, "$argon2id$", cookie, rotated, TEST_INVITE_CODES[0]]) {
       expect(everything(), secret).not.toContain(secret);
+    }
+  });
+
+  it("a failed statement is logged at error without its parameters, through the request logger", async () => {
+    const deadChunks: string[] = [];
+    const sink = new Writable({
+      write(chunk: Buffer, _encoding, done) {
+        deadChunks.push(chunk.toString());
+        done();
+      },
+    });
+    const dead = await createTestApp({
+      db: createDb("postgres://anime:anime@127.0.0.1:1/anime"),
+      logger: createLogger("info", sink),
+    });
+    try {
+      const res = await send(dead, {
+        method: "POST",
+        url: "/api/session/login",
+        payload: { login: "Chris", password: PASSWORD },
+      });
+      expect(res.statusCode).toBe(500);
+      const failed = deadChunks
+        .map((line) => JSON.parse(line) as Record<string, unknown>)
+        .find((line) => line.msg === "request failed");
+      const err = failed?.err as { type: string; message: string; params?: unknown; stack: string };
+      expect(err.type).toBe("DrizzleQueryError");
+      expect(err.params).toBeUndefined();
+      expect(err.message).toMatch(/^Failed query: /);
+      expect(err.message).not.toContain("\n");
+      expect(deadChunks.join("\n")).not.toContain("params");
+      expect(deadChunks.join("\n")).not.toContain(PASSWORD);
+    } finally {
+      await dead.close();
     }
   });
 

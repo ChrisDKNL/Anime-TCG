@@ -695,6 +695,36 @@ describe("account routes", () => {
     });
   });
 
+  describe("the breather under parallel misses", () => {
+    it("five wrong passwords arriving at once all count, so the sixth attempt is 429", async () => {
+      await registerAccount(app, { login: "Chris", password: PASSWORD });
+      const misses = await Promise.all(
+        Array.from({ length: THROTTLE_MAX_FAILURES }, (_, i) =>
+          call({
+            method: "POST",
+            url: "/api/session/login",
+            payload: { login: "Chris", password: `wrong ${i}` },
+          }),
+        ),
+      );
+      expect(misses.map((res) => res.statusCode)).toEqual(
+        Array.from({ length: THROTTLE_MAX_FAILURES }, () => 401),
+      );
+      const [row] = await app.db.select().from(authThrottle);
+      expect(row).toMatchObject({ key: "chris", failures: 0 });
+      expect(row?.blockedUntil?.getTime()).toBeGreaterThan(Date.now());
+
+      const sixth = await call({
+        method: "POST",
+        url: "/api/session/login",
+        payload: { login: "Chris", password: PASSWORD },
+      });
+      expect(sixth.statusCode).toBe(429);
+      expect(envelope(sixth).code).toBe("too_many_failures");
+      expect(Number(sixth.headers["retry-after"])).toBeGreaterThanOrEqual(1);
+    });
+  });
+
   describe("hourly throttle purge", () => {
     it("removes rows untouched for an hour, keeps fresh ones, and logs the count", async () => {
       const setIntervalSpy = vi.spyOn(globalThis, "setInterval");
