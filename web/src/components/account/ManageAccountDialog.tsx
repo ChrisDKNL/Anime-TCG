@@ -278,7 +278,9 @@ function ConfirmDelete({ account, onCancel, onDeleted }: ConfirmDeleteProps) {
         {manageCopy.deleteHeading(account.login)}
       </h2>
       <p id="delete-body" className={`${BODY_TEXT} break-words`}>
-        {manageCopy.deleteBody(account.login, cardCount(account.cards))}
+        {account.cards === 0
+          ? manageCopy.deleteBodyNoCards(account.login)
+          : manageCopy.deleteBody(account.login, cardCount(account.cards))}
       </p>
       {form.unreachable && <FormBanner />}
       <PasswordField

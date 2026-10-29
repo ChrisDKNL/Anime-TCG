@@ -180,6 +180,22 @@ describe("ManageAccountDialog", () => {
       expect(screen.getByRole("button", { name: "Delete account…" })).toHaveFocus();
     });
 
+    it("with no cards the body does not mention any", async () => {
+      const { user } = setup({}, { cards: 0 });
+      await user.click(screen.getByRole("button", { name: "Delete account…" }));
+      expect(screen.getByRole("dialog", { name: "Delete Chris?" })).toHaveAccessibleDescription(
+        "This permanently deletes Chris. There is no undo.",
+      );
+    });
+
+    it("with one card the body uses the singular", async () => {
+      const { user } = setup({}, { cards: 1 });
+      await user.click(screen.getByRole("button", { name: "Delete account…" }));
+      expect(screen.getByRole("dialog", { name: "Delete Chris?" })).toHaveAccessibleDescription(
+        "This permanently deletes Chris and its 1 card. There is no undo.",
+      );
+    });
+
     it("Escape on the confirm panel goes back to the sections instead of closing", async () => {
       const { user, onClose } = setup({});
       await user.click(screen.getByRole("button", { name: "Delete account…" }));

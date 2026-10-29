@@ -103,8 +103,10 @@ export const manageCopy = {
   deleteExplanation: "Deleting removes this account and every card in it. There is no undo.",
   deleteTrigger: "Delete account…",
   deleteHeading: (login: string) => `Delete ${login}?`,
+  /** With at least one card; `cards` is the `cardCount` phrase. */
   deleteBody: (login: string, cards: string) =>
     `This permanently deletes ${login} and its ${cards}. There is no undo.`,
+  deleteBodyNoCards: (login: string) => `This permanently deletes ${login}. There is no undo.`,
   deletePasswordLabel: "Password",
   deleteButton: (login: string) => `Delete ${login}`,
   deleting: "Deleting…",

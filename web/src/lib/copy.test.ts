@@ -56,8 +56,11 @@ describe("copy", () => {
   it("interpolates the login verbatim", () => {
     expect(copy.common.loginTaken("Chris")).toBe('The login "Chris" is already taken.');
     expect(copy.common.tryAgainIn(10)).toBe("Try again in 10 s");
-    expect(copy.manageCopy.deleteBody("Chris", "No cards yet")).toBe(
-      "This permanently deletes Chris and its No cards yet. There is no undo.",
+    expect(copy.manageCopy.deleteBody("Chris", copy.cardCount(3))).toBe(
+      "This permanently deletes Chris and its 3 cards. There is no undo.",
+    );
+    expect(copy.manageCopy.deleteBodyNoCards("Chris")).toBe(
+      "This permanently deletes Chris. There is no undo.",
     );
     expect(copy.inventoryCopy.resetConfirm("Chris")).toBe(
       "Delete every card in Chris? This cannot be undone.",
