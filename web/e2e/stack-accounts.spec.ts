@@ -1,4 +1,4 @@
-import { expect, test, type BrowserContext, type Page } from "@playwright/test";
+import { expect, test, type APIRequestContext, type BrowserContext, type Page } from "@playwright/test";
 import { mockAniList } from "./support/fake-api";
 
 /**
@@ -9,7 +9,8 @@ import { mockAniList } from "./support/fake-api";
  * INVITE_CODES, e.g. `STACK_URL=http://127.0.0.1:8180 STACK_INVITE_CODE=... npm run test:e2e -w web`.
  * The second variable is a deliberate opt-in: this spec creates an account, so it must never run
  * by accident against a stack whose accounts are real (the owner's acceptance stack counts toward
- * the 10-account cap). It deletes what it creates at the end. AniList stays mocked.
+ * the 10-account cap). It deletes what it creates at the end, and again after the test whatever
+ * its outcome, so a failed run does not keep one of the cap's places. AniList stays mocked.
  *
  * - Register through the two steps; the browser stores the session cookie as __Host-session,
  *   HttpOnly, Secure, SameSite=Lax, Path=/ and host-only (no Domain), and page script cannot read it.
@@ -31,6 +32,7 @@ test.describe("accounts journey through Caddy", () => {
     "set STACK_URL and STACK_INVITE_CODE to register a throwaway account on a running stack",
   );
   test.use({ baseURL: STACK_URL });
+  test.afterEach(async ({ page }) => deleteThrowawayAccount(page.request));
 
   test("register, cookie flags, log out, log in, delete", async ({ page, context }) => {
     await mockAniList(page);
@@ -70,6 +72,23 @@ test.describe("accounts journey through Caddy", () => {
     expect(await (await page.request.get("/api/session")).json()).toEqual({ signedIn: false });
   });
 });
+
+/**
+ * Best-effort cleanup through the api, for a run that failed before its own Delete. A 401 on log in
+ * means there is nothing to delete (never registered, or the journey already deleted it); any other
+ * failure is reported, because it would leave an account holding one of the 10 places.
+ */
+async function deleteThrowawayAccount(request: APIRequestContext): Promise<void> {
+  const headers = { origin: STACK_URL! };
+  const login = await request.post("/api/session/login", {
+    data: { login: LOGIN, password: PASSWORD },
+    headers,
+  });
+  if (login.status() === 401) return;
+  expect(login.status(), "cleanup: log in as the throwaway account").toBe(200);
+  const deleted = await request.post("/api/account/delete", { data: { password: PASSWORD }, headers });
+  expect(deleted.status(), "cleanup: delete the throwaway account").toBe(204);
+}
 
 const control = (page: Page) =>
   page.getByRole("button", { name: `Account menu. Signed in as ${LOGIN}`, exact: true });
