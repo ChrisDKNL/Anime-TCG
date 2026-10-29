@@ -1,4 +1,4 @@
-import { BASE_WEIGHTS, POPULARITY_INFLUENCE, type Rarity } from "@anime-tcg/shared/rarity";
+import { BASE_WEIGHTS, type LegacyRarity as Rarity, POPULARITY_INFLUENCE } from "@anime-tcg/shared/rarity";
 import type { Character } from "../types";
 
 /**

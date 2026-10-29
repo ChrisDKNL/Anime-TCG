@@ -1,4 +1,4 @@
-import type { Rarity } from "@anime-tcg/shared/rarity";
+import type { LegacyRarity as Rarity } from "@anime-tcg/shared/rarity";
 
 /** A character as returned (and lightly normalised) from AniList. */
 export interface Character {

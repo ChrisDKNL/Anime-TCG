@@ -1,5 +1,9 @@
 import { useMemo, useState } from "react";
-import { RARITIES, RARITY_LABEL, type Rarity } from "@anime-tcg/shared/rarity";
+import {
+  LEGACY_RARITIES as RARITIES,
+  RARITY_LABEL,
+  type LegacyRarity as Rarity,
+} from "@anime-tcg/shared/rarity";
 import { inventoryCopy } from "../lib/copy";
 import type { Card } from "../types";
 import { CharacterCard } from "./CharacterCard";
