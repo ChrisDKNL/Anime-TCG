@@ -79,7 +79,15 @@ test("Back and Forward: title and focus follow, and each entry's scroll position
   await mainNav(page).getByRole("link", { name: "Collection (20)" }).click();
   await expect(h1(page, "Collection")).toBeFocused();
   await expect(page).toHaveTitle("Collection · Anime TCG");
-  await page.evaluate(() => window.scrollTo(0, 600));
+  // Wait for the scroll event, a frame after scrollY changes: the router records a position only for a
+  // target that fired one, so leaving before it would leave nothing to restore (a test race, not the app's).
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        document.addEventListener("scroll", () => resolve(), { once: true, capture: true });
+        window.scrollTo(0, 600);
+      }),
+  );
   await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(500);
 
   // A new page starts at the top. The click is dispatched in the page: Playwright would scroll the
@@ -116,7 +124,8 @@ test.describe("addresses (§3.1 rule 2, §4.7)", () => {
       const response = await page.goto(path);
       expect(response?.status()).toBe(200);
       await expect(h1(page, "Page not found")).toBeVisible();
-      await expect(page).toHaveURL(new RegExp(`${path.replace(/[.]/g, "\\.")}$`));
+      // The address stays exactly as typed; compared as a pathname, so no regex is built from data.
+      await expect(page).toHaveURL((url) => url.pathname === path);
       await expect(page.getByText("There's no page at this address.")).toBeVisible();
       await expect(mainNav(page).getByRole("link", { name: "Log in" })).toBeVisible();
       await expect(page).toHaveTitle("Page not found · Anime TCG");
