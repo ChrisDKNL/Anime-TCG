@@ -59,6 +59,7 @@ Terms: **allowance**, the server's `PackAllowance` (`available`, `cap`, `interva
    - no 429 wait is running.
 2. **On activation** (click, Enter or Space), the page does the following in order:
    - It checks a synchronous single-flight guard (a ref, not React state). If an opening is in flight, the activation does nothing, so a double click or a held Enter sends one request.
+   - The guard covers only the time in flight, and a near server answers before a double click's second click or the next auto-repeat. So the button also ignores a click whose `detail` is above 1 (the second click of a double click, or a double tap where the browser reports one) and an Enter keydown with `repeat` true; a later single click, tap or key press opens the next pack (manager decision, 2026-10-30).
    - It takes the held key, or creates `crypto.randomUUID()` and holds it.
    - It sends `POST /api/packs/open` with `{ requestId }`.
    - The button reads `Opening…`, is `aria-disabled` and keeps focus.

@@ -1,4 +1,4 @@
-import { act, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import type { ControlShown, ControlView } from "../../lib/packControl";
@@ -64,6 +64,35 @@ describe("PackControl (packs-page.md §4.1, §7)", () => {
     expect(pity.tagName).toBe("P");
     expect(pity).not.toHaveAttribute("role");
     expect(pity).not.toHaveAttribute("aria-live");
+  });
+
+  it("a double click opens one pack, even once the first opening has answered; a later single click opens the next (§3.3 step 2)", async () => {
+    const { onOpen } = renderControl(control());
+    const button = screen.getByRole("button", { name: "Open pack" });
+    await userEvent.setup().dblClick(button);
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    fireEvent.click(button, { detail: 2 });
+    fireEvent.click(button, { detail: 3 });
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    fireEvent.click(button, { detail: 1 });
+    expect(onOpen).toHaveBeenCalledTimes(2);
+  });
+
+  it("a held Enter opens one pack: its auto-repeats do not click; Enter, Space and the keyboard's click (detail 0) still open", async () => {
+    const { onOpen } = renderControl(control());
+    const button = screen.getByRole("button", { name: "Open pack" });
+    button.focus();
+    const user = userEvent.setup();
+    await user.keyboard("{Enter>4/}");
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    expect(fireEvent.keyDown(button, { key: "Enter", repeat: true })).toBe(false);
+    expect(fireEvent.keyDown(button, { key: "Enter", repeat: false })).toBe(true);
+    // Only Enter's repeats: a held Tab still moves focus.
+    expect(fireEvent.keyDown(button, { key: "Tab", repeat: true })).toBe(true);
+    await user.keyboard("{Enter}");
+    await user.keyboard(" ");
+    fireEvent.click(button, { detail: 0 });
+    expect(onOpen).toHaveBeenCalledTimes(4);
   });
 
   it("the countdown is plain text: the clock hidden, the words for a screen reader", () => {

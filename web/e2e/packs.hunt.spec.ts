@@ -36,8 +36,10 @@ import {
  *
  * Single flight (§3.3 step 2, §10 item 5)
  * - A double click and a held Enter (repeating keydowns) while the opening is in flight send one
- *   `POST` and spend one pack. (When the answer lands between the two clicks or between two
- *   repeats, a second pack opens: packs.bugs.spec.ts.)
+ *   `POST` and spend one pack.
+ * - Regression (manager decision, 2026-10-30): the same when the answer lands between the two
+ *   clicks or between two repeats; the second click (`detail` 2) and the repeats (`repeat: true`)
+ *   are ignored, and a later single click or Enter opens the next pack.
  * - An activation during the 429 wait sends nothing.
  *
  * Lost answer (§3.3 table "no answer", step 4; §10 item 6)
@@ -190,6 +192,67 @@ test.describe("single flight (§3.3 step 2)", () => {
     await expect(packButton(page)).toBeFocused();
     expect(api.count("POST /api/packs/open")).toBe(1);
     expect(api.game.opened).toBe(1);
+  });
+
+  /*
+   * The tester's hunt found these as bugs: a local or LAN api answers in tens of milliseconds, a
+   * double click is up to ~500 ms and a keyboard auto-repeats every ~33 ms after ~500 ms, so the
+   * in-flight guard alone let the late activation open another pack.
+   */
+  test("a double click whose second click comes after the answer opens one pack; a later click opens the next", async ({
+    page,
+    api,
+  }) => {
+    api.on("GET /api/session", signedIn(CHRIS));
+    await page.goto("/packs");
+    await expect(page.getByText("3 of 3 packs ready")).toBeVisible();
+    const box = await packButton(page).boundingBox();
+    if (box === null) throw new Error("Open pack has no box");
+    const x = box.x + box.width / 2;
+    const y = box.y + box.height / 2;
+
+    // The first click of the double click; the server answers before the second one.
+    await page.mouse.click(x, y);
+    await expect(page.getByText("2 of 3 packs ready")).toBeVisible();
+    // The second click of the same double click, `detail` 2 as the browser sends it.
+    await page.mouse.down({ clickCount: 2 });
+    await page.mouse.up({ clickCount: 2 });
+    await page.waitForLoadState("networkidle");
+
+    expect(api.count("POST /api/packs/open"), "openings sent by one double click").toBe(1);
+    await expect(page.getByText("2 of 3 packs ready")).toBeVisible();
+    expect(await revealNames(page)).toEqual(namesOfOpening(1));
+
+    // A deliberate single click after the double click (`detail` 1 again) opens the next pack.
+    await page.mouse.click(x, y);
+    await expect(page.getByText("1 of 3 packs ready")).toBeVisible();
+    await expect.poll(() => revealNames(page)).toEqual(namesOfOpening(2));
+    expect(api.count("POST /api/packs/open")).toBe(2);
+  });
+
+  test("Enter held past the answer opens one pack; a later Enter opens the next", async ({ page, api }) => {
+    api.on("GET /api/session", signedIn(CHRIS));
+    await page.goto("/packs");
+    await expect(page.getByText("3 of 3 packs ready")).toBeVisible();
+    await packButton(page).focus();
+
+    await page.keyboard.down("Enter");
+    await expect(page.getByText("2 of 3 packs ready")).toBeVisible();
+    // The key is still down: the keyboard's auto-repeat (`repeat: true`).
+    for (let repeat = 0; repeat < 3; repeat += 1) await page.keyboard.down("Enter");
+    await page.keyboard.up("Enter");
+    await page.waitForLoadState("networkidle");
+
+    expect(api.count("POST /api/packs/open"), "openings sent by one held Enter").toBe(1);
+    await expect(page.getByText("2 of 3 packs ready")).toBeVisible();
+    expect(await revealNames(page)).toEqual(namesOfOpening(1));
+
+    // A new press of Enter is a new activation.
+    await page.keyboard.press("Enter");
+    await expect(page.getByText("1 of 3 packs ready")).toBeVisible();
+    await expect.poll(() => revealNames(page)).toEqual(namesOfOpening(2));
+    await expect(packButton(page)).toBeFocused();
+    expect(api.count("POST /api/packs/open")).toBe(2);
   });
 });
 
