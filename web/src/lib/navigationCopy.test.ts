@@ -64,7 +64,7 @@ const rendered: Array<[string, string]> = [
 ];
 
 describe("navigation copy (§8)", () => {
-  it("covers the headings, titles, guard lines, header, landing, profile, not-found and Booster strings", () => {
+  it("covers the headings, titles, guard lines, header, landing, profile and not-found strings", () => {
     const texts = rendered.map(([, text]) => text);
     for (const expected of [
       "Packs",
@@ -76,10 +76,7 @@ describe("navigation copy (§8)", () => {
       "How it plays",
       "Your profile isn't here yet.",
       "There's no page at this address.",
-      "Loading character pool from AniList…",
-      "Couldn't load characters:",
-      "Retry",
-      "You pulled",
+      "Every character has one of six tiers, set by how many AniList users favourited them.",
     ]) {
       expect(texts).toContain(expected);
     }

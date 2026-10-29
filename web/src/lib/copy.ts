@@ -2,8 +2,8 @@
  * Every user-facing string of the accounts feature, verbatim from
  * docs/design/accounts.md §8. Functions take the login, a count phrase or the
  * seconds they interpolate; the copy test renders all of them and scans for the
- * words §8 forbids. The plain strings that embed a login (an aria-label, a
- * confirm dialog) wrap it in directional isolates, since <bdi> cannot go there.
+ * words §8 forbids. The plain strings that embed a login (an aria-label)
+ * wrap it in directional isolates, since <bdi> cannot go there.
  * Page headings and titles live in the route list (routes.ts): the navigation
  * spec moved them there and took the login out of the title bar.
  */
@@ -116,10 +116,6 @@ export const banners = {
   loading: "Loading…",
 } as const;
 
-export const inventoryCopy = {
-  resetConfirm: (login: string) => `Delete every card in ${isolateLogin(login)}? This cannot be undone.`,
-} as const;
-
 /** `No cards yet` / `1 card` / `<N> cards`, used wherever a card count is shown. */
 export function cardCount(n: number): string {
   if (n === 0) return "No cards yet";
@@ -133,12 +129,12 @@ export function cardCount(n: number): string {
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
 
 /** `D Mon YYYY` in the viewer's time zone, e.g. `5 Sep 2026`. */
-function createdDate(createdAt: string): string {
-  const date = new Date(createdAt);
+export function shortDate(isoDateTime: string): string {
+  const date = new Date(isoDateTime);
   return `${date.getDate()} ${MONTHS[date.getMonth()] ?? ""} ${date.getFullYear()}`;
 }
 
 /** `<N cards> · Created <D Mon YYYY>` for the Manage account header. */
 export function metaLine(cards: number, createdAt: string): string {
-  return `${cardCount(cards)} · Created ${createdDate(createdAt)}`;
+  return `${cardCount(cards)} · Created ${shortDate(createdAt)}`;
 }

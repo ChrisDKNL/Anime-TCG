@@ -1,10 +1,60 @@
 @import "tailwindcss";
 
-/* Rarity glow colours as design tokens so components and animations share one source. */
+/*
+ * The card and its six tiers (card-and-rarity.md §10). Mark colours are for stars, chips and tables;
+ * every text in a tier colour uses its `-text` token, which differs from the mark only for Epic (§4.2).
+ */
 @theme {
-  --color-rarity-common: #94a3b8;
-  --color-rarity-rare: #38bdf8;
-  --color-rarity-legendary: #f59e0b;
+  --color-rarity-common: #9a9da6;
+  --color-rarity-uncommon: #3cc7a9;
+  --color-rarity-rare: #6f95ec;
+  --color-rarity-epic: #e04563;
+  --color-rarity-legendary: #f5b84a;
+  --color-rarity-mythic: #b79ff0;
+
+  --color-rarity-common-text: #9a9da6;
+  --color-rarity-uncommon-text: #3cc7a9;
+  --color-rarity-rare-text: #6f95ec;
+  --color-rarity-epic-text: #e45b76;
+  --color-rarity-legendary-text: #f5b84a;
+  --color-rarity-mythic-text: #b79ff0;
+
+  --color-card-face-top: #1b1e36;
+  --color-card-face-bottom: #121320;
+  --color-card-ink: #eceaf3;
+  --color-card-ink-muted: #bcb8c9;
+  --color-card-ink-subtle: #a6a3b6;
+  --color-card-chip: rgb(18 19 32 / 0.9);
+  --color-card-glint: rgb(255 255 255 / 0.5);
+
+  /* The owner's frame-only exception (§5.4): glows on Epic, Legendary and Mythic frames, never animated. */
+  --shadow-glow-epic: 0 0 24px rgb(224 69 99 / 0.4);
+  --shadow-glow-legendary: 0 0 30px rgb(245 184 74 / 0.45);
+  --shadow-glow-mythic: 0 0 34px rgb(170 140 240 / 0.5);
+
+  --animate-card-glint: card-glint 5.5s ease-in-out infinite;
+  --animate-card-pearl: card-pearl 7s ease-in-out infinite;
+
+  /* The light rests off the card for 3.3 s, then crosses it in 2.2 s (§5.3). */
+  @keyframes card-glint {
+    0%,
+    60% {
+      background-position: 130% 0;
+    }
+    100% {
+      background-position: -130% 0;
+    }
+  }
+
+  @keyframes card-pearl {
+    0%,
+    100% {
+      background-position: 0% 40%;
+    }
+    50% {
+      background-position: 100% 60%;
+    }
+  }
 }
 
 /*
@@ -30,45 +80,135 @@
   color-scheme: dark;
   /* Slot i of the reveal starts i steps after the answer arrives. */
   --card-enter-step: 50ms;
+
+  --card-frame-common: #686b73;
+  --card-frame-uncommon: #2fb79c;
+  --card-frame-rare: #2a4fa8;
+  --card-frame-epic: conic-gradient(from 45deg, #8e1730, #e04563, #8e1730, #c22c4b, #8e1730);
+  --card-frame-legendary: conic-gradient(from 45deg, #a8641a, #f5b84a, #c27b22, #ffd57a, #a8641a);
+  --card-frame-mythic: linear-gradient(120deg, #b79ff0, #ece3ff, #8f6fe0, #d9cdfb, #a88ff0, #f3eeff, #b79ff0);
+  --card-frame-flat-epic: #c22c4b;
+  --card-frame-flat-legendary: #c27b22;
+  --card-frame-flat-mythic: #a88ff0;
+  --card-face:
+    radial-gradient(circle at 20% 15%, rgba(255, 255, 255, 0.8) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 75% 22%, rgba(255, 255, 255, 0.6) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 55% 35%, rgba(255, 255, 255, 0.5) 0 1px, transparent 1.5px),
+    linear-gradient(180deg, #1b1e36, #121320 65%);
+  --card-glint-image: linear-gradient(105deg, transparent 42%, var(--color-card-glint) 50%, transparent 56%);
+  --card-art-placeholder: repeating-linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.04) 0 7px,
+    rgba(255, 255, 255, 0.07) 7px 14px
+  );
+}
+
+@utility card-face {
+  background: var(--card-face);
+}
+
+@utility card-art-placeholder {
+  background: var(--card-art-placeholder);
+}
+
+@utility card-frame-common {
+  background: var(--card-frame-common);
+}
+
+@utility card-frame-uncommon {
+  background: var(--card-frame-uncommon);
+}
+
+@utility card-frame-rare {
+  background: var(--card-frame-rare);
+}
+
+@utility card-frame-epic {
+  background: var(--card-frame-epic);
+}
+
+@utility card-frame-legendary {
+  background: var(--card-frame-legendary);
+}
+
+/* The pearl rests at 0% 40%, which is also where it stays under reduced motion (§5.3). */
+@utility card-frame-mythic {
+  background: var(--card-frame-mythic);
+  background-size: 300% 300%;
+  background-position: 0% 40%;
+}
+
+/*
+ * Glint (Epic, Legendary): a light layer over the whole card. `card-glint` plays it always (the
+ * reveal), `card-glint-hover` only while the card is hovered (grid tiles). Each card starts at its own
+ * point of the loop (`--card-phase`), so cards on one screen do not glint together. Under reduced
+ * motion the layer is not rendered at all.
+ */
+@utility card-glint {
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background: var(--card-glint-image);
+    background-size: 260% 100%;
+    background-position: 130% 0;
+    animation: var(--animate-card-glint);
+    animation-delay: calc(var(--card-phase, 0) * -1s);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    &::after {
+      content: none;
+    }
+  }
+}
+
+@utility card-glint-hover {
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background: var(--card-glint-image);
+    background-size: 260% 100%;
+    background-position: 130% 0;
+  }
+  &:hover::after {
+    animation: var(--animate-card-glint);
+    animation-delay: calc(var(--card-phase, 0) * -1s);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    &::after {
+      content: none;
+    }
+  }
+}
+
+/* Pearl drift (Mythic): the frame's own background moves; `-hover` plays it only while hovered. */
+@utility card-pearl {
+  animation: var(--animate-card-pearl);
+  animation-delay: calc(var(--card-phase, 0) * -1s);
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+@utility card-pearl-hover {
+  &:hover {
+    animation: var(--animate-card-pearl);
+    animation-delay: calc(var(--card-phase, 0) * -1s);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    &:hover {
+      animation: none;
+    }
+  }
 }
 
 body {
   @apply bg-zinc-950 text-zinc-100 antialiased;
-}
-
-/* Card flip-in when a pack is opened. */
-@keyframes card-reveal {
-  from {
-    opacity: 0;
-    transform: translateY(24px) rotateY(90deg) scale(0.9);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0) rotateY(0deg) scale(1);
-  }
-}
-
-.card-reveal {
-  animation: card-reveal 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both;
-}
-
-/* Legendary cards pulse; other tiers are static. */
-@keyframes legendary-pulse {
-  0%,
-  100% {
-    box-shadow:
-      0 0 12px 2px rgb(245 158 11 / 0.55),
-      0 0 40px 6px rgb(245 158 11 / 0.25);
-  }
-  50% {
-    box-shadow:
-      0 0 20px 4px rgb(245 158 11 / 0.85),
-      0 0 60px 12px rgb(245 158 11 / 0.4);
-  }
-}
-
-.glow-legendary {
-  animation: legendary-pulse 2s ease-in-out infinite;
 }
 
 /* Menu and dialog enter (accounts.md §6): fade and scale over 150 ms, nothing that loops. */
@@ -88,8 +228,6 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .card-reveal,
-  .glow-legendary,
   .pop-in {
     animation: none;
   }
