@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
+import { SESSION_QUERY_KEY } from "./hooks/useAccountSession";
 import { createQueryClient } from "./lib/queryClient";
 import { envelope, makeAccount, noContent } from "./test/api";
 import { ANILIST, liveRegion, renderApp, signedOutSession } from "./test/app";
@@ -81,13 +82,13 @@ describe("App boot", () => {
   it("signed in: the game with the Account control, tabs and the login in the title", async () => {
     renderApp({}, account);
     expect(
-      await screen.findByRole("button", { name: "Account menu. Signed in as Chris" }),
+      await screen.findByRole("button", { name: "Account menu. Signed in as \u2068Chris\u2069" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("navigation", { name: "Views" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /collection \(0\)/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /open booster pack/i })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Your account" })).not.toBeInTheDocument();
-    expect(document.title).toBe("Chris · Anime TCG");
+    expect(document.title).toBe("\u2068Chris\u2069 · Anime TCG");
   });
 });
 
@@ -110,7 +111,7 @@ describe("App account flows", () => {
       expect(
         await screen.findByRole(
           "button",
-          { name: "Account menu. Signed in as Chris" },
+          { name: "Account menu. Signed in as \u2068Chris\u2069" },
           { timeout: ASYNC_TIMEOUT },
         ),
       ).toBeInTheDocument();
@@ -119,7 +120,7 @@ describe("App account flows", () => {
       const pack = screen.getByRole("button", { name: /open booster pack/i });
       await waitFor(() => expect(pack).toBeEnabled(), { timeout: ASYNC_TIMEOUT });
       expect(pack).toHaveFocus();
-      expect(document.title).toBe("Chris · Anime TCG");
+      expect(document.title).toBe("\u2068Chris\u2069 · Anime TCG");
     },
     TEST_TIMEOUT,
   );
@@ -147,14 +148,14 @@ describe("App account flows", () => {
       await user.click(screen.getByRole("button", { name: "Log in" }));
       await screen.findByRole(
         "button",
-        { name: "Account menu. Signed in as Chris" },
+        { name: "Account menu. Signed in as \u2068Chris\u2069" },
         { timeout: ASYNC_TIMEOUT },
       );
       expect(liveRegion()).toBe(region);
       expect(region).toHaveTextContent("Logged in. You're now on Chris.");
       expect(written.length).toBeGreaterThan(0);
 
-      await user.click(screen.getByRole("button", { name: "Account menu. Signed in as Chris" }));
+      await user.click(screen.getByRole("button", { name: "Account menu. Signed in as \u2068Chris\u2069" }));
       await user.click(screen.getByRole("menuitem", { name: "Log out" }));
       await screen.findByRole("heading", { name: "Your account" });
       expect(liveRegion()).toBe(region);
@@ -177,7 +178,9 @@ describe("App account flows", () => {
   it("Log out returns to the Account screen, resets the title, announces and focuses the heading", async () => {
     renderApp({ "POST /api/session/logout": noContent }, account);
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("button", { name: "Account menu. Signed in as Chris" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Account menu. Signed in as \u2068Chris\u2069" }),
+    );
     await user.click(screen.getByRole("menuitem", { name: "Log out" }));
 
     const heading = await screen.findByRole("heading", { name: "Your account" });
@@ -191,7 +194,9 @@ describe("App account flows", () => {
   it("a log-out the server does not answer still drops to the Account screen, with the banner", async () => {
     renderApp({ "POST /api/session/logout": { status: 502, raw: "" } }, account);
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("button", { name: "Account menu. Signed in as Chris" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Account menu. Signed in as \u2068Chris\u2069" }),
+    );
     await user.click(screen.getByRole("menuitem", { name: "Log out" }));
     expect(await screen.findByRole("heading", { name: "Your account" })).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("Couldn't reach the game server.");
@@ -200,7 +205,9 @@ describe("App account flows", () => {
   it("an unauthenticated answer mid-session closes the dialog and shows the session-ended banner", async () => {
     renderApp({ "PATCH /api/account/login": envelope(401, "unauthenticated") }, account);
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("button", { name: "Account menu. Signed in as Chris" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Account menu. Signed in as \u2068Chris\u2069" }),
+    );
     await user.click(screen.getByRole("menuitem", { name: "Manage account…" }));
     expect(screen.getByRole("dialog", { name: "Manage account" })).toBeInTheDocument();
     await user.type(screen.getByLabelText("New login"), "2");
@@ -223,19 +230,44 @@ describe("App account flows", () => {
     const renamed = makeAccount({ login: "Chris2" });
     renderApp({ "PATCH /api/account/login": { status: 200, body: { account: renamed } } }, account);
     const user = userEvent.setup();
-    await user.click(await screen.findByRole("button", { name: "Account menu. Signed in as Chris" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Account menu. Signed in as \u2068Chris\u2069" }),
+    );
     await user.click(screen.getByRole("menuitem", { name: "Manage account…" }));
     await user.type(screen.getByLabelText("New login"), "2");
     await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(
-      await screen.findByRole("button", { name: "Account menu. Signed in as Chris2" }),
+      await screen.findByRole("button", { name: "Account menu. Signed in as \u2068Chris2\u2069" }),
     ).toBeInTheDocument();
     expect(liveRegion()).toHaveTextContent("Login changed to Chris2.");
-    expect(document.title).toBe("Chris2 · Anime TCG");
+    expect(document.title).toBe("\u2068Chris2\u2069 · Anime TCG");
     expect(screen.getByRole("dialog", { name: "Manage account" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Close" }));
-    expect(screen.getByRole("button", { name: "Account menu. Signed in as Chris2" })).toHaveFocus();
+    expect(
+      screen.getByRole("button", { name: "Account menu. Signed in as \u2068Chris2\u2069" }),
+    ).toHaveFocus();
+  });
+});
+
+describe("App account switch", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("a session naming a different account starts that account's game from scratch", async () => {
+    const { queryClient } = renderApp({}, account);
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: /collection \(0\)/i }));
+    expect(screen.getByRole("button", { name: /collection/i })).toHaveAttribute("aria-pressed", "true");
+
+    const other = makeAccount({ id: "9b2d7c1e-0000-4000-8000-000000000002", login: "Kris" });
+    act(() => {
+      queryClient.setQueryData(SESSION_QUERY_KEY, { signedIn: true, account: other });
+    });
+
+    expect(
+      await screen.findByRole("button", { name: "Account menu. Signed in as \u2068Kris\u2069" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Booster" })).toHaveAttribute("aria-pressed", "true");
   });
 });
 
@@ -251,13 +283,17 @@ describe("App game", () => {
       await waitFor(() => expect(button).toBeEnabled(), { timeout: ASYNC_TIMEOUT });
 
       await user.click(button);
-      expect(screen.getByRole("button", { name: "Account menu. Signed in as Chris" })).toBeDisabled();
+      expect(
+        screen.getByRole("button", { name: "Account menu. Signed in as \u2068Chris\u2069" }),
+      ).toBeDisabled();
 
       const cards = await screen.findAllByRole("article", {}, { timeout: ASYNC_TIMEOUT });
       expect(cards).toHaveLength(5);
       expect(screen.getAllByText("New")).toHaveLength(5);
       expect(screen.getByRole("button", { name: /collection \(5\)/i })).toBeInTheDocument();
-      expect(screen.getByRole("button", { name: "Account menu. Signed in as Chris" })).toBeEnabled();
+      expect(
+        screen.getByRole("button", { name: "Account menu. Signed in as \u2068Chris\u2069" }),
+      ).toBeEnabled();
       expect(localStorage.getItem("anime-tcg:inventory:v1")).toBeNull();
     },
     TEST_TIMEOUT,

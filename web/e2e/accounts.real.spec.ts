@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
-import { mockAniList } from "./support/fake-api";
+import { isolated, mockAniList } from "./support/fake-api";
 
 /**
  * Test plan: the accounts journey against the real api through the Vite /api proxy
@@ -85,7 +85,7 @@ test.describe("accounts journey against the real api", () => {
 
         await expect(controlFor(page, LOGIN)).toBeVisible();
         await expect(page.getByRole("button", { name: /open booster pack/i })).toBeFocused();
-        await expect(page).toHaveTitle(`${LOGIN} · Anime TCG`);
+        await expect(page).toHaveTitle(`${isolated(LOGIN)} · Anime TCG`);
         await expectSessionCookie(page.context());
       });
 
@@ -113,7 +113,7 @@ test.describe("accounts journey against the real api", () => {
         await page.getByRole("textbox", { name: "New login" }).fill(RENAMED);
         await page.getByRole("button", { name: "Save" }).click();
         await expect(controlFor(page, RENAMED)).toBeAttached();
-        await expect(page).toHaveTitle(`${RENAMED} · Anime TCG`);
+        await expect(page).toHaveTitle(`${isolated(RENAMED)} · Anime TCG`);
         await expect(
           page.getByRole("status").filter({ hasText: `Login changed to ${RENAMED}.` }),
         ).toHaveCount(1);
@@ -217,7 +217,7 @@ test.describe("accounts journey against the real api", () => {
 });
 
 const controlFor = (page: Page, login: string) =>
-  page.getByRole("button", { name: `Account menu. Signed in as ${login}`, exact: true });
+  page.getByRole("button", { name: `Account menu. Signed in as ${isolated(login)}`, exact: true });
 
 async function newSignedOutContext(browser: Browser): Promise<BrowserContext> {
   return browser.newContext({ baseURL: REAL_API_URL });

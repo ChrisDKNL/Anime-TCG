@@ -50,7 +50,16 @@ describe("copy", () => {
 
   it("builds the document title", () => {
     expect(copy.documentTitle(null)).toBe("Anime TCG");
-    expect(copy.documentTitle("Chris")).toBe("Chris · Anime TCG");
+    expect(copy.documentTitle("Chris")).toBe("\u2068Chris\u2069 · Anime TCG");
+  });
+
+  it("isolates the login with FSI/PDI in the plain strings that cannot hold <bdi>", () => {
+    const rtl = "\u202Egnp.exe";
+    expect(copy.documentTitle(rtl)).toBe("\u2068\u202Egnp.exe\u2069 · Anime TCG");
+    expect(copy.header.accountMenuLabel(rtl)).toBe("Account menu. Signed in as \u2068\u202Egnp.exe\u2069");
+    expect(copy.inventoryCopy.resetConfirm(rtl)).toBe(
+      "Delete every card in \u2068\u202Egnp.exe\u2069? This cannot be undone.",
+    );
   });
 
   it("interpolates the login verbatim", () => {
@@ -63,7 +72,7 @@ describe("copy", () => {
       "This permanently deletes Chris. There is no undo.",
     );
     expect(copy.inventoryCopy.resetConfirm("Chris")).toBe(
-      "Delete every card in Chris? This cannot be undone.",
+      "Delete every card in \u2068Chris\u2069? This cannot be undone.",
     );
   });
 });

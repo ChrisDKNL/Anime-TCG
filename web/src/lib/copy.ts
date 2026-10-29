@@ -2,18 +2,22 @@
  * Every user-facing string of the accounts feature, verbatim from
  * docs/design/accounts.md §8. Functions take the login, a count phrase or the
  * seconds they interpolate; the copy test renders all of them and scans for the
- * words §8 forbids.
+ * words §8 forbids. The plain strings that embed a login (an aria-label, the
+ * title bar, a confirm dialog) wrap it in directional isolates, since <bdi>
+ * cannot go there.
  */
+
+import { isolateLogin } from "./loginText";
 
 export const header = {
   accountSignedOut: "Account",
-  accountMenuLabel: (login: string) => `Account menu. Signed in as ${login}`,
+  accountMenuLabel: (login: string) => `Account menu. Signed in as ${isolateLogin(login)}`,
   manage: "Manage account…",
   logOut: "Log out",
 } as const;
 
 export function documentTitle(login: string | null): string {
-  return login === null ? "Anime TCG" : `${login} · Anime TCG`;
+  return login === null ? "Anime TCG" : `${isolateLogin(login)} · Anime TCG`;
 }
 
 export const accountScreen = {
@@ -126,7 +130,7 @@ export const banners = {
 } as const;
 
 export const inventoryCopy = {
-  resetConfirm: (login: string) => `Delete every card in ${login}? This cannot be undone.`,
+  resetConfirm: (login: string) => `Delete every card in ${isolateLogin(login)}? This cannot be undone.`,
 } as const;
 
 /** `No cards yet` / `1 card` / `<N> cards`, used wherever a card count is shown. */

@@ -58,7 +58,7 @@ describe("Inventory", () => {
     confirm.mockReturnValueOnce(false);
     await user.click(screen.getByRole("button", { name: /reset/i }));
     expect(onClear).not.toHaveBeenCalled();
-    expect(confirm).toHaveBeenCalledWith("Delete every card in Chris? This cannot be undone.");
+    expect(confirm).toHaveBeenCalledWith("Delete every card in \u2068Chris\u2069? This cannot be undone.");
 
     confirm.mockReturnValueOnce(true);
     await user.click(screen.getByRole("button", { name: /reset/i }));

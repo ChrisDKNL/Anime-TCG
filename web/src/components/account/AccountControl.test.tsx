@@ -13,7 +13,7 @@ function setup(disabled = false) {
       <button type="button">after</button>
     </>,
   );
-  const control = screen.getByRole("button", { name: "Account menu. Signed in as Chris" });
+  const control = screen.getByRole("button", { name: "Account menu. Signed in as \u2068Chris\u2069" });
   return { control, onManage, onLogout, user: userEvent.setup() };
 }
 
@@ -40,7 +40,7 @@ describe("AccountControl", () => {
     const { control, user } = setup();
     await user.click(control);
     expect(control).toHaveAttribute("aria-expanded", "true");
-    const menu = screen.getByRole("menu", { name: "Account menu. Signed in as Chris" });
+    const menu = screen.getByRole("menu", { name: "Account menu. Signed in as \u2068Chris\u2069" });
     expect(menu).toHaveAttribute("id", "account-menu");
     expect(items().map((item) => item.textContent)).toEqual(["Manage account…", "Log out"]);
     expect(items()[0]).toHaveFocus();

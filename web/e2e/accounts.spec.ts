@@ -6,6 +6,7 @@ import {
   envelope,
   expect,
   firstSeen,
+  isolated,
   makeAccount,
   noContent,
   recordFirstSeen,
@@ -75,7 +76,7 @@ const UNREACHABLE_FORM = "Couldn't reach the game server. Nothing was changed. T
 const SESSION_ENDED = "You were logged out. Log in again to continue.";
 
 const accountControl = (page: Page, login = "Chris") =>
-  page.getByRole("button", { name: `Account menu. Signed in as ${login}`, exact: true });
+  page.getByRole("button", { name: `Account menu. Signed in as ${isolated(login)}`, exact: true });
 const accountHeading = (page: Page) => page.getByRole("heading", { name: "Your account" });
 const packButton = (page: Page) => page.getByRole("button", { name: /open booster pack/i });
 const loginField = (page: Page) => page.getByRole("textbox", { name: "Login", exact: true });
@@ -242,7 +243,7 @@ test.describe("register (§3.3, §4.4-A)", () => {
       "true",
     );
     await expect(page.getByRole("button", { name: "Collection (0)" })).toBeVisible();
-    await expect(page).toHaveTitle("Chris · Anime TCG");
+    await expect(page).toHaveTitle(`${isolated("Chris")} · Anime TCG`);
     await expect(status(page, "Registered Chris. You're now on Chris.")).toHaveCount(1);
     expect(api.bodies("POST /api/accounts/check-invite")).toEqual([{ inviteCode: "anime-tcg-2026" }]);
     expect(api.bodies("POST /api/accounts/register")).toEqual([
@@ -385,7 +386,7 @@ test.describe("log in (§3.4, §4.4-B)", () => {
     await page.getByRole("button", { name: "Log in", exact: true }).click();
 
     await expect(packButton(page)).toBeFocused();
-    await expect(page).toHaveTitle("Chris · Anime TCG");
+    await expect(page).toHaveTitle(`${isolated("Chris")} · Anime TCG`);
     await expect(status(page, "Logged in. You're now on Chris.")).toHaveCount(1);
     expect(api.bodies("POST /api/session/login")).toEqual([{ login: "Chris", password: " secret pw " }]);
   });
@@ -463,7 +464,7 @@ test.describe("signed in (§3.5, §3.6)", () => {
     api.on("GET /api/session", signedIn(CHRIS));
     api.on("POST /api/session/logout", noContent);
     await signedInPage(page);
-    await expect(page).toHaveTitle("Chris · Anime TCG");
+    await expect(page).toHaveTitle(`${isolated("Chris")} · Anime TCG`);
 
     await accountControl(page).focus();
     await page.keyboard.press("Enter");
@@ -509,7 +510,9 @@ test.describe("signed in (§3.5, §3.6)", () => {
       void dialog.dismiss();
     });
     await page.getByRole("button", { name: "Reset" }).click();
-    await expect.poll(() => messages).toEqual(["Delete every card in Chris? This cannot be undone."]);
+    await expect
+      .poll(() => messages)
+      .toEqual([`Delete every card in ${isolated("Chris")}? This cannot be undone.`]);
     await expect(page.getByText("5 cards")).toBeVisible();
 
     page.once("dialog", (dialog) => void dialog.accept());
@@ -587,7 +590,7 @@ test.describe("manage account (§3.5.3, §4.6)", () => {
     await dialog.getByRole("button", { name: "Save" }).click();
 
     await expect(accountControl(page, "Kris")).toBeAttached();
-    await expect(page).toHaveTitle("Kris · Anime TCG");
+    await expect(page).toHaveTitle(`${isolated("Kris")} · Anime TCG`);
     await expect(dialog.getByText("Kris", { exact: true })).toHaveAttribute("title", "Kris");
     await expect(status(page, "Login changed to Kris.")).toHaveCount(1);
     await expect(dialog.getByRole("button", { name: "Save" })).toBeDisabled();
@@ -610,7 +613,7 @@ test.describe("manage account (§3.5.3, §4.6)", () => {
     await expect(field).toHaveAttribute("aria-invalid", "true");
     await expect(field).toHaveAccessibleDescription('The login "Taken" is already taken.');
     await expect(accountControl(page)).toBeAttached();
-    await expect(page).toHaveTitle("Chris · Anime TCG");
+    await expect(page).toHaveTitle(`${isolated("Chris")} · Anime TCG`);
   });
 
   test("a 500 on rename shows the in-form unreachable copy and changes nothing", async ({ page, api }) => {
@@ -628,14 +631,14 @@ test.describe("manage account (§3.5.3, §4.6)", () => {
     const banner = dialog.getByRole("alert").filter({ hasText: UNREACHABLE_FORM });
     await expect(banner).toBeVisible();
     await expect(dialog.getByRole("textbox", { name: "New login" })).toHaveValue("Kris");
-    await expect(page).toHaveTitle("Chris · Anime TCG");
+    await expect(page).toHaveTitle(`${isolated("Chris")} · Anime TCG`);
     await expect(dialog.getByText("Chris", { exact: true })).toBeVisible();
 
     // A proxy error page (not the envelope) reads the same.
     await dialog.getByRole("button", { name: "Save" }).click();
     await expect.poll(() => api.count("PATCH /api/account/login")).toBe(2);
     await expect(banner).toBeVisible();
-    await expect(page).toHaveTitle("Chris · Anime TCG");
+    await expect(page).toHaveTitle(`${isolated("Chris")} · Anime TCG`);
   });
 
   test("a wrong current password is inline on that field, cleared and focused; success clears and announces", async ({
@@ -739,7 +742,7 @@ test.describe("keyboard (§7)", () => {
     api.on("GET /api/session", signedIn(CHRIS));
     await signedInPage(page);
     const control = accountControl(page);
-    const menu = page.getByRole("menu", { name: "Account menu. Signed in as Chris" });
+    const menu = page.getByRole("menu", { name: `Account menu. Signed in as ${isolated("Chris")}` });
     const manage = page.getByRole("menuitem", { name: "Manage account…" });
     const logOut = page.getByRole("menuitem", { name: "Log out" });
     await expect(control).toHaveAttribute("aria-haspopup", "menu");
@@ -983,7 +986,7 @@ test.describe("hunt", () => {
     }));
     expect(header.clientWidth).toBeLessThanOrEqual(128); // max-w-[8rem] on phone
     expect(header.scrollWidth).toBeGreaterThan(header.clientWidth); // truncated; the title has it all
-    await expect(page).toHaveTitle(`${LONG_LOGIN} · Anime TCG`);
+    await expect(page).toHaveTitle(`${isolated(LONG_LOGIN)} · Anime TCG`);
   });
 
   test("§5 phone header: a 24-character login does not push the page sideways at 375 px", async ({
@@ -1040,7 +1043,7 @@ test.describe("hunt", () => {
       await signedInPage(page);
       const control = accountControl(page, login);
       await expect(control.getByText(login, { exact: true })).toHaveAttribute("title", login);
-      await expect(page).toHaveTitle(`${login} · Anime TCG`);
+      await expect(page).toHaveTitle(`${isolated(login)} · Anime TCG`);
       await openManage(page, login);
       const dialogLogin = manageDialog(page).getByText(login, { exact: true });
       await expect(dialogLogin).toHaveAttribute("title", login);

@@ -24,12 +24,14 @@ describe.each(HOSTILE_LOGINS)("a hostile login (%s)", (_name, login) => {
     renderApp({}, makeAccount({ login }));
     const user = userEvent.setup();
 
-    const control = await screen.findByRole("button", { name: `Account menu. Signed in as ${login}` });
+    const control = await screen.findByRole("button", {
+      name: `Account menu. Signed in as \u2068${login}\u2069`,
+    });
     const headerLogin = within(control).getByTitle(login);
     expect(headerLogin).toHaveTextContent(login);
     expect(control.querySelector("img")).toBeNull();
     expect(document.querySelectorAll("[onerror]")).toHaveLength(0);
-    expect(document.title).toBe(`${login} · Anime TCG`);
+    expect(document.title).toBe(`\u2068${login}\u2069 · Anime TCG`);
 
     await user.click(control);
     await user.click(screen.getByRole("menuitem", { name: "Manage account…" }));
@@ -65,7 +67,9 @@ describe("an RTL override login", () => {
     renderApp({ "POST /api/account/delete": noContent }, makeAccount({ login, cards: 2 }));
     const user = userEvent.setup();
 
-    const control = await screen.findByRole("button", { name: `Account menu. Signed in as ${login}` });
+    const control = await screen.findByRole("button", {
+      name: `Account menu. Signed in as \u2068${login}\u2069`,
+    });
     const headerLogin = within(control).getByTitle(login);
     expect(headerLogin.tagName).toBe("BDI");
     expect(headerLogin.textContent).toBe(login);

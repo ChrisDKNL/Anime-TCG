@@ -30,6 +30,13 @@ export async function mockAniList(page: Page): Promise<void> {
   );
 }
 
+/**
+ * The login as the app writes it into a plain string (the Account control's aria-label, the
+ * title bar, the Reset confirm): between U+2068 FIRST STRONG ISOLATE and U+2069 POP DIRECTIONAL
+ * ISOLATE, the plain-text counterpart of <bdi> (T1, docs/05-security.md).
+ */
+export const isolated = (login: string): string => `\u2068${login}\u2069`;
+
 export function makeAccount(overrides: Partial<AccountPublic> = {}): AccountPublic {
   return {
     id: "3f2504e0-4f89-11d3-9a0c-0305e82c3301",

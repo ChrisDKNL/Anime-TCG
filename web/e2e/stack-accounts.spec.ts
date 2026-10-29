@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext, type BrowserContext, type Page } from "@playwright/test";
-import { mockAniList } from "./support/fake-api";
+import { isolated, mockAniList } from "./support/fake-api";
 
 /**
  * Test plan: a short accounts journey through Caddy on a deployed compose stack
@@ -91,7 +91,7 @@ async function deleteThrowawayAccount(request: APIRequestContext): Promise<void>
 }
 
 const control = (page: Page) =>
-  page.getByRole("button", { name: `Account menu. Signed in as ${LOGIN}`, exact: true });
+  page.getByRole("button", { name: `Account menu. Signed in as ${isolated(LOGIN)}`, exact: true });
 
 /** The cookie as the browser stored it, and proof page script cannot see it (HttpOnly). Returns its value. */
 async function expectSessionCookie(context: BrowserContext, page: Page): Promise<string> {

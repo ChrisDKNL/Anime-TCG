@@ -38,7 +38,8 @@ export default function App() {
   return (
     <ShellContext value={shell.context}>
       {session.status === "signedIn" ? (
-        <Game frame={frame} account={session.account} pool={pool} />
+        // Keyed by account: if the session ever names a different account, nothing of the last one's game state survives.
+        <Game key={session.account.id} frame={frame} account={session.account} pool={pool} />
       ) : (
         <SignedOut frame={frame} loading={session.status === "loading"} showLoading={showLoading} />
       )}
