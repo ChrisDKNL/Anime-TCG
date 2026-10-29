@@ -29,6 +29,20 @@ export default tseslint.config(
       jsxA11y.flatConfigs.recommended,
     ],
     languageOptions: { globals: { ...globals.browser, ...globals.node } },
+    rules: {
+      // C9 (docs/05-security.md): the UI renders every string as text and never injects HTML.
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector: "JSXAttribute[name.name='dangerouslySetInnerHTML']",
+          message: "Render strings as text; the UI never injects HTML (docs/05-security.md C9).",
+        },
+        {
+          selector: "Property[key.name='dangerouslySetInnerHTML']",
+          message: "Render strings as text; the UI never injects HTML (docs/05-security.md C9).",
+        },
+      ],
+    },
   },
   {
     // The api is server-side only: structured logs, server RNG, env read in one place (ADR 0008 §5).
