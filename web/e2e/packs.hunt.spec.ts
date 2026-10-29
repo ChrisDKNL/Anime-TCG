@@ -294,6 +294,8 @@ test.describe("a lost answer never costs a pack (§3.3, §10 item 6)", () => {
       await expect(page.getByText("Mythic guaranteed within 299 free packs.")).toBeVisible();
       await expect(mainNav(page).getByRole("link", { name: "Collection (5)" })).toBeVisible();
       await expect(main(page).getByText(NO_ANSWER)).toHaveCount(0);
+      // The replay is an answer: the banner the lost one raised goes (§4.1, manager decision 2026-10-30).
+      await expect(page.getByText(UNREACHABLE)).toHaveCount(0);
       await expect(packButton(page)).toBeFocused();
       expect(api.game.opened).toBe(1);
       expect(api.count("POST /api/packs/open")).toBe(2);

@@ -13,6 +13,7 @@ import {
 } from "../test/fixtures";
 
 const ASYNC_TIMEOUT = 5_000;
+const UNREACHABLE = "Couldn't reach the game server. Check your connection and try again.";
 const account = makeAccount();
 
 const packs = (allowance: Parameters<typeof makeAllowance>[0], overrides: Partial<PacksResponse> = {}) => ({
@@ -234,6 +235,26 @@ describe("/packs: opening", () => {
     expect(screen.queryByText(/Trying again opens this same pack/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open pack" })).toBeInTheDocument();
   });
+
+  it.each([201, 200])(
+    "a %i to the retry clears the unreachable banner the lost answer raised",
+    async (status) => {
+      renderApp(
+        { [OPEN]: sequence({ status: 502, raw: "" }, { status, body: makePackOpened() }) },
+        account,
+        "/packs",
+      );
+      const user = userEvent.setup();
+      await user.click(await openButton());
+      await openButton("Try again");
+      expect(screen.getByRole("alert")).toHaveTextContent(UNREACHABLE);
+
+      await user.click(main().getByRole("button", { name: "Try again" }));
+      await screen.findByRole("list", { name: "Your pack" });
+      expect(screen.queryByText(UNREACHABLE)).not.toBeInTheDocument();
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    },
+  );
 
   it("the held key survives a page change", async () => {
     const { fetchMock } = renderApp(

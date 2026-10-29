@@ -139,6 +139,8 @@ The page keeps today's Inventory layout and swaps its data and card for the serv
 
 Lines under the button (none left, no answer, wait, failure) replace each other and clear on the next answer that changes the row. At most one shows.
 
+A 201 or 200 (replay) answer to an opening also clears the app's unreachable banner that a lost answer raised, since the server has answered (manager decision, 2026-10-30).
+
 ### 4.2 Reveal
 
 | State                     | User sees                                                                                                                         |

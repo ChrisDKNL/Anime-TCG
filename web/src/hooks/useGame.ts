@@ -138,7 +138,7 @@ export function useGameState({ account, shell, packsShowing }: Options): Game | 
     [],
   );
 
-  const { sessionEnded, unreachable, announce } = shell;
+  const { sessionEnded, unreachable, announce, clearNotice } = shell;
   /** A read that failed: an ended session goes to `/login`, no answer shows the banner, anything else is the page's to show. */
   const report = useCallback(
     (err: unknown) => {
@@ -209,6 +209,8 @@ export function useGameState({ account, shell, packsShowing }: Options): Game | 
           const pack = await mutateAsync({ requestId });
           dispatch({ type: "opened", ...owner, seq, receivedAt: performance.now(), pack });
           if (!isCurrent(owner)) return;
+          // The server answered: a banner a lost answer raised no longer holds (packs-page.md §4.1).
+          clearNotice();
           if (packsShowing()) {
             announce(
               revealCopy.announce(
@@ -232,6 +234,7 @@ export function useGameState({ account, shell, packsShowing }: Options): Game | 
       mutateAsync,
       isCurrent,
       packsShowing,
+      clearNotice,
       announce,
       queryClient,
       settleFailure,
