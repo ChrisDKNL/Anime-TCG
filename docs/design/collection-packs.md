@@ -293,7 +293,7 @@ AniList's answer is untrusted input, whether it arrives over the network or from
 
 One transaction, with the app role (it has the DML this needs):
 
-1. Apply the franchise cap (§5.1.3) to the accepted characters. Refuse, changing nothing, when fewer than `SNAPSHOT_SERIES_MIN` entries were accepted, when the capped pool holds fewer than `SNAPSHOT_CHARACTERS_MIN` or more than `SNAPSHOT_CHARACTERS_MAX` characters, when the relation hops exceeded `FRANCHISE_MAX_REQUESTS`, or when any of the six tiers would hold fewer than `PACK_SIZE` characters.
+1. Apply the franchise cap (§5.1.3) to the accepted characters. Refuse, changing nothing, when fewer than `SNAPSHOT_SERIES_MIN` entries are listed after the cap (an entry the cap empties is not listed, §5.1.6), when the capped pool holds fewer than `SNAPSHOT_CHARACTERS_MIN` or more than `SNAPSHOT_CHARACTERS_MAX` characters, when the relation hops exceeded `FRANCHISE_MAX_REQUESTS`, or when any of the six tiers would hold fewer than `PACK_SIZE` characters.
 2. Build the franchises (§5.1.2), the capped pool (§5.1.3) and the tiers over it (§5.1.4).
 3. Insert the `pool_snapshots` row; upsert `series` and `characters` with the new display strings; insert the snapshot's franchises, entries, merge edges, characters (with rank, tier and primary entry) and memberships.
 4. Clear `is_current` on the previous snapshot and set it on the new one.

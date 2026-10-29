@@ -6,6 +6,7 @@ import {
   imageUrl,
   snapshotFile,
   snapshotText,
+  type StandardOptions,
   standardPool,
 } from "../../../test/fixtures/pool.js";
 import { buildSnapshot, SnapshotRefused } from "./build.js";
@@ -463,8 +464,8 @@ describe("entries the cap empties (collection-packs.md §5.1.6)", () => {
   /** `count` extras MAIN in `entry`, more favourited than any character of the standard pool. */
   const stars = (entry: number, count: number, base: number): FixtureCharacter[] =>
     extraCharacters(entry, count, (i) => 1_000_000 + i).map((c) => ({ ...c, id: c.id + base }));
-  const linked = (links: [number, number][]): FixturePool => {
-    const pool = standardPool();
+  const linked = (links: [number, number][], options: StandardOptions = {}): FixturePool => {
+    const pool = standardPool(options);
     pool.entries = pool.entries.map((entry) => {
       const to = links
         .filter(([from]) => from === entry.id)
@@ -497,6 +498,21 @@ describe("entries the cap empties (collection-packs.md §5.1.6)", () => {
     expect([...plan.cappedByFranchise]).toEqual([[NEIGHBOUR, 6]]);
     expect(plan.skipped.items).toBe(0);
     expectEveryEntryAndFranchiseHeld(plan);
+  });
+
+  it("counts SNAPSHOT_SERIES_MIN on the entries listed after the cap: exactly 90 builds, 89 is refused", () => {
+    const emptyingEntry1 = (entries: number) => {
+      const pool = linked([[ENTRY, NEIGHBOUR]], { entries });
+      pool.characters.push(...stars(NEIGHBOUR, 60, 0));
+      return pool;
+    };
+    const ninety = build(emptyingEntry1(91));
+    expect(ninety.entries).toHaveLength(90);
+    expect(ninety.entries.map((entry) => entry.id)).not.toContain(ENTRY);
+    // 90 accepted, so without the cap the same file builds: the refusal is the emptied entry's.
+    const ninetyAccepted = readSnapshotFile(snapshotText(emptyingEntry1(90))).input;
+    expect(buildSnapshot(ninetyAccepted, Infinity).entries).toHaveLength(90);
+    expect(() => buildSnapshot(ninetyAccepted)).toThrow("Only 89 valid entries, fewer than 90.");
   });
 
   it("ranks entries among the listed ones after a skipped entry too, so an export ranks them the same", () => {
