@@ -2,6 +2,7 @@ import { count, eq } from "drizzle-orm";
 import type { Db, Queryable } from "../../db/client.js";
 import { accounts, cards, packOpenings } from "../../db/schema.js";
 import { normalizeLogin } from "../accounts/logins.js";
+import { postEntry } from "../economy/ledger.js";
 
 /** A reason the owner can act on; its message is the one line the command prints before exiting 1. */
 export class ResetCollectionError extends Error {
@@ -17,6 +18,10 @@ export interface CollectionResetResult {
   login: string;
   cards: number;
   openings: number;
+  /** The Karma balance before the reset. */
+  balance: number;
+  /** True with `--keep-karma`: the balance stays and no ledger row is written. */
+  keepKarma: boolean;
   /** False for the preview without `--confirm`: nothing was changed. */
   applied: boolean;
 }
@@ -35,17 +40,22 @@ async function holdings(tx: Queryable, accountId: string): Promise<{ cards: numb
  * under the account row's lock, the same one every opening takes, its
  * openings go (and their cards by cascade), the allowance is full again and
  * both pack counters are 0, as on registration, so a racing opening is
- * either wholly removed or wholly kept. The login,
- * password, sessions and account id stay. Without `confirm` it only counts.
+ * either wholly removed or wholly kept. The Karma rule is the owner's per
+ * reset (economy.md §8.10): by default the balance goes to 0 with one
+ * `owner_reset` row of minus the balance (none at 0), with `keepKarma` it
+ * stays and nothing is written. The account's ledger, recycles and their
+ * entries stay as history. The login, password, sessions and account id
+ * stay. Without `confirm` it only counts.
  */
 export async function resetCollection(
   db: Db,
   login: string,
-  options: { confirm: boolean },
+  options: { confirm: boolean; keepKarma?: boolean },
 ): Promise<CollectionResetResult> {
+  const keepKarma = options.keepKarma ?? false;
   return db.transaction(async (tx) => {
     const query = tx
-      .select({ id: accounts.id, login: accounts.login })
+      .select({ id: accounts.id, login: accounts.login, balance: accounts.balance })
       .from(accounts)
       .where(eq(accounts.loginNormalized, normalizeLogin(login)));
     const [account] = options.confirm ? await query.for("update") : await query;
@@ -58,7 +68,17 @@ export async function resetCollection(
         .update(accounts)
         .set({ packsAnchorAt: null, packsSinceMythic: 0, freePacksOpened: 0 })
         .where(eq(accounts.id, account.id));
+      if (!keepKarma && account.balance > 0) {
+        await postEntry(tx, account, "owner_reset", -account.balance, new Date());
+      }
     }
-    return { accountId: account.id, login: account.login, ...held, applied: options.confirm };
+    return {
+      accountId: account.id,
+      login: account.login,
+      ...held,
+      balance: account.balance,
+      keepKarma,
+      applied: options.confirm,
+    };
   });
 }

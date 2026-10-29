@@ -80,6 +80,8 @@ describe("reset-collection", () => {
       login: account.login,
       cards: 2 * PACK_SIZE,
       openings: 2,
+      balance: 0,
+      keepKarma: false,
       applied: false,
     });
     expect(await holdings(account.id)).toEqual({ cards: 2 * PACK_SIZE, openings: 2 });
@@ -156,21 +158,28 @@ describe("reset-collection", () => {
       const { account } = await playerWithPacks(2);
       expect(await run([account.login])).toEqual({
         code: 0,
-        stdout: `Would reset "${account.login}": 10 cards, 2 openings; pity and Enchanted counters to zero.\n`,
+        stdout: `Would reset "${account.login}": 10 cards, 2 openings; pity and Enchanted counters to zero; balance 0 to 0.\n`,
         stderr: "",
       });
       expect(await run([account.login, "--confirm"])).toEqual({
         code: 0,
-        stdout: `Collection reset for "${account.login}": 10 cards and 2 openings removed; packs full; counters reset.\n`,
+        stdout: `Collection reset for "${account.login}": 10 cards and 2 openings removed; packs full; counters reset; balance 0 set to 0.\n`,
         stderr: "",
       });
       expect(await holdings(account.id)).toEqual({ cards: 0, openings: 0 });
     });
 
     it("prints the login quoted, with C0, C1 and format characters escaped", () => {
-      const counts = { accountId: "id", login: "a\u001b[2Jb\n\u009b2J\u202e", cards: 1, openings: 1 };
+      const counts = {
+        accountId: "id",
+        login: "a\u001b[2Jb\n\u009b2J\u202e",
+        cards: 1,
+        openings: 1,
+        balance: 0,
+        keepKarma: false,
+      };
       expect(describeReset({ ...counts, applied: false })).toBe(
-        'Would reset "a\\u001b[2Jb\\n\\u009b2J\\u202e": 1 cards, 1 openings; pity and Enchanted counters to zero.',
+        'Would reset "a\\u001b[2Jb\\n\\u009b2J\\u202e": 1 cards, 1 openings; pity and Enchanted counters to zero; balance 0 to 0.',
       );
       expect(describeReset({ ...counts, applied: true })).toMatch(/^Collection reset for "a\\u001b\[2Jb/);
     });
@@ -183,14 +192,19 @@ describe("reset-collection", () => {
       });
     });
 
-    it.each([[[]], [["a", "b"]], [["--confirm"]], [["a", "--confirm", "--confirm"]], [["--force", "a"]]])(
-      "exits 1 with usage for %j",
-      async (argv) => {
-        const result = await run(argv);
-        expect(result.code).toBe(1);
-        expect(result.stderr).toMatch(/^Usage: /);
-      },
-    );
+    it.each([
+      [[]],
+      [["a", "b"]],
+      [["--confirm"]],
+      [["a", "--confirm", "--confirm"]],
+      [["--force", "a"]],
+      [["a", "--keep-karma", "--keep-karma"]],
+      [["--keep-karma"]],
+    ])("exits 1 with usage for %j", async (argv) => {
+      const result = await run(argv);
+      expect(result.code).toBe(1);
+      expect(result.stderr).toMatch(/^Usage: /);
+    });
 
     it("exits 1 when DATABASE_URL is not set", async () => {
       const stdout = sink();

@@ -12,23 +12,31 @@ import { escapeUnprintable, quote } from "./quote.js";
  * Owner-side collection reset (docs/design/collection-packs.md §7.2), run
  * inside the api container:
  *
- *   node api/dist/cli/reset-collection.js <login>             what a reset would remove
- *   node api/dist/cli/reset-collection.js <login> --confirm   reset it
+ *   node api/dist/cli/reset-collection.js <login>                          what a reset would remove
+ *   node api/dist/cli/reset-collection.js <login> --confirm                reset it, Karma to 0
+ *   node api/dist/cli/reset-collection.js <login> --keep-karma --confirm   reset it, Karma kept
  *
  * Removes the account's openings and cards, fills its pack allowance and
- * sets its pity and Enchanted counters to zero; the login, password and
- * sessions stay. Uses DATABASE_URL: the app role has
+ * sets its pity and Enchanted counters to zero; the Karma balance goes to 0
+ * with one ledger row unless `--keep-karma` (economy.md §8.10, §13.4); the
+ * login, password and sessions stay. Uses DATABASE_URL: the app role has
  * every statement this needs. There is no route for it, by design.
  */
 
-const USAGE = "Usage: node api/dist/cli/reset-collection.js <login> [--confirm]";
+const USAGE = "Usage: node api/dist/cli/reset-collection.js <login> [--keep-karma] [--confirm]";
+const FLAGS = ["--confirm", "--keep-karma"];
 
 /** The login is printed through `quote`, as the snapshot command prints titles, so nothing in it reaches the terminal unescaped. */
 export function describeReset(result: CollectionResetResult): string {
   const login = quote(result.login);
-  return result.applied
-    ? `Collection reset for ${login}: ${result.cards} cards and ${result.openings} openings removed; packs full; counters reset.`
-    : `Would reset ${login}: ${result.cards} cards, ${result.openings} openings; pity and Enchanted counters to zero.`;
+  if (result.applied) {
+    const karma = result.keepKarma ? `balance ${result.balance} kept` : `balance ${result.balance} set to 0`;
+    return `Collection reset for ${login}: ${result.cards} cards and ${result.openings} openings removed; packs full; counters reset; ${karma}.`;
+  }
+  const karma = result.keepKarma
+    ? `balance ${result.balance} kept (--keep-karma)`
+    : `balance ${result.balance} to 0`;
+  return `Would reset ${login}: ${result.cards} cards, ${result.openings} openings; pity and Enchanted counters to zero; ${karma}.`;
 }
 
 export interface ResetIo {
@@ -44,9 +52,11 @@ export async function main(
   io: ResetIo,
 ): Promise<number> {
   const confirms = argv.filter((arg) => arg === "--confirm").length;
-  const [login, ...extra] = argv.filter((arg) => arg !== "--confirm");
+  const keeps = argv.filter((arg) => arg === "--keep-karma").length;
+  const [login, ...extra] = argv.filter((arg) => !FLAGS.includes(arg));
   const confirm = confirms === 1;
-  if (login === undefined || login.startsWith("--") || extra.length > 0 || confirms > 1) {
+  const keepKarma = keeps === 1;
+  if (login === undefined || login.startsWith("--") || extra.length > 0 || confirms > 1 || keeps > 1) {
     io.stderr.write(`${USAGE}\n`);
     return 1;
   }
@@ -57,10 +67,16 @@ export async function main(
   const log = createLogger("info", io.logDestination ?? pino.destination({ dest: 2, sync: true }));
   const db = createDb(databaseUrl);
   try {
-    const result = await resetCollection(db, login, { confirm });
+    const result = await resetCollection(db, login, { confirm, keepKarma });
     if (result.applied) {
       log.info(
-        { accountId: result.accountId, cards: result.cards, openings: result.openings },
+        {
+          accountId: result.accountId,
+          cards: result.cards,
+          openings: result.openings,
+          balance: result.balance,
+          keepKarma: result.keepKarma,
+        },
         "collection reset",
       );
     }
