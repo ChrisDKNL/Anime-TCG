@@ -9,7 +9,7 @@ import type {
 import { and, count, eq, ne, sql } from "drizzle-orm";
 import type { Logger } from "pino";
 import type { Db } from "../../db/client.js";
-import { accounts, cards } from "../../db/schema.js";
+import { accounts } from "../../db/schema.js";
 import { ApiError } from "../errors.js";
 import { hashInviteCode, type InviteList, isCapReached } from "./invites.js";
 import { normalizeLogin, storableLogin, validatedLogin } from "./logins.js";
@@ -41,8 +41,9 @@ const accountColumns = {
   id: accounts.id,
   login: accounts.login,
   createdAt: accounts.createdAt,
-  // Correlated, so it also works in the RETURNING of an insert or update of the row.
-  cards: sql<number>`(select count(*)::int from ${cards} where ${cards.accountId} = ${accounts.id})`,
+  // Correlated, so it also works in the RETURNING of an insert or update of the row. Spelled out:
+  // drizzle drops the table qualifier from interpolated columns here, which would compare cards with themselves.
+  cards: sql<number>`(select count(*)::int from "cards" where "cards"."account_id" = "accounts"."id")`,
 };
 const credentialColumns = { ...accountColumns, passwordHash: accounts.passwordHash };
 

@@ -44,7 +44,8 @@ describe("1c contract", () => {
     expect(ERROR_CODES).toEqual(expect.arrayContaining(["no_pack_available", "pool_unavailable"]));
   });
 
-  it("accepts exactly the five tiers as a rarity", () => {
+  it("accepts exactly the five tiers as a rarity, in RARITIES' order", () => {
+    expect(Rarity.anyOf.map((member) => member.const)).toEqual([...RARITIES]);
     for (const tier of RARITIES) expect(Value.Check(Rarity, tier)).toBe(true);
     expect(Value.Check(Rarity, "legendary ")).toBe(false);
     expect(Value.Check(Rarity, "uncommon")).toBe(false);

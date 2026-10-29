@@ -1,6 +1,5 @@
 import { type Static, Type } from "@sinclair/typebox";
 import { PACK_CAP, PACK_SIZE } from "./economy.js";
-import { RARITIES } from "./rarity.js";
 
 /**
  * Length limits as character counts (TypeBox `minLength`/`maxLength` count
@@ -91,8 +90,18 @@ const Count = Type.Integer({ minimum: 0 });
 const DateTime = Type.String({ format: "date-time" });
 const AniListId = Type.Integer({ minimum: 1 });
 
-/** A card's or a tier's rarity, from `RARITIES` in rank order. */
-export const Rarity = Type.Union(RARITIES.map((rarity) => Type.Literal(rarity)));
+/**
+ * A card's or a tier's rarity, `RARITIES` in rank order. Spelled out as a
+ * tuple so route handlers see the literal union (a mapped array widens to
+ * `never` there); `shared/test/contract.test.ts` holds it to `RARITIES`.
+ */
+export const Rarity = Type.Union([
+  Type.Literal("common"),
+  Type.Literal("rare"),
+  Type.Literal("epic"),
+  Type.Literal("legendary"),
+  Type.Literal("mythic"),
+]);
 export type Rarity = Static<typeof Rarity>;
 
 /** Reserved (collection-packs.md §2): `"masterwork"` joins as a second member later; every card is standard today. */
