@@ -1,9 +1,11 @@
 import type { AccountPublic } from "@anime-tcg/shared/api";
-import { useEffect, useRef, useState, type SyntheticEvent } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { useChangePasswordForm } from "../../hooks/useChangePasswordForm";
 import { useDeleteForm } from "../../hooks/useDeleteForm";
 import { useRenameForm } from "../../hooks/useRenameForm";
 import { cardCount, common, manageCopy, metaLine } from "../../lib/copy";
+import { pageHeading } from "../../lib/routes";
+import { PageHeading } from "../layout/PageHeading";
 import { Avatar } from "./Avatar";
 import { FormBanner } from "./FormBanner";
 import type { CopyText } from "../../lib/loginText";
@@ -11,106 +13,40 @@ import { LoginText } from "./LoginText";
 import { PasswordField, SubmitButton, TextField } from "./fields";
 import { BODY_TEXT, BUTTON, HINT_TEXT, PANEL_HEADING, SECTION_HEADING } from "./styles";
 
-/** `backFromDelete` is the sections again, entered from the confirm panel: focus returns to its trigger. */
-type Panel = "sections" | "confirmDelete" | "backFromDelete";
-
 interface Props {
-  open: boolean;
   account: AccountPublic;
-  onClose: () => void;
   onRenamed: (account: AccountPublic) => void;
   onDeleted: (login: string) => void;
 }
 
 /**
- * The Manage account dialog (accounts.md §3.5.3, §4.6): a native <dialog>
- * opened with showModal(), so the focus trap, Escape and background inertness
- * are the browser's. Its content mounts only while open, so every section
- * starts clean each time.
+ * The `/account` page's body (navigation-and-landing.md §3.4): the account
+ * header and the Login, Password and Delete account sections of accounts.md
+ * §3.5.3, now `h2`s under the page's `h1`. There is no Close: the page is left
+ * like any other. `Delete account…` opens the confirmation as a modal dialog.
  */
-export function ManageAccountDialog({ open, account, onClose, onRenamed, onDeleted }: Props) {
-  const ref = useRef<HTMLDialogElement>(null);
-  const [panel, setPanel] = useState<Panel>("sections");
-
-  useEffect(() => {
-    const dialog = ref.current;
-    if (dialog === null) return;
-    if (open && !dialog.open) {
-      dialog.showModal();
-      dialog.focus();
-    } else if (!open && dialog.open) {
-      dialog.close();
-    }
-  }, [open]);
-
-  /** Escape on the confirm panel goes back to the sections instead of closing (§4.6). */
-  const handleCancel = (event: SyntheticEvent<HTMLDialogElement>) => {
-    if (panel === "confirmDelete") {
-      event.preventDefault();
-      setPanel("backFromDelete");
-    }
-  };
-
-  const handleClose = () => {
-    setPanel("sections");
-    onClose();
-  };
-
-  return (
-    <dialog
-      ref={ref}
-      tabIndex={-1}
-      aria-labelledby="manage-heading"
-      aria-describedby={panel === "confirmDelete" ? "delete-body" : undefined}
-      onCancel={handleCancel}
-      onClose={handleClose}
-      className="pop-in m-auto max-h-[85vh] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-100 backdrop:bg-zinc-950/70 backdrop:backdrop-blur-sm focus:outline-none"
-    >
-      {open && panel !== "confirmDelete" && (
-        <Sections
-          account={account}
-          focusDeleteTrigger={panel === "backFromDelete"}
-          onClose={() => ref.current?.close()}
-          onRenamed={onRenamed}
-          onDeleteRequested={() => setPanel("confirmDelete")}
-        />
-      )}
-      {open && panel === "confirmDelete" && (
-        <ConfirmDelete account={account} onCancel={() => setPanel("backFromDelete")} onDeleted={onDeleted} />
-      )}
-    </dialog>
-  );
-}
-
-interface SectionsProps {
-  account: AccountPublic;
-  /** Back from the delete confirm (Cancel or Escape): `Delete account…` takes focus instead of <body>. */
-  focusDeleteTrigger: boolean;
-  onClose: () => void;
-  onRenamed: (account: AccountPublic) => void;
-  onDeleteRequested: () => void;
-}
-
-function Sections({ account, focusDeleteTrigger, onClose, onRenamed, onDeleteRequested }: SectionsProps) {
+export function ManageAccount({ account, onRenamed, onDeleted }: Props) {
+  /**
+   * Each press of `Delete account…` is a new opening with its own id, so a
+   * press that lands before React has seen the previous close (Escape closes
+   * the native dialog at once; the `close` event comes a task later) still
+   * opens a fresh confirmation instead of finding `open` already true.
+   */
+  const [confirmation, setConfirmation] = useState({ open: false, id: 0 });
   const deleteTriggerRef = useRef<HTMLButtonElement>(null);
-  useEffect(() => {
-    if (focusDeleteTrigger) deleteTriggerRef.current?.focus();
-  }, [focusDeleteTrigger]);
+
+  const openConfirm = () => setConfirmation(({ id }) => ({ open: true, id: id + 1 }));
+  /** Cancel and Escape return focus to `Delete account…` (accounts.md §11). */
+  const closeConfirm = () => {
+    setConfirmation(({ id }) => ({ open: false, id }));
+    deleteTriggerRef.current?.focus();
+  };
 
   return (
-    <div className="flex flex-col">
-      <div className="flex items-start justify-between gap-4">
-        <h2 id="manage-heading" className={PANEL_HEADING}>
-          {manageCopy.heading}
-        </h2>
-        <button type="button" onClick={onClose} aria-label={common.close} className={`${BUTTON.text} -mr-1`}>
-          <svg aria-hidden="true" viewBox="0 0 20 20" fill="currentColor" className="size-5">
-            <path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z" />
-          </svg>
-        </button>
-      </div>
+    <div className="flex max-w-lg flex-col">
+      <PageHeading text={pageHeading("/account")} />
 
-      <div className="mt-4 flex items-center gap-3">
+      <div className="flex items-center gap-3">
         <Avatar login={account.login} size="lg" />
         <div className="min-w-0">
           <p className="truncate font-semibold text-zinc-100">
@@ -127,20 +63,77 @@ function Sections({ account, focusDeleteTrigger, onClose, onRenamed, onDeleteReq
         aria-labelledby="delete-section"
         className="mt-6 flex flex-col gap-3 border-t border-zinc-800 pt-6"
       >
-        <h3 id="delete-section" className={SECTION_HEADING}>
+        <h2 id="delete-section" className={SECTION_HEADING}>
           {manageCopy.deleteSection}
-        </h3>
+        </h2>
         <p className={BODY_TEXT}>{manageCopy.deleteExplanation}</p>
         <button
           ref={deleteTriggerRef}
           type="button"
-          onClick={onDeleteRequested}
+          onClick={openConfirm}
           className={`${BUTTON.dangerOutline} self-start`}
         >
           {manageCopy.deleteTrigger}
         </button>
       </section>
+
+      <DeleteDialog
+        open={confirmation.open}
+        openingId={confirmation.id}
+        account={account}
+        onClose={closeConfirm}
+        onDeleted={onDeleted}
+      />
     </div>
+  );
+}
+
+interface DeleteDialogProps {
+  open: boolean;
+  /** Changes with every opening: the form remounts (empty, password focused) for each one. */
+  openingId: number;
+  account: AccountPublic;
+  onClose: () => void;
+  onDeleted: (login: string) => void;
+}
+
+/**
+ * The delete confirmation as a native modal <dialog> (§3.4 step 3): showModal()
+ * gives the focus trap, Escape and background inertness; the password field
+ * takes focus as it opens (accounts.md §7 "Dialog"). Its form mounts only
+ * while open, so the field starts empty every time.
+ */
+function DeleteDialog({ open, openingId, account, onClose, onDeleted }: DeleteDialogProps) {
+  const ref = useRef<HTMLDialogElement>(null);
+
+  // A layout effect, so the dialog is open before the form's own effect focuses its password field.
+  useLayoutEffect(() => {
+    const dialog = ref.current;
+    if (dialog === null) return;
+    if (open && !dialog.open) dialog.showModal();
+    else if (!open && dialog.open) dialog.close();
+  }, [open, openingId]);
+
+  return (
+    <dialog
+      ref={ref}
+      aria-labelledby="delete-heading"
+      aria-describedby="delete-body"
+      // A `close` event for an earlier opening can arrive after the dialog was opened again: ignore it.
+      onClose={() => {
+        if (ref.current?.open !== true) onClose();
+      }}
+      className="pop-in m-auto max-h-[85vh] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-100 backdrop:bg-zinc-950/70 backdrop:backdrop-blur-sm focus:outline-none"
+    >
+      {open && (
+        <ConfirmDelete
+          key={openingId}
+          account={account}
+          onCancel={() => ref.current?.close()}
+          onDeleted={onDeleted}
+        />
+      )}
+    </dialog>
   );
 }
 
@@ -151,9 +144,9 @@ function LoginSection({ login, onRenamed }: { login: string; onRenamed: (account
       aria-labelledby="login-section"
       className="mt-6 flex flex-col gap-3 border-t border-zinc-800 pt-6"
     >
-      <h3 id="login-section" className={SECTION_HEADING}>
+      <h2 id="login-section" className={SECTION_HEADING}>
         {manageCopy.loginSection}
-      </h3>
+      </h2>
       <form noValidate onSubmit={(event) => void form.submit(event)} className="flex flex-col gap-3">
         {form.unreachable && <FormBanner />}
         <div className="flex flex-col gap-2 sm:flex-row sm:items-start">
@@ -198,9 +191,9 @@ function PasswordSection() {
       aria-labelledby="password-section"
       className="mt-6 flex flex-col gap-3 border-t border-zinc-800 pt-6"
     >
-      <h3 id="password-section" className={SECTION_HEADING}>
+      <h2 id="password-section" className={SECTION_HEADING}>
         {manageCopy.passwordSection}
-      </h3>
+      </h2>
       <form noValidate onSubmit={(event) => void form.submit(event)} className="flex flex-col gap-3">
         {form.unreachable && <FormBanner />}
         <PasswordField
@@ -273,7 +266,7 @@ function ConfirmDelete({ account, onCancel, onDeleted }: ConfirmDeleteProps) {
         : { template: manageCopy.deleteButton, login: account.login };
   return (
     <form noValidate onSubmit={(event) => void form.submit(event)} className="flex flex-col gap-4">
-      <h2 id="manage-heading" className={`${PANEL_HEADING} break-words`}>
+      <h2 id="delete-heading" className={`${PANEL_HEADING} break-words`}>
         <LoginText text={{ template: manageCopy.deleteHeading, login: account.login }} />
       </h2>
       <p id="delete-body" className={`${BODY_TEXT} break-words`}>

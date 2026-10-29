@@ -4,7 +4,7 @@
  * colour of the AniList banner and the Inventory Reset button.
  */
 
-const FOCUS_RING = "focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500";
+export const FOCUS_RING = "focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500";
 /** `aria-disabled` looks the same as `disabled`: submit buttons use it so they keep focus (§7 "Forms"). */
 const DISABLED =
   "disabled:cursor-not-allowed disabled:opacity-50 aria-disabled:cursor-not-allowed aria-disabled:opacity-50";
@@ -22,7 +22,7 @@ export const BUTTON: Record<ButtonKind, string> = {
   secondary: `rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-200 hover:bg-zinc-800 disabled:hover:bg-transparent aria-disabled:hover:bg-transparent ${PHONE_MIN_HEIGHT} ${FOCUS_RING} ${DISABLED}`,
   dangerOutline: `rounded-lg border border-red-900/60 px-4 py-2 text-sm text-red-300 hover:bg-red-950/50 disabled:hover:bg-transparent aria-disabled:hover:bg-transparent ${PHONE_MIN_HEIGHT} ${FOCUS_RING} ${DISABLED}`,
   dangerSolid: `rounded-lg bg-red-800/60 px-4 py-2 text-sm font-medium text-red-200 hover:bg-red-700/60 disabled:hover:bg-red-800/60 aria-disabled:hover:bg-red-800/60 ${PHONE_MIN_HEIGHT} ${FOCUS_RING} ${DISABLED}`,
-  /** The Show/Hide toggles and the dialog's Close button: §6's 28 px from `sm` up, 40 px on phone. */
+  /** The Show/Hide toggles: §6's 28 px from `sm` up, 40 px on phone. */
   text: `h-10 sm:h-7 rounded px-1 text-xs font-medium text-zinc-400 hover:text-zinc-200 disabled:hover:text-zinc-400 aria-disabled:hover:text-zinc-400 ${FOCUS_RING} ${DISABLED}`,
 };
 

@@ -9,12 +9,15 @@ import { fill } from "../../test/user";
 
 const account = makeAccount({ login: "Chris" });
 
+const CROSS_LINK = "Already registered? Log in";
+
 function setup(routes: Parameters<typeof mockFetch>[0]) {
   const fetchMock = mockFetch(routes);
-  const onBack = vi.fn();
   const onRegistered = vi.fn();
-  const rendered = renderWithProviders(<RegisterForm onBack={onBack} onRegistered={onRegistered} />);
-  return { fetchMock, onBack, onRegistered, user: userEvent.setup(), ...rendered };
+  const rendered = renderWithProviders(
+    <RegisterForm onRegistered={onRegistered} crossLink={<p>{CROSS_LINK}</p>} />,
+  );
+  return { fetchMock, onRegistered, user: userEvent.setup(), ...rendered };
 }
 
 async function toStep2(user: ReturnType<typeof userEvent.setup>) {
@@ -35,11 +38,15 @@ async function fillStep2AndSubmit(user: ReturnType<typeof userEvent.setup>) {
 describe("RegisterForm step 1", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it("focuses its heading on entry and describes it with the step", () => {
+  it("is the page's h1, described by the step, with no Back and the cross-link under the form", () => {
     setup({});
-    const heading = screen.getByRole("heading", { name: "Register" });
-    expect(heading).toHaveFocus();
+    const heading = screen.getByRole("heading", { level: 1, name: "Register" });
+    // The page change focuses it (router.tsx); a first render leaves focus alone (navigation spec §3.6).
+    expect(heading).not.toHaveFocus();
+    expect(heading).toHaveAttribute("tabindex", "-1");
     expect(heading).toHaveAccessibleDescription("Step 1 of 2");
+    expect(screen.queryByRole("button", { name: "Back" })).not.toBeInTheDocument();
+    expect(screen.getByText(CROSS_LINK)).toBeInTheDocument();
     expect(screen.getByLabelText("Invite code")).toHaveAccessibleDescription(
       "Ask the owner for a code. Codes are not case-sensitive.",
     );
@@ -74,16 +81,16 @@ describe("RegisterForm step 1", () => {
     expect(screen.getByLabelText("Invite code")).toHaveValue("nope");
   });
 
-  it("replaces the body with the cap message and Back", async () => {
-    const { user, onBack } = setup({ "POST /api/accounts/check-invite": envelope(403, "cap_reached") });
+  it("replaces the body with the cap message; no Back, the cross-link stays", async () => {
+    const { user } = setup({ "POST /api/accounts/check-invite": envelope(403, "cap_reached") });
     await fill(user, screen.getByLabelText("Invite code"), "code");
     await user.click(screen.getByRole("button", { name: "Continue" }));
     expect(await screen.findByRole("alert")).toHaveTextContent(
       "All 10 places are taken for now. Ask the owner to make room.",
     );
     expect(screen.queryByLabelText("Invite code")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Back" }));
-    expect(onBack).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.getByText(CROSS_LINK)).toBeInTheDocument();
   });
 
   it("shows the in-form banner when the server is unreachable and keeps the value", async () => {
@@ -94,12 +101,6 @@ describe("RegisterForm step 1", () => {
       "Couldn't reach the game server. Nothing was changed. Try again.",
     );
     expect(screen.getByLabelText("Invite code")).toHaveValue("code");
-  });
-
-  it("Back on step 1 returns to the choice", async () => {
-    const { user, onBack } = setup({});
-    await user.click(screen.getByRole("button", { name: "Back" }));
-    expect(onBack).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -227,6 +228,8 @@ describe("RegisterForm step 2", () => {
       "All 10 places are taken for now. Ask the owner to make room.",
     );
     expect(screen.queryByLabelText("Login")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+    expect(screen.getByText(CROSS_LINK)).toBeInTheDocument();
   });
 
   it("any other server answer at submit shows the in-form banner", async () => {

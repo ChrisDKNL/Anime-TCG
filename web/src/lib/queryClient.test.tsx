@@ -1,9 +1,9 @@
 import { onlineManager } from "@tanstack/react-query";
-import { act, screen } from "@testing-library/react";
+import { act, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LoginForm } from "../components/account/LoginForm";
-import { ManageAccountDialog } from "../components/account/ManageAccountDialog";
+import { ManageAccount } from "../components/account/ManageAccount";
 import { makeAccount } from "../test/api";
 import { renderWithProviders } from "../test/render";
 import { banners } from "./copy";
@@ -35,7 +35,7 @@ describe("query client after the browser reports offline", () => {
   });
 
   it("Log in still sends, fails and shows the unreachable-form banner; nothing is paused", async () => {
-    const { queryClient } = renderWithProviders(<LoginForm onBack={vi.fn()} onLoggedIn={vi.fn()} />);
+    const { queryClient } = renderWithProviders(<LoginForm onLoggedIn={vi.fn()} />);
     goOffline();
     expect(onlineManager.isOnline()).toBe(false);
 
@@ -56,19 +56,13 @@ describe("query client after the browser reports offline", () => {
 
   it("Delete still sends, fails and shows the unreachable-form banner; nothing is paused", async () => {
     const { queryClient } = renderWithProviders(
-      <ManageAccountDialog
-        open
-        account={makeAccount({ login: "Chris" })}
-        onClose={vi.fn()}
-        onRenamed={vi.fn()}
-        onDeleted={vi.fn()}
-      />,
+      <ManageAccount account={makeAccount({ login: "Chris" })} onRenamed={vi.fn()} onDeleted={vi.fn()} />,
     );
     goOffline();
 
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Delete account…" }));
-    await fill(user, screen.getByLabelText("Password"), "a password");
+    await fill(user, within(screen.getByRole("dialog")).getByLabelText("Password"), "a password");
     await user.click(screen.getByRole("button", { name: "Delete Chris" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(banners.unreachableForm);
@@ -87,7 +81,7 @@ describe("query client mutation cache", () => {
 
   it("drops a finished mutation, and the password in its variables, once its form unmounts", async () => {
     stubOfflineFetch();
-    const { queryClient, unmount } = renderWithProviders(<LoginForm onBack={vi.fn()} onLoggedIn={vi.fn()} />);
+    const { queryClient, unmount } = renderWithProviders(<LoginForm onLoggedIn={vi.fn()} />);
     const user = userEvent.setup();
     await fill(user, screen.getByLabelText("Login"), "chris");
     await fill(user, screen.getByLabelText("Password"), "a password");

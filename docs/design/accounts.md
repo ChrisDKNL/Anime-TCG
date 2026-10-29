@@ -2,9 +2,12 @@
 
 Amended 2026-10-28 for ADR 0006 (login + password)
 Amended again 2026-10-28 for ADR 0008 (server-authoritative state; the web app is a thin UI)
+Amended 2026-10-29 for addresses and pages ([navigation-and-landing.md](navigation-and-landing.md) §10): the Account screen is retired for the `/login` and `/register` pages, Manage account is the `/account` page, and sign-in, log-out, deletion and session end land on a page by replace
 
 Roadmap item 1 · implements [ADR 0008](../adr/0008-server-authoritative.md) §3–4 (which supersedes [ADR 0003](../adr/0003-accounts-local-first.md) Phase 1 and [ADR 0006](../adr/0006-local-credentials.md)) · leaves room for [ADR 0004](../adr/0004-economy-ground-rules.md) · written 2026-10-28
 
+> **Navigation amendment (2026-10-29).** Every screen has an address now ([navigation-and-landing.md](navigation-and-landing.md)). Where this spec says "Account screen", read the landing page at `/` (which offers the choice) and the `/login` and `/register` pages; where it says "Manage account dialog", read the `/account` page; where it says "Booster tab" or "Collection tab", read `/packs` and `/collection`. The sections below are amended in place where the behaviour changed; the navigation spec holds the routes, the guard, titles and focus on page changes.
+>
 > **Amendment note.** The first version of this spec designed password-less local _profiles_ with a header switcher. ADR 0006 replaced that with _accounts_ that have a login and a password and a Log in / Register flow. ADR 0008 then moved every piece of state to the server. What survives from the earlier versions is the UI: the Account control, the Account screen, the Register and Log in forms, their errors, copy and accessibility. What is gone: the profile switcher, `localStorage` keys, the `StorageAdapter`, browser-side hashing, cross-tab storage events, export/import of collection files, and the migration of the pre-accounts collection. "Profile" no longer appears in UI copy; "account" does.
 
 ## 1. Goal
@@ -30,53 +33,55 @@ The owner (and anyone they hand the URL and an invite code to) gets an **account
 
 ## 3. Flow
 
-Terms: **signed out** = the server reports no session; **signed in** = the server reports a session for an account. **Account screen** = the signed-out main area (§4.3). **Account control** = the header button (§4.5). Every "the server says" below is a response from the API; the UI holds the signed-in account's `login` and `createdAt` in React state for the page's lifetime and nothing else.
+Terms: **signed out** = the server reports no session; **signed in** = the server reports a session for an account. **Account screen** = the signed-out main area of the first build, retired for the landing page and the `/login` and `/register` pages (§3.2, §4.3). **Account control** = the header button (§4.5). Every "the server says" below is a response from the API; the UI holds the signed-in account's `login` and `createdAt` in React state for the page's lifetime and nothing else.
 
 ### 3.1 Boot (every launch)
 
 1. The app asks the server whether the cookie it may hold belongs to a live session. Until that resolves, nothing game-related renders (no flash of an empty collection); the loading state in §4.1 appears only if it takes longer than 300 ms.
 2. Branch on the answer:
    - **Session for an account** → signed in → 3.6 (normal app).
-   - **No session** → signed out → 3.2 (Account screen).
-   - **Server unreachable or errored** → signed out, Account screen, with the unreachable banner (§4.1). The forms stay usable; each submit retries the network.
+   - **No session** → signed out → the page the address names (navigation-and-landing.md §3.2): the landing page at `/`, `/login`, `/register`, or `/login` with a return path for an account page.
+   - **Server unreachable or errored** → signed out, with the unreachable banner (§4.1), on the page the address names; an account page is replaced by `/login` with its return path. The forms stay usable; each submit retries the network, and `Try again` that finds a session replaces `/login` with the return path (or `/packs`).
 3. Nothing is read from `localStorage` at boot. The old `anime-tcg:inventory:v1` key, if present, is ignored and left alone (its bytes are not ours to delete; nothing reads them).
 
-### 3.2 Signed out: the Account screen
+### 3.2 Signed out: the landing page, `/login` and `/register`
 
-1. The header renders with title, subtitle and the Account control (§4.5), no view tabs.
-2. The main area shows the **Account screen** (§4.3): heading, one-line intro, two actions **Log in** and **Register**. Below it, the attribution footer, unchanged.
+The Account screen and its choice panel are retired (navigation-and-landing.md §10). Signed out:
+
+1. The header renders with the wordmark (a link to `/`) and the `Log in` and `Register` links (navigation-and-landing.md §3.5 step 1), no page links.
+2. The landing page at `/` offers the choice (navigation-and-landing.md §3.7); `/login` is the Log in page (§3.4) and `/register` the Register page (§3.3). Below each, the attribution footer.
 3. Nothing belonging to any account is rendered signed out, and this is server-enforced: without a session the API refuses every account and collection call, so the UI has nothing to show even if it asked. No login list, no card counts, no "last pack".
-4. `Log in` → 3.4. `Register` → 3.3. The header Account control, while signed out, returns to this screen from either sub-step (and focuses its heading).
+4. `Log in` → 3.4. `Register` → 3.3. Each page links to the other under its form (`No account yet?` `Register`, `Already registered?` `Log in`), carrying the guard's return path.
 
 ### 3.3 Register (two steps)
 
-1. **Step 1, invite code**: one field, `Continue`, `Back`. The value is trimmed and sent to the server, which checks it case-insensitively against its own list (Phase 1 seeds the single code `ANIME-TCG-2026`; the UI never holds a code list). Codes are reusable unless the server decides otherwise. Validation on submit, not keystroke: empty is a client-side error; invalid, cap reached and unreachable come from the server (§8). No attempt counter on this step.
+1. **Step 1, invite code**: one field, `Continue` (no `Back`: the browser's Back and the header links leave the page). The value is trimmed and sent to the server, which checks it case-insensitively against its own list (Phase 1 seeds the single code `ANIME-TCG-2026`; the UI never holds a code list). Codes are reusable unless the server decides otherwise. Validation on submit, not keystroke: empty is a client-side error; invalid, cap reached and unreachable come from the server (§8). No attempt counter on this step.
 2. **Step 2, credentials**: `Login`, `Password`, `Confirm password`, `Register`, `Back` (to step 1, code kept). Password rules are printed under the Password field _before_ the user types (§8 "password-rules").
    - Login: trimmed; 3–24 characters; any characters; internal whitespace kept as typed; the server enforces uniqueness case-insensitively on the trimmed value. The login **is** the display name.
    - Password: 8–128 characters, any characters, **never trimmed**. Confirm must match exactly. Length and match are checked client-side first so the server is not called for a typo; the server checks them again and the UI maps its answer to the same messages.
 3. On submit the UI sends the invite code, login and password together; the server creates the account, starts the session and answers with the account. The code is re-checked by the server at this point, so a code that became invalid between the steps produces the step-1 error on step 2 (§4.4-A).
-4. Success: signed in, Booster tab, header shows the login, live region announces. Focus moves to the pack button. The new collection is empty (ADR 0008 §7).
-5. **Cap**: the server holds at most **10 accounts** in Phase 1 (the owner's number, kept). The UI learns of the cap only from the server's answer; it shows the cap error on whichever step returned it and offers `Back`.
+4. Success: signed in; `/register` is replaced by the return path or `/packs`, header shows the login, live region announces. Focus moves to that page's `h1` (navigation-and-landing.md §3.6 step 3). The new collection is empty (ADR 0008 §7).
+5. **Cap**: the server holds at most **10 accounts** in Phase 1 (the owner's number, kept). The UI learns of the cap only from the server's answer; it shows the cap error on whichever step returned it, in place of the form. There is no `Back` (it returned to the retired Account screen); the `Log in` cross-link stays.
 
 ### 3.4 Log in
 
-1. `Login` and `Password` fields, `Log in`, `Back`. Password rules are _not_ shown here (the user already chose it). Below the form, the forgotten-password line (§8).
+1. `Login` and `Password` fields, `Log in` (no `Back`), then `No account yet?` with a `Register` link. Password rules are _not_ shown here (the user already chose it). Below the form, the forgotten-password line (§8).
 2. Login is trimmed; password is not. Empty fields are client-side errors. The server answers unknown login and wrong password with one failure, and the UI shows one message: `Login or password is incorrect.` The form never says which.
 3. **Wait after repeated failures**, server-enforced: after **5 consecutive** failures for a login, the server refuses further attempts for **10 seconds** and tells the UI how many seconds remain. The UI disables `Log in`, counts down from that number (`Try again in <S> s`), and shows the nudge message (§8 "login-breather"), which talks about spelling and caps lock and never about attempts, blocking or protection. A reload does not reset the wait (the server remembers); the UI simply asks again on the next submit and gets a fresh remaining-seconds answer. The same server rule and the same copy family apply to every password check (change password, delete).
-4. Success: signed in, Booster tab (the last-used tab is not remembered; a fresh session starts at the pack), header shows the login, live region announces, focus on the pack button.
+4. Success: signed in; `/login` is replaced by the return path the guard held, or `/packs` (the last page is not remembered across sign-ins), header shows the login, live region announces, focus on that page's `h1`.
 
 ### 3.5 Signed in: Account control and menu
 
-1. The **Account control** in the header shows the avatar placeholder, the login and a chevron. Activating it opens a menu with exactly two items: `Manage account…`, `Log out`. It is disabled while a pack is mid-open (`opening === true`).
-2. `Log out` calls the server (which invalidates the session, ADR 0008 §4), then: the reveal grid is cleared, the view returns to the Account screen, `document.title` resets, focus moves to the Account screen heading, live region announces. No confirmation (nothing is lost). If the call fails, the UI still drops to the Account screen and shows the unreachable banner (the cookie may still be live; the next boot will find out).
-3. `Manage account…` opens the **Manage account dialog** (§4.6):
-   - **Login** section: current login prefilled in a field, `Save`. Same rules as Register (the server excludes the account itself from the duplicate check). Saving updates the header, `document.title` and the live region.
+1. The **Account control** in the header shows the avatar placeholder, the login and a chevron. Activating it opens a menu with exactly two items: `Manage account` (a link to `/account`, marked `aria-current="page"` there), `Log out`. It is disabled while a pack is mid-open (`opening === true`).
+2. `Log out` calls the server (which invalidates the session, ADR 0008 §4), then: the account state (the reveal grid included) is dropped, the current page is **replaced** by `/`, `document.title` resets, focus moves to the landing page's `h1`, live region announces. No confirmation (nothing is lost). If the call fails, the UI still signs out to `/` and shows the unreachable banner (the cookie may still be live; the next boot will find out).
+3. `Manage account` goes to the **`/account` page** (§4.6; navigation-and-landing.md §3.4): the `h1` `Manage account`, the avatar, login and meta line, then three sections with `h2`s:
+   - **Login** section: current login prefilled in a field, `Save`. Same rules as Register (the server excludes the account itself from the duplicate check). Saving updates the header, the page's account header and the live region (the title names the page, not the login).
    - **Password** section: `Current password`, `New password`, `Confirm new password`, rules line under New password, `Change password`. Errors: wrong current password (server), new too short/long, confirm mismatch (client first, server again). Success clears the three fields and announces.
-   - **Delete** section: `Delete account…` replaces the dialog body with a confirmation panel: heading, body stating that the account and every card in it are deleted and that there is no undo, a `Password` field, buttons `Delete <login>` (danger), `Cancel`. The delete button is enabled only once the password field is non-empty; a wrong password is an inline error on the field. On success the server ends the session; the UI is signed out on the Account screen, live region announces.
+   - **Delete** section: `Delete account…` opens the confirmation as a native modal `<dialog>`: heading, body stating that the account and every card in it are deleted and that there is no undo, a `Password` field, buttons `Delete <login>` (danger), `Cancel`. `Cancel` and Escape close it and return focus to `Delete account…`. The delete button is enabled only once the password field is non-empty; a wrong password is an inline error on the field. On success the server ends the session; `/account` is replaced by `/`, the landing `h1` takes focus, live region announces.
 
 ### 3.6 Normal app (signed in)
 
-Identical to today plus: the Account control in the header, `document.title` = `<login> · Anime TCG`, the Inventory `Reset` confirm names the login (§8). The Collection tab keeps its `Collection (N)` label; N comes from the server's collection response. (Moving the collection and pack opening themselves to the server is roadmap work under ADR 0008 and is specced separately; this spec only requires that nothing account-scoped renders without a session.)
+Identical to today plus: the Account control in the header, `document.title` per page (`Packs · Anime TCG`, navigation-and-landing.md §3.1 rule 4; the login is not in it), the Inventory `Reset` confirm names the login (§8). The `Collection` page link keeps its `Collection (N)` label; N comes from the server's collection response. (Moving the collection and pack opening themselves to the server is roadmap work under ADR 0008 and is specced separately; this spec only requires that nothing account-scoped renders without a session.)
 
 ### 3.7 Persistence
 
@@ -86,12 +91,12 @@ Persistence and credentials are server-side (ADR 0008); the UI calls an API and 
 
 ### 4.1 Boot
 
-| State       | User sees                                                                                                                                                                                                   | User can do             |
-| ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
-| loading     | Header (title block only); main area shows `Loading…` (`text-sm text-zinc-500`, `aria-live="polite"`) only if the session check takes longer than 300 ms, otherwise nothing                                 | Wait                    |
-| unreachable | Account screen with the unreachable banner above it, `role="alert"`, same red style as the AniList error banner, copy §8 "unreachable", button `Try again` (repeats the session check). Forms remain usable | Retry, log in, register |
-| signed out  | Account screen (4.3)                                                                                                                                                                                        | Log in, register        |
-| signed in   | Normal app (3.6)                                                                                                                                                                                            | Everything              |
+| State       | User sees                                                                                                                                                                                                                                                                                                                                            | User can do             |
+| ----------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------- |
+| loading     | Header (wordmark only); main area shows `Loading…` (`text-sm text-zinc-500`, `role="status"`) only if the session check takes longer than 300 ms, otherwise nothing                                                                                                                                                                                  | Wait                    |
+| unreachable | The page the address names (an account page is replaced by `/login` with its return path) with the unreachable banner above it, `role="alert"`, same red style as the AniList error banner, copy §8 "unreachable", button `Try again` (repeats the session check; one that finds a session leaves `/login` for the return path). Forms remain usable | Retry, log in, register |
+| signed out  | The page the address names: the landing page, `/login` or `/register` (4.3)                                                                                                                                                                                                                                                                          | Log in, register        |
+| signed in   | Normal app (3.6)                                                                                                                                                                                                                                                                                                                                     | Everything              |
 
 ### 4.2 Pre-accounts collection
 
@@ -101,13 +106,13 @@ Persistence and credentials are server-side (ADR 0008); the UI calls an API and 
 
 There is no migration, no note and no welcome dialog (ADR 0008 §7). The old key is not read and not deleted.
 
-### 4.3 Account screen (signed out)
+### 4.3 Signed-out pages (the Account screen is retired)
 
-| State             | User sees                                                                                                                                                                           | User can do    |
-| ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
-| choice            | One centred panel: heading, intro line, primary `Log in`, secondary `Register`; attribution footer below the panel as today. No view tabs. No account names, counts or art anywhere | Pick an action |
-| log in form       | 4.4-B                                                                                                                                                                               |                |
-| register step 1/2 | 4.4-A                                                                                                                                                                               |                |
+| State             | User sees                                                                                                                              | User can do    |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
+| choice            | Retired: the landing page at `/` offers Register and Log in (navigation-and-landing.md §3.7); no account names, counts or art anywhere | Pick an action |
+| log in form       | 4.4-B                                                                                                                                  |                |
+| register step 1/2 | 4.4-A                                                                                                                                  |                |
 
 The UI does not know whether any accounts exist or whether the cap is reached, and does not ask; both buttons are always enabled, and the server's answer to a submit is the only source of those facts.
 
@@ -117,11 +122,11 @@ The UI does not know whether any accounts exist or whether the cap is reached, a
 
 | State                          | User sees                                                                                                                                                                       | User can do            |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------- |
-| step 1 idle                    | Heading `Register`, step indicator `Step 1 of 2`, `Invite code` field (autofocused) with hint, `Continue`, `Back`                                                               | Type, continue, back   |
+| step 1 idle                    | `h1` `Register`, step indicator `Step 1 of 2`, `Invite code` field with hint, `Continue`; under the form `Already registered?` `Log in`. No `Back`                              | Type, continue         |
 | step 1 checking                | `Checking…`, button and field disabled                                                                                                                                          | Wait                   |
 | step 1 error: empty code       | Field `aria-invalid`, red border, message below (§8), focus to the field. No server call                                                                                        | Fix                    |
 | step 1 error: invalid code     | Same treatment, message §8 (from the server). No counter, no delay in the UI                                                                                                    | Fix                    |
-| step 1 error: cap reached      | Form body replaced by the cap message (§8) and `Back`                                                                                                                           | Back                   |
+| step 1 error: cap reached      | Form body replaced by the cap message (§8); the `Log in` cross-link stays; no `Back`                                                                                            | Leave the page         |
 | step 1 error: unreachable      | Banner inside the form (`role="alert"`), §8 "unreachable-form"; field keeps its value                                                                                           | Retry                  |
 | step 2 idle                    | `Step 2 of 2`, `Login` (autofocused) with hint, `Password` with the rules line _under it before typing_ and a `Show` toggle, `Confirm password` with toggle, `Register`, `Back` | Type, submit, back     |
 | step 2 error: empty login      | Invalid treatment, §8                                                                                                                                                           | Fix                    |
@@ -132,16 +137,16 @@ The UI does not know whether any accounts exist or whether the cap is reached, a
 | step 2 error: mismatch         | `Confirm password` invalid, §8; the Password field keeps its value                                                                                                              | Fix                    |
 | step 2 error: several          | All marked; focus to the first invalid in DOM order                                                                                                                             | Fix                    |
 | step 2 error: code now invalid | The server rejected the code at submit time: back to step 1 with the invalid-code error shown and the code field focused; the login stays filled for when the user returns      | Fix the code           |
-| step 2 error: cap reached      | Form body replaced by the cap message and `Back`                                                                                                                                | Back                   |
+| step 2 error: cap reached      | Form body replaced by the cap message; the `Log in` cross-link stays; no `Back`                                                                                                 | Leave the page         |
 | step 2 error: unreachable      | Form stays filled; banner inside the form, §8 "unreachable-form"                                                                                                                | Retry; nothing created |
 | submitting                     | `Registering…`, button, fields and toggles disabled                                                                                                                             | Wait                   |
-| success                        | Normal app on the Booster tab, header shows the login, live region announces                                                                                                    | Open a pack            |
+| success                        | `/register` replaced by the return path or `/packs`, its `h1` focused, header shows the login, live region announces                                                            | Open a pack            |
 
 **B. Log in**
 
 | State                 | User sees                                                                                                                                                                                            | User can do   |
 | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------- |
-| idle                  | Heading `Log in`, `Login` (autofocused), `Password` with `Show` toggle, `Log in`, `Back`, forgotten-password line beneath the form                                                                   | Type, submit  |
+| idle                  | `h1` `Log in` (the guard line under it when a return path is held), `Login`, `Password` with `Show` toggle, `Log in`, `No account yet?` `Register`, forgotten-password line beneath. No `Back`       | Type, submit  |
 | error: empty login    | Invalid treatment, §8. No server call                                                                                                                                                                | Fix           |
 | error: empty password | Invalid treatment, §8. No server call                                                                                                                                                                | Fix           |
 | error: incorrect      | Both fields get the invalid border; one message under the password field: `Login or password is incorrect.`; password field cleared; focus to `Login`                                                | Fix           |
@@ -149,7 +154,7 @@ The UI does not know whether any accounts exist or whether the cap is reached, a
 | wait (server says so) | `Log in` disabled and reads `Try again in <S> s` (S from the server's remaining seconds down to 1, `tabular-nums`); message `role="status"` §8 "login-breather" announced once; fields stay editable | Re-read, wait |
 | wait over             | Button reads `Log in` again; live region `You can try again now.`                                                                                                                                    | Submit        |
 | error: unreachable    | Banner inside the form, §8 "unreachable-form"; fields keep their values                                                                                                                              | Retry         |
-| success               | Normal app on the Booster tab, live region announces                                                                                                                                                 | Play          |
+| success               | `/login` replaced by the return path or `/packs`, its `h1` focused, live region announces                                                                                                            | Play          |
 
 **C. Change password** (inside Manage account)
 
@@ -167,31 +172,31 @@ The UI does not know whether any accounts exist or whether the cap is reached, a
 
 ### 4.5 Account control (header)
 
-| State             | User sees                                                                                                                        | User can do                         |
-| ----------------- | -------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------- |
-| signed out        | Button labelled `Account` (no avatar, no chevron). Activating it shows the Account screen "choice" state and focuses its heading | Return to the choice screen         |
-| signed in, closed | Avatar circle with the first character of the login, the login, chevron                                                          | Open                                |
-| signed in, open   | Menu anchored below the button, right-aligned: `Manage account…`, divider, `Log out`                                             | Pick an item, Escape, click outside |
-| disabled          | Button `disabled` while a pack is opening                                                                                        | Wait ~350 ms                        |
-| logging out       | Menu closed; control disabled until the server answers (sub-second)                                                              | Wait                                |
-| after Log out     | Account screen, choice state; `document.title` = `Anime TCG`; focus on the screen heading; live region `Logged out.`             | Log in, register                    |
+| State             | User sees                                                                                                   | User can do                         |
+| ----------------- | ----------------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| signed out        | No control: the header shows `Log in` and `Register` links instead (navigation-and-landing.md §3.5 step 1)  | Go to either page                   |
+| signed in, closed | Avatar circle with the first character of the login, the login, chevron                                     | Open                                |
+| signed in, open   | Menu anchored below the button, right-aligned: `Manage account` (link), divider, `Log out`                  | Pick an item, Escape, click outside |
+| disabled          | Button `disabled` while a pack is opening                                                                   | Wait ~350 ms                        |
+| logging out       | Menu closed; control disabled until the server answers (sub-second)                                         | Wait                                |
+| after Log out     | `/` replaces the page; `document.title` = `Anime TCG`; focus on the landing `h1`; live region `Logged out.` | Log in, register                    |
 
-### 4.6 Manage account dialog
+### 4.6 Manage account page (`/account`)
 
-| State           | User sees                                                                                                                                                                                                                                     | User can do                          |
-| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
-| open            | Modal titled `Manage account`, close button, avatar + login + `Created <date>` + `<N cards>` at the top, then three sections in order: **Login**, **Password**, **Delete account**                                                            | Any action, close, Escape            |
-| login editing   | `Login` field prefilled; `Save` enabled once the value differs from the current login                                                                                                                                                         | Save                                 |
-| login error     | Same inline treatment as Register (empty / length / duplicate)                                                                                                                                                                                | Fix                                  |
-| login saving    | `Saving…`, disabled                                                                                                                                                                                                                           | Wait                                 |
-| login saved     | Header, `document.title` and the dialog header update; live region `Login changed to <login>.`                                                                                                                                                | Continue                             |
-| password        | 4.4-C                                                                                                                                                                                                                                         |                                      |
-| delete confirm  | Dialog body replaced by: heading `Delete <login>?`, body naming the card count and "no undo", `Password` field (autofocused, `current-password`, toggle), buttons `Delete <login>` (danger, enabled only with a non-empty password), `Cancel` | Delete, cancel/Escape (back to list) |
-| delete wrong pw | Password field invalid, §8 "wrong-current"; field cleared; same server-enforced wait on the delete button after repeated misses                                                                                                               | Retry, cancel                        |
-| deleting        | `Deleting…`, disabled                                                                                                                                                                                                                         | Wait                                 |
-| delete done     | Dialog closes; app is signed out on the Account screen; live region `Deleted <login>.`                                                                                                                                                        | Log in, register                     |
-| delete failed   | Stays on the confirm panel with the inline banner (§8 "unreachable-form"). The server deletes atomically or not at all; the UI never shows a half-deleted account                                                                             | Retry, cancel                        |
-| session ended   | Any `unauthenticated` answer closes the dialog and applies §4.8                                                                                                                                                                               | Log in                               |
+| State           | User sees                                                                                                                                                                                                                                          | User can do                                             |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| open            | The `/account` page: `h1` `Manage account`, avatar + login + `Created <date>` + `<N cards>`, then three sections with `h2`s in order: **Login**, **Password**, **Delete account**. No Close: the page is left like any other                       | Any action, leave the page                              |
+| login editing   | `Login` field prefilled; `Save` enabled once the value differs from the current login                                                                                                                                                              | Save                                                    |
+| login error     | Same inline treatment as Register (empty / length / duplicate)                                                                                                                                                                                     | Fix                                                     |
+| login saving    | `Saving…`, disabled                                                                                                                                                                                                                                | Wait                                                    |
+| login saved     | Header and the page's account header update; live region `Login changed to <login>.`                                                                                                                                                               | Continue                                                |
+| password        | 4.4-C                                                                                                                                                                                                                                              |                                                         |
+| delete confirm  | A modal `<dialog>` over the page: heading `Delete <login>?`, body naming the card count and "no undo", `Password` field (focused, `current-password`, toggle), buttons `Delete <login>` (danger, enabled only with a non-empty password), `Cancel` | Delete, cancel/Escape (focus back to `Delete account…`) |
+| delete wrong pw | Password field invalid, §8 "wrong-current"; field cleared; same server-enforced wait on the delete button after repeated misses                                                                                                                    | Retry, cancel                                           |
+| deleting        | `Deleting…`, disabled                                                                                                                                                                                                                              | Wait                                                    |
+| delete done     | Signed out; `/` replaces `/account`, the landing `h1` takes focus; live region `Deleted <login>.`                                                                                                                                                  | Log in, register                                        |
+| delete failed   | Stays on the confirm panel with the inline banner (§8 "unreachable-form"). The server deletes atomically or not at all; the UI never shows a half-deleted account                                                                                  | Retry, cancel                                           |
+| session ended   | Any `unauthenticated` answer applies §4.8: `/login` replaces the page with return path `/account`                                                                                                                                                  | Log in                                                  |
 
 ### 4.7 (reserved)
 
@@ -199,26 +204,25 @@ Import from a file was §4.7 in the previous version and is out of scope now (§
 
 ### 4.8 Cross-cutting
 
-| State                                                     | User sees                                                                                                                                                                                              | User can do |
-| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------- |
-| session ended (server says `unauthenticated` on any call) | The UI drops to the Account screen, closes any dialog, clears the reveal grid and all account state; banner above the panel, `role="status"`, §8 "session-ended"; the Log in form is one click away    | Log in      |
-| server unreachable (any later call)                       | Persistent banner above the main area, `role="alert"`, red style, copy §8 "unreachable" with `Try again`. The game state on screen is whatever the server last returned; no action pretends to succeed | Retry, wait |
-| logged out in another tab                                 | Nothing until this tab's next API call, which returns `unauthenticated` and triggers "session ended" above. This is accepted (§2)                                                                      | Log in      |
+| State                                                     | User sees                                                                                                                                                                                                                                                                      | User can do |
+| --------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------- |
+| session ended (server says `unauthenticated` on any call) | The UI signs out, clears the reveal grid and all account state, and **replaces** the page with `/login`, the current page held as the return path; banner above the main area, `role="status"`, §8 "session-ended"; focus on the `Log in` `h1`; logging in returns to the page | Log in      |
+| server unreachable (any later call)                       | Persistent banner above the main area, `role="alert"`, red style, copy §8 "unreachable" with `Try again`. The game state on screen is whatever the server last returned; no action pretends to succeed                                                                         | Retry, wait |
+| logged out in another tab                                 | Nothing until this tab's next API call, which returns `unauthenticated` and triggers "session ended" above. This is accepted (§2)                                                                                                                                              | Log in      |
 
 ## 5. Layout
 
 Breakpoints are Tailwind defaults: phone `< 640`, `sm ≥ 640`, `lg ≥ 1024`. The card grid is unchanged (2 / 3 / 5 columns for the reveal, 2 / 3 / 4 / 5 / 6 for the collection).
 
-**Header**
+**Header**: as navigation-and-landing.md §5.1. The wordmark replaces the title block and the subtitle is gone. Signed in on phone: row 1 the wordmark and the Account control, row 2 the page links full width; from `sm` one row. Signed out: one row, the wordmark and the `Log in` and `Register` links. The login truncates at `max-w-[8rem]` on phone and `max-w-[10rem]` from `sm`.
 
-- Phone (stacked, `flex-col gap-4`): row 1 title + subtitle (unchanged); row 2 `flex items-center justify-between`: view tabs left (signed in only), Account control right. Signed out, row 2 is the Account control alone, right-aligned. The login truncates at `max-w-[8rem]`.
-- `sm` and up: title block left; right side is `flex items-end gap-3`: view tabs (signed in only), then the Account control. Login truncates at `max-w-[10rem]`.
-
-**Account screen and its sub-steps (choice, Log in, Register)**: one centred panel `w-full max-w-sm` in the main area, `rounded-2xl border border-zinc-800 bg-zinc-900 p-6`, fields full-width, primary buttons full-width on phone and auto on `sm`. The two choice buttons stack on phone and sit side by side on `sm`. The attribution footer keeps its place below `main`.
+**Log in and Register pages**: one centred panel `w-full max-w-sm` in the main area, `rounded-2xl border border-zinc-800 bg-zinc-900 p-6`, the `h1` inside it, fields full-width, primary buttons full-width on phone and auto on `sm`. The attribution footer keeps its place below `main`.
 
 **Menu**: `min-w-[12rem]`, anchored to the control's right edge, below it. Two items; never scrolls.
 
-**Dialog** (Manage account): native `<dialog>` opened with `showModal()`. `w-[calc(100%-2rem)] max-w-lg`, `max-h-[85vh]`, body scrolls. Backdrop `bg-zinc-950/70 backdrop-blur-sm`. Sections are stacked with `border-t border-zinc-800 pt-6 mt-6` between them; each has an `h3`. On phone the login field and `Save` stack; on `sm` they share a row.
+**Manage account page**: one column, `max-w-lg`. Sections are stacked with `border-t border-zinc-800 pt-6 mt-6` between them; each has an `h2`. On phone the login field and `Save` stack; on `sm` they share a row.
+
+**Dialog** (the delete confirmation): native `<dialog>` opened with `showModal()`. `w-[calc(100%-2rem)] max-w-lg`, `max-h-[85vh]`, body scrolls. Backdrop `bg-zinc-950/70 backdrop-blur-sm`.
 
 **Password fields**: the input gets `pr-16` and the `Show`/`Hide` text toggle is absolutely positioned inside the right edge, vertically centred, so the field width never changes when the label flips.
 
@@ -238,25 +242,25 @@ No new design tokens are needed; everything below is existing utilities. (If the
 - **Show/Hide toggle**: text button `text-xs font-medium text-zinc-400 hover:text-zinc-200`, violet focus ring, no icon (no new iconography in this feature).
 - **Buttons**: primary `rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-500` (the loud fuchsia→sky gradient stays reserved for the pack); secondary `rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-200 hover:bg-zinc-800`; disabled `opacity-50 cursor-not-allowed`; danger outline (`Delete account…`) is the existing Inventory `Reset` style `border border-red-900/60 text-red-300 hover:bg-red-950/50`; danger solid (final `Delete <login>`) is the existing banner `Retry` style `bg-red-800/60 text-red-200 hover:bg-red-700/60`. Red is already in use as a semantic colour, not a new accent family.
 - **Wait countdown**: the disabled primary button with `tabular-nums`; the message beneath in the hint style, not the error style (it is not an error).
-- **Motion**: menu and dialog fade/scale in over 150 ms (`opacity 0→1`, `scale .98→1`); none under `prefers-reduced-motion`. Switching between Account screen sub-steps has no transition. The countdown number changes without animation.
+- **Motion**: menu and dialog fade/scale in over 150 ms (`opacity 0→1`, `scale .98→1`); none under `prefers-reduced-motion`. Moving between the Log in and Register pages, and between the two Register steps, has no transition. The countdown number changes without animation.
 - **Nothing money-like, nothing lock-like**: no coin, wallet, cart, lock, shield or key iconography anywhere in this feature; the economy spec names and draws the currency, and a lock would be a security claim.
 
 ## 7. Accessibility
 
 - **Account control (signed in)**: `<button aria-haspopup="menu" aria-expanded aria-controls="account-menu">`, accessible name `Account menu. Signed in as <login>` via `aria-label` (visible text stays as designed). Signed out: a plain `<button>` whose visible text `Account` is its name.
 - **Menu**: `role="menu"` `aria-labelledby` the button; items `role="menuitem"`; roving `tabindex`. Keyboard: `Enter`/`Space`/`ArrowDown` open and focus the first item; `ArrowUp` opens and focuses the last; `ArrowUp/Down` move and wrap; `Home`/`End`; `Enter`/`Space` activate; `Escape` closes and returns focus to the button; `Tab` closes. Clicking outside closes.
-- **Account screen**: `<main>` contains one `<section aria-labelledby>` its `h2`. The heading has `tabindex="-1"` so the header control, Log out and session-ended can move focus to it. Sub-steps (Log in, Register) replace the section's content; their `h2` receives focus on entry. `Back` returns focus to the choice screen's heading.
+- **Log in and Register pages** (the Account screen is retired): `<main>` contains one `<section aria-labelledby>` the page's `h1`, which has `tabindex="-1"` and receives focus on every page change after the first render (navigation-and-landing.md §3.6), not on load.
 - **Register steps**: step indicator is text (`Step 1 of 2`), part of the heading's `aria-describedby`. Step 2's `Back` keeps the entered code; a server-side code rejection at submit returns to step 1 with focus on the code field.
-- **Dialog**: native `<dialog>` via `showModal()` gives the focus trap, `Escape` and background inertness, `aria-labelledby` its heading. Initial focus: the dialog element itself (`tabindex="-1"`) in Manage account; the `Password` field in delete-confirm (the user has to type anyway, and `Enter` with an empty field does nothing because the delete button is disabled). Closing returns focus to the Account control.
+- **Dialog** (the delete confirmation on `/account`): native `<dialog>` via `showModal()` gives the focus trap, `Escape` and background inertness, `aria-labelledby` its heading. Initial focus: the `Password` field (the user has to type anyway, and `Enter` with an empty field does nothing because the delete button is disabled). Closing returns focus to `Delete account…`.
 - **Forms**: every field has a visible `<label>`; hints, rules and errors are linked with `aria-describedby`; invalid fields get `aria-invalid="true"`; on submit, focus moves to the first invalid field in DOM order, whether the error came from the client check or from the server. Errors render in a `role="alert"` region inside the form so screen readers hear them once. Validation on submit, not on keystroke. While a request is in flight the submit button is disabled and keeps focus; it is not removed from the DOM.
 - **Password fields**: `type="password"`; each has its own Show/Hide `<button type="button" aria-pressed>` with accessible name `Show password` / `Hide password` (in Manage account's Password section: `Show current password` / `Hide current password` and `Show new password` / `Hide new password`) (for confirm fields: `Show password confirmation` / `Hide password confirmation`). Toggling does not move focus and does not clear the value. Toggles are disabled while the form is submitting. `autocomplete`: Register `Login` → `username`, `Password` and `Confirm password` → `new-password`; Log in `Login` → `username`, `Password` → `current-password`; Manage `Login` → `username`; `Current password` → `current-password`; `New password` and `Confirm new password` → `new-password`; delete-confirm `Password` → `current-password`. `autocapitalize="off" spellcheck="false"` on every login and password field. No `maxlength` attribute on passwords (a hard cut-off would silently truncate what the user thinks they typed; validate on submit instead); `maxlength="24"` is fine on login.
 - **Invite code field**: `autocomplete="off" autocapitalize="off" spellcheck="false" inputmode="text"`. Not a password field; the value is visible (it is not a secret).
 - **Wait**: the message is a `role="status"` element rendered once when the wait starts; the countdown lives in the button's text, which is _not_ a live region, so screen readers are not read a number every second. When the wait ends, the live region announces `You can try again now.` and focus is unchanged.
-- **Live region**: one app-level visually hidden `role="status" aria-live="polite"` element for register/login/logout/rename/password/delete announcements (§8). Failure banners use `role="alert"`; the session-ended banner uses `role="status"` and moves focus to the Account screen heading, which is why it does not need to be an alert.
+- **Live region**: one app-level visually hidden `role="status" aria-live="polite"` element for register/login/logout/rename/password/delete announcements (§8). Failure banners use `role="alert"`; the session-ended banner uses `role="status"` and focus goes to the `Log in` `h1` just after it, which is why it does not need to be an alert.
 - **Delete confirm**: the final button's accessible name is `Delete <login>`; the panel sets `aria-describedby` to the body paragraph.
 - **Contrast**: hints and rules in `text-zinc-500` on `bg-zinc-900` are at the floor; everything that must be read (logins, errors, body copy) is `zinc-200` or lighter / `red-300` on `zinc-900`.
 - **Reduced motion**: only the 150 ms enter transitions exist; they are disabled under `prefers-reduced-motion: reduce`, in the same media block as `card-reveal`.
-- **Touch targets**: menu items, toggles, form buttons, inputs, the dialog Close button and the Account control are at least 40 px tall on phone (`min-h-10` / `h-10` below `sm`); this wins over the §6 sizes, which apply from `sm` up (manager decision 2026-10-29).
+- **Touch targets**: menu items, toggles, form buttons, inputs, the header links and the Account control are at least 40 px tall on phone (`min-h-10` / `h-10` below `sm`); this wins over the §6 sizes, which apply from `sm` up (manager decision 2026-10-29).
 
 ## 8. Copy
 
@@ -264,22 +268,14 @@ Exact strings. `<login>` is the account login, `<N>` a number, `<S>` the countdo
 
 **Header**
 
-| Element                         | Copy                                 |
-| ------------------------------- | ------------------------------------ |
-| Control, signed out             | `Account`                            |
-| Control `aria-label`, signed in | `Account menu. Signed in as <login>` |
-| Menu items                      | `Manage account…` · `Log out`        |
-| Document title, signed in       | `<login> · Anime TCG`                |
-| Document title, signed out      | `Anime TCG`                          |
+| Element                         | Copy                                                                                   |
+| ------------------------------- | -------------------------------------------------------------------------------------- |
+| Control, signed out             | none: `Log in` · `Register` links (navigation-and-landing.md §8)                       |
+| Control `aria-label`, signed in | `Account menu. Signed in as <login>`                                                   |
+| Menu items                      | `Manage account` · `Log out`                                                           |
+| Document title                  | per page, navigation-and-landing.md §3.1 (`Packs · Anime TCG`); the login is not in it |
 
-**Account screen (choice)**
-
-| Element   | Copy                                                                    |
-| --------- | ----------------------------------------------------------------------- |
-| Heading   | `Your account`                                                          |
-| Intro     | `Log in to your collection, or register a new one with an invite code.` |
-| Primary   | `Log in`                                                                |
-| Secondary | `Register`                                                              |
+**Account screen (choice)**: retired (navigation-and-landing.md §8 "Copy that changes elsewhere"); the landing page and the two pages replace it.
 
 **Register**
 
@@ -289,7 +285,7 @@ Exact strings. `<login>` is the account login, `<N>` a number, `<S>` the countdo
 | Step indicator                       | `Step 1 of 2` / `Step 2 of 2`                                             |
 | Invite code label                    | `Invite code`                                                             |
 | Invite code hint                     | `Ask the owner for a code. Codes are not case-sensitive.`                 |
-| Step 1 buttons                       | `Continue` / while checking `Checking…` · `Back`                          |
+| Step 1 buttons                       | `Continue` / while checking `Checking…` (no `Back`)                       |
 | Error: empty code                    | `Enter an invite code.`                                                   |
 | Error: invalid code                  | `That invite code isn't valid.`                                           |
 | Error: cap reached                   | `All 10 places are taken for now. Ask the owner to make room.`            |
@@ -316,7 +312,7 @@ Exact strings. `<login>` is the account login, `<N>` a number, `<S>` the countdo
 | Heading                 | `Log in`                                                                                                                                                                                                    |
 | Login label             | `Login`                                                                                                                                                                                                     |
 | Password label          | `Password`                                                                                                                                                                                                  |
-| Buttons                 | `Log in` / while checking `Logging in…` · `Back`                                                                                                                                                            |
+| Buttons                 | `Log in` / while checking `Logging in…` (no `Back`)                                                                                                                                                         |
 | Countdown button        | `Try again in <S> s`                                                                                                                                                                                        |
 | Error: empty login      | `Enter your login.`                                                                                                                                                                                         |
 | Error: empty password   | `Enter your password.`                                                                                                                                                                                      |
@@ -332,12 +328,11 @@ Exact strings. `<login>` is the account login, `<N>` a number, `<S>` the countdo
 | ---------------------- | ------------- |
 | Live region on log out | `Logged out.` |
 
-**Manage account dialog**
+**Manage account page**
 
 | Element                          | Copy                                                                                                              |
 | -------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | Heading                          | `Manage account`                                                                                                  |
-| Close button `aria-label`        | `Close`                                                                                                           |
 | Meta line                        | `<N cards> · Created <D Mon YYYY>` (`Intl.DateTimeFormat` with `day: "numeric", month: "short", year: "numeric"`) |
 | Section: Login                   | `Login`                                                                                                           |
 | Login field label (sr)           | `New login`                                                                                                       |
@@ -401,7 +396,7 @@ Made by the manager on the tester's, quality-controller's and security-officer's
 
 - While a request is in flight the submit button is `aria-disabled` (not `disabled`), so it keeps focus as §7 requires; a second activation sends nothing.
 - One live region, mounted once for the app's lifetime; a repeated message is announced again.
-- Logins embedded in text are isolated: `<bdi>` in the DOM, U+2068/U+2069 in plain strings (`document.title`, `aria-label`, the Reset confirm).
+- Logins embedded in text are isolated: `<bdi>` in the DOM, U+2068/U+2069 in plain strings (`aria-label`, the Reset confirm; `document.title` no longer carries the login, navigation-and-landing.md §3.1 rule 4).
 - Leaving the delete confirm (Cancel or the first Escape) returns focus to `Delete account…`.
 - Form buttons: the primary button comes first in the DOM and sits on the left from `sm` up, so Tab moves left to right (`flex-row-reverse` removed).
 - Avatar and touch targets: see §6 and §7.

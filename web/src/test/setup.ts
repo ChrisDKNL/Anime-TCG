@@ -19,3 +19,6 @@ if (typeof HTMLDialogElement.prototype.showModal !== "function") {
     this.dispatchEvent(new Event("close"));
   };
 }
+
+// jsdom does not lay out or scroll; the router's scroll restoration calls this on every page change.
+window.scrollTo = () => undefined;

@@ -1,19 +1,24 @@
+import { Link } from "@tanstack/react-router";
+import type { MouseEvent } from "react";
+import { useCurrentPageClick } from "../../hooks/useCurrentPageClick";
 import { useMenu } from "../../hooks/useMenu";
-import { useFocusTarget } from "../../hooks/useShell";
 import { header } from "../../lib/copy";
 import { Avatar } from "./Avatar";
 import { ACCOUNT_CONTROL, MENU_ITEM } from "./styles";
 
-interface SignedInProps {
+interface Props {
   login: string;
   /** While a pack opens or the log-out call is in flight (§4.5). */
   disabled: boolean;
-  onManage: () => void;
   onLogout: () => void;
 }
 
-/** The signed-in header control: avatar, login, chevron, and the two-item menu (accounts.md §3.5, §7). */
-export function AccountControl({ login, disabled, onManage, onLogout }: SignedInProps) {
+/**
+ * The signed-in header control: avatar, login, chevron, and the two-item menu
+ * (accounts.md §3.5, §7). `Manage account` is a link to `/account`, marked as
+ * the current page there (navigation-and-landing.md §3.4 step 1).
+ */
+export function AccountControl({ login, disabled, onLogout }: Props) {
   const {
     open,
     activeIndex,
@@ -25,11 +30,17 @@ export function AccountControl({ login, disabled, onManage, onLogout }: SignedIn
     onMenuKeyDown,
     close,
   } = useMenu(2);
-  useFocusTarget("accountControl", buttonRef);
+  const manage = useCurrentPageClick("/account");
 
   const pick = (action: () => void) => {
     close(false);
     action();
+  };
+
+  /** Leaving for /account, the page change focuses its heading; already there, focus goes back to the button. */
+  const pickManage = (event: MouseEvent<HTMLAnchorElement>) => {
+    manage.onClick(event);
+    close(event.defaultPrevented);
   };
 
   return (
@@ -74,16 +85,18 @@ export function AccountControl({ login, disabled, onManage, onLogout }: SignedIn
           onKeyDown={onMenuKeyDown}
           className="pop-in absolute top-full right-0 z-10 mt-1 min-w-[12rem] rounded-xl border border-zinc-800 bg-zinc-900 p-1 shadow-xl shadow-black/40"
         >
-          <button
+          <Link
             ref={itemRef(0)}
-            type="button"
+            to="/account"
             role="menuitem"
             tabIndex={activeIndex === 0 ? 0 : -1}
-            onClick={() => pick(onManage)}
+            onClick={pickManage}
+            activeOptions={{ exact: true, includeSearch: false }}
+            activeProps={{}}
             className={MENU_ITEM}
           >
             {header.manage}
-          </button>
+          </Link>
           <div role="separator" className="my-1 border-t border-zinc-800" />
           <button
             ref={itemRef(1)}
@@ -98,14 +111,5 @@ export function AccountControl({ login, disabled, onManage, onLogout }: SignedIn
         </div>
       )}
     </div>
-  );
-}
-
-/** The signed-out header control: a plain button that brings the Account screen back to its choice (§4.5). */
-export function AccountButton({ onClick }: { onClick: () => void }) {
-  return (
-    <button type="button" onClick={onClick} className={ACCOUNT_CONTROL}>
-      {header.accountSignedOut}
-    </button>
   );
 }

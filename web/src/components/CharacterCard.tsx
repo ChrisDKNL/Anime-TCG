@@ -12,6 +12,9 @@ const FRAME_CLASS: Record<Rarity, string> = {
   legendary: "border-rarity-legendary glow-legendary",
 };
 
+/** The reveal entrance runs only for cards that just landed (navigation-and-landing.md §3.10 step 2). */
+const ENTRANCE: Record<"entering" | "shown", string> = { entering: "card-reveal", shown: "" };
+
 const NAME_CLASS: Record<Rarity, string> = {
   common: "text-zinc-100",
   rare: "text-sky-100",
@@ -26,12 +29,14 @@ interface Props {
   isNew?: boolean;
   /** How many copies of this character the player owns (shown as ×N). */
   copies?: number;
+  /** False for a reveal found on returning to /packs: the entrance runs only for a new opening (§3.10 step 2). */
+  animate?: boolean;
 }
 
-export function CharacterCard({ card, index = 0, isNew = false, copies }: Props) {
+export function CharacterCard({ card, index = 0, isNew = false, copies, animate = true }: Props) {
   return (
     <article
-      className={`card-reveal group relative flex flex-col overflow-hidden rounded-2xl border-2 bg-zinc-900 transition-transform duration-300 hover:-translate-y-1 ${FRAME_CLASS[card.rarity]}`}
+      className={`${ENTRANCE[animate ? "entering" : "shown"]} group relative flex flex-col overflow-hidden rounded-2xl border-2 bg-zinc-900 transition-transform duration-300 hover:-translate-y-1 ${FRAME_CLASS[card.rarity]}`}
       style={{ animationDelay: `${index * 120}ms` }}
       aria-label={`${card.name}, ${card.rarity} card from ${card.animeTitle}`}
     >

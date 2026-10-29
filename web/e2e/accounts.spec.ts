@@ -25,44 +25,51 @@ import {
  * hard to produce with a real server is deterministic; AniList is served from fixtures. Waits are
  * measured inside the page (MutationObserver recorders) rather than raced with polling assertions.
  *
+ * Since the navigation PR (docs/design/navigation-and-landing.md) every screen has an address: the
+ * Account screen became `/login` and `/register` (the landing page offers the choice), Manage account
+ * became the `/account` page with the delete confirmation as its modal, the tabs became links, the
+ * title names the page instead of the login, and focus after an action goes to the destination's
+ * `h1`. Each test below keeps the intent it had; the comments name what moved.
+ *
  * Journeys
- * - Register in two steps (trimmed code and login, untrimmed password), land on Booster with the
- *   pack button focused, the login in the header and the title, and the live region announcing.
- * - Log in (trimmed login), same landing. Log out from the keyboard: Account screen, title reset,
- *   heading focused, `Logged out.` announced, no body on the request. Inventory Reset names the login.
+ * - Register in two steps (trimmed code and login, untrimmed password), land on /packs with its `h1`
+ *   focused, the login in the header, the page in the title, and the live region announcing.
+ * - Log in (trimmed login), same landing. Log out from the keyboard: the landing page at `/`, title
+ *   reset, its `h1` focused, `Logged out.` announced, no body on the request. Inventory Reset names the login.
  *
  * Boot (§3.1, §4.1)
- * - While the session check runs: title block only, no Account control, no game; `Loading…` appears
- *   no earlier than 300 ms after the page shell rendered.
+ * - While the session check runs: the wordmark only, no Account control, no page links, no page;
+ *   `Loading…` appears no earlier than 300 ms after the page shell rendered.
  * - Unreachable (a 502 proxy page, then a dropped connection): red alert with `Try again` above a
- *   usable Account screen; `Try again` repeats the check; a later success clears the banner.
+ *   usable landing page; `Try again` repeats the check; a later success clears the banner.
  * - Unreachable at boot, Log in still submits and clears the banner.
  *
  * Failure states (§4.4, §4.6, §4.8)
- * - Session ended mid-session (`unauthenticated` on rename, and on delete): dialog closes, reveal grid
- *   clears, neutral `role=status` banner (not an alert), focus on the Account heading.
+ * - Session ended mid-session (`unauthenticated` on rename, and on delete): `/login` replaces the
+ *   page, the account state (the reveal grid) is gone, neutral `role=status` banner (not an alert),
+ *   focus on the `Log in` heading, and logging in returns to `/account`.
  * - Log-in wait: retryAfterSeconds 3 → `Try again in 3 s`, 2, 1, then `Log in`; button disabled, fields
  *   editable; the breather and `You can try again now.` each announced exactly once.
- * - Register: cap reached on step 1 and on step 2 (form replaced, Back to the choice); the code
+ * - Register: cap reached on step 1 and on step 2 (form replaced, no Back, the cross-link stays); the code
  *   rejected at submit (back to step 1, code field focused and invalid, login kept); duplicate login.
  * - Manage: duplicate login on rename, a 500 on rename (in-form copy, nothing changes), wrong current
  *   password (inline, cleared, focused), change password success, the delete flow (password focused,
  *   button enabled only with a password, wrong password inline and cleared, success signs out).
- * - Log out the server does not answer: still the Account screen, with the unreachable banner.
+ * - Log out the server does not answer: still the landing page, with the unreachable banner.
  *
  * Keyboard (§7)
  * - Menu: Enter/Space/ArrowDown open on the first item, ArrowUp on the last, arrows wrap, Home/End,
  *   roving tabindex, Escape returns focus to the button, Tab closes and moves on, click outside closes.
- * - Dialog: focus starts on it, Tab never leaves it, Escape and Close return focus to the control.
- * - Escape twice in the delete confirm: first back to the sections, then the dialog closes.
- * - Tab order through the Account screen: choice, Log in, Register step 1 and step 2.
+ * - The delete confirmation: focus starts in its password field, Tab never leaves it, Escape and
+ *   Cancel return focus to `Delete account…`.
+ * - Tab order: the landing page, Log in, Register step 1 and step 2.
  *
  * Hunt
  * - Double-submit: a double click on Continue, Register or Log in sends one request.
  * - Back on step 2 keeps the code. The Account control is disabled while a pack opens.
  * - A 24-character login truncates in the header with a `title`, the page never scrolls sideways at
- *   phone width, the dialog keeps a `title`, the delete heading wraps the full login. An RTL login
- *   renders as text with its `title` in the header, the dialog and the title bar.
+ *   phone width, the Manage account page keeps a `title`, the delete heading wraps the full login. An
+ *   RTL login renders as text with its `title` in the header and the page, and never in the title bar.
  * - §7 "Forms": the submit button keeps focus while its request is in flight.
  */
 
@@ -77,26 +84,39 @@ const SESSION_ENDED = "You were logged out. Log in again to continue.";
 
 const accountControl = (page: Page, login = "Chris") =>
   page.getByRole("button", { name: `Account menu. Signed in as ${isolated(login)}`, exact: true });
-const accountHeading = (page: Page) => page.getByRole("heading", { name: "Your account" });
+const h1 = (page: Page, name: string) => page.getByRole("heading", { level: 1, name, exact: true });
+/** The landing page's heading, where a log-out or a deletion lands (navigation-and-landing.md §3.4, §3.5). */
+const landingHeading = (page: Page) => h1(page, "Anime TCG");
+const packsHeading = (page: Page) => h1(page, "Packs");
+const logInHeading = (page: Page) => h1(page, "Log in");
+const mainNav = (page: Page) => page.getByRole("navigation", { name: "Main" });
 const packButton = (page: Page) => page.getByRole("button", { name: /open booster pack/i });
 const loginField = (page: Page) => page.getByRole("textbox", { name: "Login", exact: true });
+/** The Log in and Register forms' Password field; on /account the delete dialog has its own (`deletePassword`). */
 const passwordField = (page: Page) => page.getByLabel("Password", { exact: true });
-const manageDialog = (page: Page) => page.getByRole("dialog", { name: "Manage account" });
+/** Manage account is the /account page now; its content is the main landmark. */
+const managePage = (page: Page) => page.getByRole("main");
+const confirmDialog = (page: Page, login = "Chris") => page.getByRole("dialog", { name: `Delete ${login}?` });
+const deletePassword = (page: Page, login = "Chris") =>
+  confirmDialog(page, login).getByLabel("Password", { exact: true });
 const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 /** A `role=status` element whose whole text is `text`: the app's live region, or a status banner. */
 const status = (page: Page, text: string) =>
   page.getByRole("status").filter({ hasText: new RegExp(`^${escapeRegExp(text)}$`) });
 
+/** From the landing page through the header link, so the page change focuses the `h1` as entry did before. */
 async function openLogIn(page: Page) {
   await page.goto("/");
-  await page.getByRole("button", { name: "Log in", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Log in" })).toBeFocused();
+  await mainNav(page).getByRole("link", { name: "Log in" }).click();
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(logInHeading(page)).toBeFocused();
 }
 
 async function openRegister(page: Page) {
   await page.goto("/");
-  await page.getByRole("button", { name: "Register", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Register" })).toBeFocused();
+  await mainNav(page).getByRole("link", { name: "Register" }).click();
+  await expect(page).toHaveURL(/\/register$/);
+  await expect(h1(page, "Register")).toBeFocused();
 }
 
 async function toStep2(page: Page, code = "ANIME-TCG-2026") {
@@ -113,13 +133,16 @@ async function fillCredentials(page: Page, login = "Chris", password = "correct 
 
 async function signedInPage(page: Page) {
   await page.goto("/");
+  await expect(page).toHaveURL(/\/packs$/);
   await expect(packButton(page)).toBeEnabled();
 }
 
+/** The menu item is a link to the /account page now (§3.4). */
 async function openManage(page: Page, login = "Chris") {
   await accountControl(page, login).click();
-  await page.getByRole("menuitem", { name: "Manage account…" }).click();
-  await expect(manageDialog(page)).toBeVisible();
+  await page.getByRole("menuitem", { name: "Manage account" }).click();
+  await expect(page).toHaveURL(/\/account$/);
+  await expect(h1(page, "Manage account")).toBeFocused();
 }
 
 /** Records every text the button shows, in order, so a countdown is checked without racing it. */
@@ -143,7 +166,7 @@ async function expectTabOrder(page: Page, stops: Locator[]) {
 }
 
 test.describe("boot (§3.1, §4.1)", () => {
-  test("while the session check runs: the title block only, and Loading… no earlier than 300 ms", async ({
+  test("while the session check runs: the wordmark only, and Loading… no earlier than 300 ms", async ({
     page,
     api,
   }) => {
@@ -156,21 +179,23 @@ test.describe("boot (§3.1, §4.1)", () => {
     await page.goto("/");
 
     await expect(page.getByText("Loading…")).toBeVisible();
-    await expect(page.getByRole("heading", { name: "Anime TCG", level: 1 })).toBeVisible();
-    // No Account control, no tabs, no pack button, no Account screen: nothing game-related.
+    // The wordmark is not a heading any more (navigation spec §6.1), and no page renders yet (§3.2 step 1).
+    await expect(page.getByText("Anime TCG", { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading")).toHaveCount(0);
+    // No Account control, no page links, no pack button, no forms: nothing game-related.
     await expect(page.getByRole("button")).toHaveCount(0);
-    await expect(accountHeading(page)).toHaveCount(0);
+    await expect(page.getByRole("navigation")).toHaveCount(0);
     const seen = await firstSeen(page);
     expect(seen["Loading…"] - seen["Anime TCG"]).toBeGreaterThanOrEqual(290);
 
     hold.release();
-    await expect(accountHeading(page)).toBeVisible();
+    await expect(landingHeading(page)).toBeVisible();
     await expect(page.getByText("Loading…")).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Account", exact: true })).toBeVisible();
+    await expect(mainNav(page).getByRole("link", { name: "Log in" })).toBeVisible();
     await expect(page).toHaveTitle("Anime TCG");
   });
 
-  test("unreachable: a red alert with Try again above a usable Account screen; Try again repeats the check", async ({
+  test("unreachable: a red alert with Try again above a usable landing page; Try again repeats the check", async ({
     page,
     api,
   }) => {
@@ -184,16 +209,18 @@ test.describe("boot (§3.1, §4.1)", () => {
 
     const banner = page.getByRole("alert").filter({ hasText: UNREACHABLE });
     await expect(banner).toBeVisible();
-    await expect(accountHeading(page)).toBeVisible();
-    await expect(page.getByRole("button", { name: "Log in", exact: true })).toBeEnabled();
-    await expect(page.getByRole("button", { name: "Register", exact: true })).toBeEnabled();
+    await expect(landingHeading(page)).toBeVisible();
+    await expect(mainNav(page).getByRole("link", { name: "Log in" })).toBeVisible();
+    await expect(mainNav(page).getByRole("link", { name: "Register" })).toBeVisible();
 
     await banner.getByRole("button", { name: "Try again" }).click();
     await expect.poll(() => api.count("GET /api/session")).toBe(2);
     await expect(banner).toBeVisible();
 
+    // The third answer names a session: a signed-in visitor at / is replaced by /packs (§3.2 step 4).
     await banner.getByRole("button", { name: "Try again" }).click();
     await expect(accountControl(page)).toBeVisible();
+    await expect(page).toHaveURL(/\/packs$/);
     await expect(page.getByRole("alert")).toHaveCount(0);
     expect(api.count("GET /api/session")).toBe(3);
   });
@@ -204,10 +231,9 @@ test.describe("boot (§3.1, §4.1)", () => {
   }) => {
     api.on("GET /api/session", "abort");
     api.on("POST /api/session/login", signedIn(CHRIS));
-    await page.goto("/");
+    await page.goto("/login");
     await expect(page.getByRole("alert").filter({ hasText: UNREACHABLE })).toBeVisible();
 
-    await page.getByRole("button", { name: "Log in", exact: true }).click();
     await loginField(page).fill("Chris");
     await passwordField(page).fill("correct horse");
     await page.getByRole("button", { name: "Log in", exact: true }).click();
@@ -218,7 +244,7 @@ test.describe("boot (§3.1, §4.1)", () => {
 });
 
 test.describe("register (§3.3, §4.4-A)", () => {
-  test("two steps: trimmed code and login, untrimmed password; lands on Booster with the pack focused", async ({
+  test("two steps: trimmed code and login, untrimmed password; lands on /packs with its heading focused", async ({
     page,
     api,
   }) => {
@@ -226,7 +252,7 @@ test.describe("register (§3.3, §4.4-A)", () => {
     api.on("POST /api/accounts/check-invite", noContent);
     api.on("POST /api/accounts/register", { status: 201, json: { signedIn: true, account: CHRIS } });
     await openRegister(page);
-    await expect(page.getByRole("heading", { name: "Register" })).toHaveAccessibleDescription("Step 1 of 2");
+    await expect(h1(page, "Register")).toHaveAccessibleDescription("Step 1 of 2");
 
     await toStep2(page, "  anime-tcg-2026  ");
     await expect(loginField(page)).toBeFocused();
@@ -236,14 +262,16 @@ test.describe("register (§3.3, §4.4-A)", () => {
     await fillCredentials(page, "  Chris ", " correct horse ");
     await page.getByRole("button", { name: "Register", exact: true }).click();
 
+    // Focus goes to the destination's h1, not the pack button (navigation spec §3.6 step 3).
     await expect(accountControl(page)).toBeVisible();
-    await expect(packButton(page)).toBeFocused();
-    await expect(page.getByRole("button", { name: "Booster", exact: true })).toHaveAttribute(
-      "aria-pressed",
-      "true",
+    await expect(page).toHaveURL(/\/packs$/);
+    await expect(packsHeading(page)).toBeFocused();
+    await expect(mainNav(page).getByRole("link", { name: "Packs", exact: true })).toHaveAttribute(
+      "aria-current",
+      "page",
     );
-    await expect(page.getByRole("button", { name: "Collection (0)" })).toBeVisible();
-    await expect(page).toHaveTitle(`${isolated("Chris")} · Anime TCG`);
+    await expect(mainNav(page).getByRole("link", { name: "Collection (0)" })).toBeVisible();
+    await expect(page).toHaveTitle("Packs · Anime TCG");
     await expect(status(page, "Registered Chris. You're now on Chris.")).toHaveCount(1);
     expect(api.bodies("POST /api/accounts/check-invite")).toEqual([{ inviteCode: "anime-tcg-2026" }]);
     expect(api.bodies("POST /api/accounts/register")).toEqual([
@@ -251,7 +279,10 @@ test.describe("register (§3.3, §4.4-A)", () => {
     ]);
   });
 
-  test("cap reached on step 1: the form is replaced by the cap message and Back", async ({ page, api }) => {
+  test("cap reached on step 1: the form is replaced by the cap message; no Back, the Log in link stays", async ({
+    page,
+    api,
+  }) => {
     api.on("GET /api/session", signedOut);
     api.on("POST /api/accounts/check-invite", envelope(403, "cap_reached"));
     await openRegister(page);
@@ -265,11 +296,16 @@ test.describe("register (§3.3, §4.4-A)", () => {
     ).toBeVisible();
     await expect(page.getByRole("textbox", { name: "Invite code" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Continue" })).toHaveCount(0);
-    await page.getByRole("button", { name: "Back" }).click();
-    await expect(accountHeading(page)).toBeFocused();
+    // Back was the Account screen's; the browser's Back and the links leave the page (§3.5 step 6).
+    await expect(page.getByRole("button", { name: "Back" })).toHaveCount(0);
+    await page.getByRole("main").getByRole("link", { name: "Log in" }).click();
+    await expect(logInHeading(page)).toBeFocused();
   });
 
-  test("cap reached on step 2: the form is replaced by the cap message and Back", async ({ page, api }) => {
+  test("cap reached on step 2: the form is replaced by the cap message; no Back, still signed out", async ({
+    page,
+    api,
+  }) => {
     api.on("GET /api/session", signedOut);
     api.on("POST /api/accounts/check-invite", noContent);
     api.on("POST /api/accounts/register", envelope(403, "cap_reached"));
@@ -285,8 +321,8 @@ test.describe("register (§3.3, §4.4-A)", () => {
     ).toBeVisible();
     await expect(loginField(page)).toHaveCount(0);
     await expect(passwordField(page)).toHaveCount(0);
-    await page.getByRole("button", { name: "Back" }).click();
-    await expect(accountHeading(page)).toBeFocused();
+    await expect(page.getByRole("button", { name: "Back" })).toHaveCount(0);
+    await expect(page.getByRole("main").getByRole("link", { name: "Log in" })).toBeVisible();
     await expect(page.getByRole("button", { name: /^Account menu/ })).toHaveCount(0);
   });
 
@@ -359,6 +395,8 @@ test.describe("register (§3.3, §4.4-A)", () => {
     await expect(page.getByText("Step 1 of 2")).toBeVisible();
     await expect(code).toBeFocused();
     await expect(code).toHaveValue("kept-code-9");
+    // Both steps are one page: step 2's Back is in the form, not in the browser's history (§3.5 step 6).
+    await expect(page).toHaveURL(/\/register$/);
     await page.getByRole("button", { name: "Continue" }).click();
     await expect(page.getByText("Step 2 of 2")).toBeVisible();
     expect(api.bodies("POST /api/accounts/check-invite")).toEqual([
@@ -369,7 +407,7 @@ test.describe("register (§3.3, §4.4-A)", () => {
 });
 
 test.describe("log in (§3.4, §4.4-B)", () => {
-  test("logs in with the trimmed login and the untrimmed password; lands on Booster with the pack focused", async ({
+  test("logs in with the trimmed login and the untrimmed password; lands on /packs with its heading focused", async ({
     page,
     api,
   }) => {
@@ -385,8 +423,9 @@ test.describe("log in (§3.4, §4.4-B)", () => {
     await passwordField(page).fill(" secret pw ");
     await page.getByRole("button", { name: "Log in", exact: true }).click();
 
-    await expect(packButton(page)).toBeFocused();
-    await expect(page).toHaveTitle(`${isolated("Chris")} · Anime TCG`);
+    await expect(packsHeading(page)).toBeFocused();
+    await expect(page).toHaveURL(/\/packs$/);
+    await expect(page).toHaveTitle("Packs · Anime TCG");
     await expect(status(page, "Logged in. You're now on Chris.")).toHaveCount(1);
     expect(api.bodies("POST /api/session/login")).toEqual([{ login: "Chris", password: " secret pw " }]);
   });
@@ -457,14 +496,14 @@ test.describe("log in (§3.4, §4.4-B)", () => {
 });
 
 test.describe("signed in (§3.5, §3.6)", () => {
-  test("keyboard log out: Account screen, title reset, heading focused, Logged out. announced, no body sent", async ({
+  test("keyboard log out: the landing page, title reset, heading focused, Logged out. announced, no body sent", async ({
     page,
     api,
   }) => {
     api.on("GET /api/session", signedIn(CHRIS));
     api.on("POST /api/session/logout", noContent);
     await signedInPage(page);
-    await expect(page).toHaveTitle(`${isolated("Chris")} · Anime TCG`);
+    await expect(page).toHaveTitle("Packs · Anime TCG");
 
     await accountControl(page).focus();
     await page.keyboard.press("Enter");
@@ -472,17 +511,18 @@ test.describe("signed in (§3.5, §3.6)", () => {
     await expect(page.getByRole("menuitem", { name: "Log out" })).toBeFocused();
     await page.keyboard.press("Enter");
 
-    await expect(accountHeading(page)).toBeFocused();
+    await expect(landingHeading(page)).toBeFocused();
+    await expect(page).toHaveURL(/\/$/);
     await expect(page).toHaveTitle("Anime TCG");
     await expect(status(page, "Logged out.")).toHaveCount(1);
-    await expect(page.getByRole("button", { name: "Booster", exact: true })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: "Account", exact: true })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Packs", exact: true })).toHaveCount(0);
+    await expect(mainNav(page).getByRole("link", { name: "Log in" })).toBeVisible();
     expect(api.bodies("POST /api/session/logout")).toEqual([undefined]);
     // The session query never refetches on its own (accepted decision, spec §4.8).
     expect(api.count("GET /api/session")).toBe(1);
   });
 
-  test("a log-out the server does not answer still drops to the Account screen, with the banner", async ({
+  test("a log-out the server does not answer still signs out to the landing page, with the banner", async ({
     page,
     api,
   }) => {
@@ -492,7 +532,7 @@ test.describe("signed in (§3.5, §3.6)", () => {
     await accountControl(page).click();
     await page.getByRole("menuitem", { name: "Log out" }).click();
 
-    await expect(accountHeading(page)).toBeFocused();
+    await expect(landingHeading(page)).toBeFocused();
     await expect(page.getByRole("alert").filter({ hasText: UNREACHABLE })).toBeVisible();
     await expect(page).toHaveTitle("Anime TCG");
   });
@@ -502,7 +542,7 @@ test.describe("signed in (§3.5, §3.6)", () => {
     await signedInPage(page);
     await packButton(page).click();
     await expect(page.getByRole("article")).toHaveCount(5);
-    await page.getByRole("button", { name: "Collection (5)" }).click();
+    await mainNav(page).getByRole("link", { name: "Collection (5)" }).click();
 
     const messages: string[] = [];
     page.once("dialog", (dialog) => {
@@ -518,82 +558,101 @@ test.describe("signed in (§3.5, §3.6)", () => {
     page.once("dialog", (dialog) => void dialog.accept());
     await page.getByRole("button", { name: "Reset" }).click();
     await expect(page.getByText("Your collection is empty. Open a pack to get started.")).toBeVisible();
-    await expect(page.getByRole("button", { name: "Collection (0)" })).toBeVisible();
+    await expect(mainNav(page).getByRole("link", { name: "Collection (0)" })).toBeVisible();
   });
 
-  test("session ended on rename: dialog closes, reveal grid clears, neutral banner, focus on the heading", async ({
+  test("session ended on rename: /login replaces the page, account state gone, neutral banner, focus on Log in", async ({
     page,
     api,
   }) => {
     api.on("GET /api/session", signedIn(CHRIS));
     api.on("PATCH /api/account/login", envelope(401, "unauthenticated"));
+    api.on("POST /api/session/login", signedIn(CHRIS));
     await signedInPage(page);
     await packButton(page).click();
     await expect(page.getByRole("article")).toHaveCount(5);
     await openManage(page);
-    await manageDialog(page).getByRole("textbox", { name: "New login" }).fill("Kris");
-    await manageDialog(page).getByRole("button", { name: "Save" }).click();
+    await managePage(page).getByRole("textbox", { name: "New login" }).fill("Kris");
+    await managePage(page).getByRole("button", { name: "Save" }).click();
 
-    await expect(page.getByRole("dialog")).toHaveCount(0);
-    await expect(accountHeading(page)).toBeFocused();
-    await expect(page.getByRole("article")).toHaveCount(0);
+    await expect(page).toHaveURL(/\/login$/);
+    await expect(logInHeading(page)).toBeFocused();
     await expect(status(page, SESSION_ENDED)).toBeVisible();
     await expect(page.getByRole("alert")).toHaveCount(0);
-    await expect(page).toHaveTitle("Anime TCG");
-    await expect(page.getByRole("button", { name: /^Collection/ })).toHaveCount(0);
-    // The Log in form is one click away.
+    await expect(page).toHaveTitle("Log in · Anime TCG");
+    await expect(page.getByRole("link", { name: /^Collection/ })).toHaveCount(0);
+    // The banner says why; the guard line would say it twice (navigation spec §3.3 step 4).
+    await expect(page.getByText("Log in to manage your account.")).toHaveCount(0);
+
+    // The Log in form is right there, and it returns to the page the session ended on.
+    await loginField(page).fill("Chris");
+    await passwordField(page).fill("correct horse");
     await page.getByRole("button", { name: "Log in", exact: true }).click();
-    await expect(page.getByRole("heading", { name: "Log in" })).toBeFocused();
+    await expect(page).toHaveURL(/\/account$/);
+    await expect(h1(page, "Manage account")).toBeFocused();
+    // The reveal grid went with the account state (accounts.md §4.8).
+    await mainNav(page).getByRole("link", { name: "Packs", exact: true }).click();
+    await expect(packsHeading(page)).toBeFocused();
+    await expect(page.getByRole("article")).toHaveCount(0);
   });
 
-  test("session ended on delete: the confirm panel closes the same way", async ({ page, api }) => {
+  test("session ended on delete: the confirmation closes with the page the same way", async ({
+    page,
+    api,
+  }) => {
     api.on("GET /api/session", signedIn(CHRIS));
     api.on("POST /api/account/delete", envelope(401, "unauthenticated"));
     await signedInPage(page);
     await openManage(page);
     await page.getByRole("button", { name: "Delete account…" }).click();
-    await passwordField(page).fill("correct horse");
+    await deletePassword(page).fill("correct horse");
     await page.getByRole("button", { name: "Delete Chris" }).click();
 
     await expect(page.getByRole("dialog")).toHaveCount(0);
-    await expect(accountHeading(page)).toBeFocused();
+    await expect(page).toHaveURL(/\/login$/);
+    await expect(logInHeading(page)).toBeFocused();
     await expect(status(page, SESSION_ENDED)).toBeVisible();
   });
 });
 
 test.describe("manage account (§3.5.3, §4.6)", () => {
-  test("opens with the account header: login, card count and creation date, then three sections", async ({
+  test("the page shows the account header: login, card count and creation date, then three sections", async ({
     page,
     api,
   }) => {
     api.on("GET /api/session", signedIn(makeAccount({ cards: 3 })));
     await signedInPage(page);
     await openManage(page);
-    const dialog = manageDialog(page);
-    await expect(dialog.getByText("Chris", { exact: true })).toHaveAttribute("title", "Chris");
-    await expect(dialog.getByText("3 cards · Created 28 Oct 2026")).toBeVisible();
-    await expect(dialog.getByRole("heading", { level: 3 })).toHaveText([
+    const manage = managePage(page);
+    await expect(manage.getByText("Chris", { exact: true })).toHaveAttribute("title", "Chris");
+    await expect(manage.getByText("3 cards · Created 28 Oct 2026")).toBeVisible();
+    // The dialog's h3s are the page's h2s (navigation spec §3.4 step 2).
+    await expect(manage.getByRole("heading", { level: 2 })).toHaveText([
       "Login",
       "Password",
       "Delete account",
     ]);
-    await expect(dialog.getByRole("button", { name: "Save" })).toBeDisabled();
+    await expect(manage.getByRole("button", { name: "Save" })).toBeDisabled();
+    await expect(page).toHaveTitle("Manage account · Anime TCG");
   });
 
-  test("rename: header, title, dialog header and live region follow the new login", async ({ page, api }) => {
+  test("rename: header, page header and live region follow the new login; the title names the page", async ({
+    page,
+    api,
+  }) => {
     api.on("GET /api/session", signedIn(CHRIS));
     api.on("PATCH /api/account/login", accountAnswer(makeAccount({ login: "Kris" })));
     await signedInPage(page);
     await openManage(page);
-    const dialog = manageDialog(page);
-    await dialog.getByRole("textbox", { name: "New login" }).fill("  Kris ");
-    await dialog.getByRole("button", { name: "Save" }).click();
+    const manage = managePage(page);
+    await manage.getByRole("textbox", { name: "New login" }).fill("  Kris ");
+    await manage.getByRole("button", { name: "Save" }).click();
 
     await expect(accountControl(page, "Kris")).toBeAttached();
-    await expect(page).toHaveTitle(`${isolated("Kris")} · Anime TCG`);
-    await expect(dialog.getByText("Kris", { exact: true })).toHaveAttribute("title", "Kris");
+    await expect(page).toHaveTitle("Manage account · Anime TCG");
+    await expect(manage.getByText("Kris", { exact: true })).toHaveAttribute("title", "Kris");
     await expect(status(page, "Login changed to Kris.")).toHaveCount(1);
-    await expect(dialog.getByRole("button", { name: "Save" })).toBeDisabled();
+    await expect(manage.getByRole("button", { name: "Save" })).toBeDisabled();
     expect(api.bodies("PATCH /api/account/login")).toEqual([{ login: "Kris" }]);
   });
 
@@ -605,15 +664,15 @@ test.describe("manage account (§3.5.3, §4.6)", () => {
     api.on("PATCH /api/account/login", envelope(409, "login_taken"));
     await signedInPage(page);
     await openManage(page);
-    const field = manageDialog(page).getByRole("textbox", { name: "New login" });
+    const field = managePage(page).getByRole("textbox", { name: "New login" });
     await field.fill("Taken");
-    await manageDialog(page).getByRole("button", { name: "Save" }).click();
+    await managePage(page).getByRole("button", { name: "Save" }).click();
 
     await expect(field).toBeFocused();
     await expect(field).toHaveAttribute("aria-invalid", "true");
     await expect(field).toHaveAccessibleDescription('The login "Taken" is already taken.');
     await expect(accountControl(page)).toBeAttached();
-    await expect(page).toHaveTitle(`${isolated("Chris")} · Anime TCG`);
+    await expect(page).toHaveTitle("Manage account · Anime TCG");
   });
 
   test("a 500 on rename shows the in-form unreachable copy and changes nothing", async ({ page, api }) => {
@@ -624,21 +683,21 @@ test.describe("manage account (§3.5.3, §4.6)", () => {
     });
     await signedInPage(page);
     await openManage(page);
-    const dialog = manageDialog(page);
-    await dialog.getByRole("textbox", { name: "New login" }).fill("Kris");
-    await dialog.getByRole("button", { name: "Save" }).click();
+    const manage = managePage(page);
+    await manage.getByRole("textbox", { name: "New login" }).fill("Kris");
+    await manage.getByRole("button", { name: "Save" }).click();
 
-    const banner = dialog.getByRole("alert").filter({ hasText: UNREACHABLE_FORM });
+    const banner = manage.getByRole("alert").filter({ hasText: UNREACHABLE_FORM });
     await expect(banner).toBeVisible();
-    await expect(dialog.getByRole("textbox", { name: "New login" })).toHaveValue("Kris");
-    await expect(page).toHaveTitle(`${isolated("Chris")} · Anime TCG`);
-    await expect(dialog.getByText("Chris", { exact: true })).toBeVisible();
+    await expect(manage.getByRole("textbox", { name: "New login" })).toHaveValue("Kris");
+    await expect(accountControl(page)).toBeAttached();
+    await expect(manage.getByText("Chris", { exact: true })).toBeVisible();
 
     // A proxy error page (not the envelope) reads the same.
-    await dialog.getByRole("button", { name: "Save" }).click();
+    await manage.getByRole("button", { name: "Save" }).click();
     await expect.poll(() => api.count("PATCH /api/account/login")).toBe(2);
     await expect(banner).toBeVisible();
-    await expect(page).toHaveTitle(`${isolated("Chris")} · Anime TCG`);
+    await expect(accountControl(page)).toBeAttached();
   });
 
   test("a wrong current password is inline on that field, cleared and focused; success clears and announces", async ({
@@ -649,33 +708,33 @@ test.describe("manage account (§3.5.3, §4.6)", () => {
     api.on("POST /api/account/change-password", envelope(403, "wrong_password"), noContent);
     await signedInPage(page);
     await openManage(page);
-    const dialog = manageDialog(page);
-    const current = dialog.getByLabel("Current password", { exact: true });
+    const manage = managePage(page);
+    const current = manage.getByLabel("Current password", { exact: true });
     await current.fill("not it at all");
-    await dialog.getByLabel("New password", { exact: true }).fill("brand new pw");
-    await dialog.getByLabel("Confirm new password", { exact: true }).fill("brand new pw");
-    await dialog.getByRole("button", { name: "Change password" }).click();
+    await manage.getByLabel("New password", { exact: true }).fill("brand new pw");
+    await manage.getByLabel("Confirm new password", { exact: true }).fill("brand new pw");
+    await manage.getByRole("button", { name: "Change password" }).click();
 
     await expect(current).toBeFocused();
     await expect(current).toHaveValue("");
     await expect(current).toHaveAttribute("aria-invalid", "true");
     await expect(current).toHaveAccessibleDescription("That password is incorrect.");
-    await expect(dialog.getByLabel("New password", { exact: true })).toHaveValue("brand new pw");
+    await expect(manage.getByLabel("New password", { exact: true })).toHaveValue("brand new pw");
 
     await current.fill("the old one");
-    await dialog.getByRole("button", { name: "Change password" }).click();
-    await expect(dialog.getByText("Password changed.")).toBeVisible();
+    await manage.getByRole("button", { name: "Change password" }).click();
+    await expect(manage.getByText("Password changed.")).toBeVisible();
     await expect(status(page, "Password changed.")).toHaveCount(1);
     await expect(current).toHaveValue("");
-    await expect(dialog.getByLabel("New password", { exact: true })).toHaveValue("");
-    await expect(dialog.getByLabel("Confirm new password", { exact: true })).toHaveValue("");
+    await expect(manage.getByLabel("New password", { exact: true })).toHaveValue("");
+    await expect(manage.getByLabel("Confirm new password", { exact: true })).toHaveValue("");
     expect(api.bodies("POST /api/account/change-password")).toEqual([
       { currentPassword: "not it at all", newPassword: "brand new pw" },
       { currentPassword: "the old one", newPassword: "brand new pw" },
     ]);
   });
 
-  test("delete: password focused, button needs a password, wrong password inline and cleared, success signs out", async ({
+  test("delete: password focused, button needs a password, wrong password inline and cleared, success replaces the page with /", async ({
     page,
     api,
   }) => {
@@ -685,11 +744,11 @@ test.describe("manage account (§3.5.3, §4.6)", () => {
     await openManage(page);
     await page.getByRole("button", { name: "Delete account…" }).click();
 
-    const confirm = page.getByRole("dialog", { name: "Delete Chris?" });
+    const confirm = confirmDialog(page);
     await expect(confirm).toHaveAccessibleDescription(
       "This permanently deletes Chris and its 3 cards. There is no undo.",
     );
-    const password = confirm.getByLabel("Password", { exact: true });
+    const password = deletePassword(page);
     const remove = confirm.getByRole("button", { name: "Delete Chris", exact: true });
     await expect(password).toBeFocused();
     await expect(remove).toBeDisabled();
@@ -708,7 +767,8 @@ test.describe("manage account (§3.5.3, §4.6)", () => {
     await password.fill("correct horse");
     await password.press("Enter");
     await expect(page.getByRole("dialog")).toHaveCount(0);
-    await expect(accountHeading(page)).toBeFocused();
+    await expect(page).toHaveURL(/\/$/);
+    await expect(landingHeading(page)).toBeFocused();
     await expect(status(page, "Deleted Chris.")).toHaveCount(1);
     await expect(page).toHaveTitle("Anime TCG");
     expect(api.bodies("POST /api/account/delete")).toEqual([
@@ -717,7 +777,7 @@ test.describe("manage account (§3.5.3, §4.6)", () => {
     ]);
   });
 
-  test("Escape twice in the delete confirm: back to the sections, then the dialog closes onto the control", async ({
+  test("Escape in the delete confirmation closes it onto Delete account…; the page stays", async ({
     page,
     api,
   }) => {
@@ -725,15 +785,12 @@ test.describe("manage account (§3.5.3, §4.6)", () => {
     await signedInPage(page);
     await openManage(page);
     await page.getByRole("button", { name: "Delete account…" }).click();
-    await expect(page.getByRole("dialog", { name: "Delete Chris?" })).toBeVisible();
-
-    await page.keyboard.press("Escape");
-    await expect(manageDialog(page)).toBeVisible();
-    await expect(manageDialog(page).getByRole("button", { name: "Delete account…" })).toBeVisible();
+    await expect(confirmDialog(page)).toBeVisible();
 
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog")).toHaveCount(0);
-    await expect(accountControl(page)).toBeFocused();
+    await expect(page.getByRole("button", { name: "Delete account…" })).toBeFocused();
+    await expect(page).toHaveURL(/\/account$/);
   });
 });
 
@@ -743,7 +800,7 @@ test.describe("keyboard (§7)", () => {
     await signedInPage(page);
     const control = accountControl(page);
     const menu = page.getByRole("menu", { name: `Account menu. Signed in as ${isolated("Chris")}` });
-    const manage = page.getByRole("menuitem", { name: "Manage account…" });
+    const manage = page.getByRole("menuitem", { name: "Manage account" });
     const logOut = page.getByRole("menuitem", { name: "Log out" });
     await expect(control).toHaveAttribute("aria-haspopup", "menu");
     await expect(control).toHaveAttribute("aria-expanded", "false");
@@ -783,7 +840,7 @@ test.describe("keyboard (§7)", () => {
     await page.keyboard.press("ArrowUp");
     await expect(logOut).toBeFocused();
 
-    // Tab closes the menu and moves on past the button, to the pack button.
+    // Tab closes the menu and moves on past the button, to the pack button (the h1 is not a tab stop).
     await page.keyboard.press("Tab");
     await expect(menu).toHaveCount(0);
     await expect(packButton(page)).toBeFocused();
@@ -791,84 +848,85 @@ test.describe("keyboard (§7)", () => {
     // Clicking outside closes.
     await control.click();
     await expect(menu).toBeVisible();
-    await page.getByRole("heading", { name: "Anime TCG", level: 1 }).click();
+    await packsHeading(page).click();
     await expect(menu).toHaveCount(0);
+
+    // Space on the link item goes to the page, as Enter does (navigation spec §3.4 step 1).
+    await control.focus();
+    await page.keyboard.press("Enter");
+    await page.keyboard.press("Space");
+    await expect(page).toHaveURL(/\/account$/);
+    await expect(h1(page, "Manage account")).toBeFocused();
   });
 
-  test("the dialog: focus starts on it, Tab stays inside, Escape and Close return focus to the control", async ({
+  test("the delete confirmation: focus in its field, Tab stays inside, Escape and Cancel return to its trigger", async ({
     page,
     api,
   }) => {
     api.on("GET /api/session", signedIn(CHRIS));
     await signedInPage(page);
-    const control = accountControl(page);
-    await control.focus();
+    await openManage(page);
+    const trigger = page.getByRole("button", { name: "Delete account…" });
+    await trigger.focus();
     await page.keyboard.press("Enter");
-    await page.keyboard.press("Enter");
-    const dialog = manageDialog(page);
+    const dialog = confirmDialog(page);
     await expect(dialog).toBeVisible();
-    await expect(dialog).toBeFocused();
+    await expect(deletePassword(page)).toBeFocused();
     await expect(page.getByRole("menu")).toHaveCount(0);
 
-    await page.keyboard.press("Tab");
-    await expect(dialog.getByRole("button", { name: "Close" })).toBeFocused();
     // Twice round the dialog's controls: focus never lands on the page behind the modal.
-    for (let i = 0; i < 24; i += 1) {
+    for (let i = 0; i < 12; i += 1) {
       await page.keyboard.press("Tab");
       const outside = await dialog.evaluate((element) => {
         const active = document.activeElement;
         return active !== null && active !== document.body && !element.contains(active);
       });
-      expect(outside, `Tab ${i + 2} left the dialog`).toBe(false);
+      expect(outside, `Tab ${i + 1} left the dialog`).toBe(false);
     }
 
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog")).toHaveCount(0);
-    await expect(control).toBeFocused();
+    await expect(trigger).toBeFocused();
 
     await page.keyboard.press("Enter");
-    await page.keyboard.press("Enter");
-    await expect(dialog).toBeFocused();
-    await page.keyboard.press("Tab");
-    await expect(dialog.getByRole("button", { name: "Close" })).toBeFocused();
-    await page.keyboard.press("Enter");
+    await expect(deletePassword(page)).toBeFocused();
+    await dialog.getByRole("button", { name: "Cancel" }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
-    await expect(control).toBeFocused();
+    await expect(trigger).toBeFocused();
   });
 
-  test("Tab order through the Account screen: choice, Log in, Register step 1 and step 2", async ({
-    page,
-    api,
-  }) => {
+  test("Tab order: the landing page, Log in, Register step 1 and step 2", async ({ page, api }) => {
     api.on("GET /api/session", signedOut);
     api.on("POST /api/accounts/check-invite", noContent);
     await page.goto("/");
-    await expect(accountHeading(page)).toBeVisible();
+    await expect(landingHeading(page)).toBeVisible();
+    const main = page.getByRole("main");
     await expectTabOrder(page, [
+      page.getByRole("link", { name: "Skip to content" }),
+      page.getByRole("link", { name: "Anime TCG" }),
+      mainNav(page).getByRole("link", { name: "Log in" }),
+      mainNav(page).getByRole("link", { name: "Register" }),
+      main.getByRole("link", { name: "Register" }),
+      main.getByRole("link", { name: "Log in" }),
       page.getByRole("link", { name: "AniList" }),
-      page.getByRole("button", { name: "Account", exact: true }),
-      page.getByRole("button", { name: "Log in", exact: true }),
-      page.getByRole("button", { name: "Register", exact: true }),
     ]);
 
-    await page.getByRole("button", { name: "Log in", exact: true }).click();
-    await expect(page.getByRole("heading", { name: "Log in" })).toBeFocused();
+    await mainNav(page).getByRole("link", { name: "Log in" }).click();
+    await expect(logInHeading(page)).toBeFocused();
     await expectTabOrder(page, [
       loginField(page),
       passwordField(page),
       page.getByRole("button", { name: "Show password", exact: true }),
       page.getByRole("button", { name: "Log in", exact: true }),
-      page.getByRole("button", { name: "Back" }),
+      main.getByRole("link", { name: "Register" }),
     ]);
 
     await page.keyboard.press("Enter");
-    await expect(accountHeading(page)).toBeFocused();
-    await page.getByRole("button", { name: "Register", exact: true }).click();
-    await expect(page.getByRole("heading", { name: "Register" })).toBeFocused();
+    await expect(h1(page, "Register")).toBeFocused();
     await expectTabOrder(page, [
       page.getByRole("textbox", { name: "Invite code" }),
       page.getByRole("button", { name: "Continue" }),
-      page.getByRole("button", { name: "Back" }),
+      main.getByRole("link", { name: "Log in" }),
     ]);
 
     await toStep2(page);
@@ -880,6 +938,7 @@ test.describe("keyboard (§7)", () => {
       page.getByRole("button", { name: "Show password confirmation", exact: true }),
       page.getByRole("button", { name: "Register", exact: true }),
       page.getByRole("button", { name: "Back" }),
+      main.getByRole("link", { name: "Log in" }),
     ]);
   });
 });
@@ -915,7 +974,7 @@ test.describe("hunt", () => {
         }
       }
 
-      await page.getByRole("button", { name: button, exact: true }).dblclick();
+      await page.getByRole("main").getByRole("button", { name: button, exact: true }).dblclick();
       await expect.poll(() => api.count(route)).toBe(1);
       // Give a second request every chance to leave before the first one answers.
       await page.waitForTimeout(300);
@@ -970,7 +1029,7 @@ test.describe("hunt", () => {
     expect(await page.evaluate(() => window.__labels)).toEqual(["false", "true", "false"]);
   });
 
-  test("a 24-character login truncates in the header and keeps its full text in the title", async ({
+  test("a 24-character login truncates in the header and keeps its full text in the title attribute", async ({
     page,
     api,
   }) => {
@@ -986,10 +1045,11 @@ test.describe("hunt", () => {
     }));
     expect(header.clientWidth).toBeLessThanOrEqual(128); // max-w-[8rem] on phone
     expect(header.scrollWidth).toBeGreaterThan(header.clientWidth); // truncated; the title has it all
-    await expect(page).toHaveTitle(`${isolated(LONG_LOGIN)} · Anime TCG`);
+    // The title bar names the page, never the login (navigation spec §3.1 rule 4).
+    await expect(page).toHaveTitle("Packs · Anime TCG");
   });
 
-  test("§5 phone header: a 24-character login does not push the page sideways at 375 px", async ({
+  test("§5.1 phone header: a 24-character login does not push the page sideways at 375 px", async ({
     page,
     api,
   }) => {
@@ -997,15 +1057,19 @@ test.describe("hunt", () => {
     await page.setViewportSize({ width: 375, height: 740 });
     await signedInPage(page);
 
-    // Row 2 on phone is the view tabs left and the Account control right, the login truncated (§5 "Header").
+    // Row 1 on phone is the wordmark and the Account control, the login truncated; row 2 the page links.
     const box = await accountControl(page, LONG_LOGIN).boundingBox();
     expect(box!.x + box!.width, "the Account control's right edge").toBeLessThanOrEqual(375);
+    const wordmark = await page.getByRole("link", { name: "Anime TCG" }).boundingBox();
+    expect(Math.abs(wordmark!.y - box!.y), "wordmark and control share row 1").toBeLessThan(box!.height);
+    const nav = await mainNav(page).boundingBox();
+    expect(nav!.y, "the page links sit below row 1").toBeGreaterThanOrEqual(box!.y + box!.height);
     expect(await page.evaluate(() => document.documentElement.scrollWidth), "page width").toBeLessThanOrEqual(
       375,
     );
   });
 
-  test("a 24-character login: the dialog keeps it in a title and the delete heading wraps it in full", async ({
+  test("a 24-character login: the Manage account page keeps it in a title and the delete heading wraps it in full", async ({
     page,
     api,
   }) => {
@@ -1014,15 +1078,17 @@ test.describe("hunt", () => {
     await signedInPage(page);
     await openManage(page, LONG_LOGIN);
 
-    const dialog = manageDialog(page);
-    await expect(dialog.getByText(LONG_LOGIN, { exact: true })).toHaveAttribute("title", LONG_LOGIN);
-    const dialogBox = await dialog.boundingBox();
+    const manage = managePage(page);
+    await expect(manage.getByText(LONG_LOGIN, { exact: true })).toHaveAttribute("title", LONG_LOGIN);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth), "page width").toBeLessThanOrEqual(
+      375,
+    );
+
+    await manage.getByRole("button", { name: "Delete account…" }).click();
+    const confirm = confirmDialog(page, LONG_LOGIN);
+    const dialogBox = await confirm.boundingBox();
     expect(dialogBox!.x).toBeGreaterThanOrEqual(0);
     expect(dialogBox!.x + dialogBox!.width).toBeLessThanOrEqual(375);
-    expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
-
-    await dialog.getByRole("button", { name: "Delete account…" }).click();
-    const confirm = page.getByRole("dialog", { name: `Delete ${LONG_LOGIN}?` });
     const heading = confirm.getByRole("heading", { name: `Delete ${LONG_LOGIN}?` });
     await expect(heading).toHaveText(`Delete ${LONG_LOGIN}?`);
     // Headings and confirm panels wrap the login instead of truncating it (§5 "Truncation").
@@ -1035,7 +1101,7 @@ test.describe("hunt", () => {
     ["an RTL override", "\u202Egnp.exe"],
     ["a Hebrew", "שלום עולם"],
   ] as const) {
-    test(`${kind} login renders as text with its title in the header, the dialog and the title bar`, async ({
+    test(`${kind} login renders as text with its title in the header and the page, and stays out of the title bar`, async ({
       page,
       api,
     }) => {
@@ -1043,16 +1109,16 @@ test.describe("hunt", () => {
       await signedInPage(page);
       const control = accountControl(page, login);
       await expect(control.getByText(login, { exact: true })).toHaveAttribute("title", login);
-      await expect(page).toHaveTitle(`${isolated(login)} · Anime TCG`);
+      await expect(page).toHaveTitle("Packs · Anime TCG");
       await openManage(page, login);
-      const dialogLogin = manageDialog(page).getByText(login, { exact: true });
-      await expect(dialogLogin).toHaveAttribute("title", login);
-      expect(await dialogLogin.evaluate((element) => element.textContent)).toBe(login);
+      const pageLogin = managePage(page).getByText(login, { exact: true });
+      await expect(pageLogin).toHaveAttribute("title", login);
+      expect(await pageLogin.evaluate((element) => element.textContent)).toBe(login);
       await page.getByRole("button", { name: "Delete account…" }).click();
       await expect(page.getByRole("button", { name: `Delete ${login}`, exact: true })).toBeDisabled();
       await page.keyboard.press("Escape");
-      await page.keyboard.press("Escape");
-      await expect(control).toBeFocused();
+      await expect(page.getByRole("button", { name: "Delete account…" })).toBeFocused();
+      expect(await page.title()).not.toContain(login);
     });
   }
 });

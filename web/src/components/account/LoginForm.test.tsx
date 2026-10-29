@@ -1,5 +1,6 @@
 import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { envelope, makeAccount, mockFetch, sentBody } from "../../test/api";
 import { renderWithProviders } from "../../test/render";
@@ -8,12 +9,14 @@ import { fill } from "../../test/user";
 
 const account = makeAccount({ login: "Chris" });
 
-function setup(routes: Parameters<typeof mockFetch>[0]) {
+function setup(
+  routes: Parameters<typeof mockFetch>[0],
+  props: Partial<ComponentProps<typeof LoginForm>> = {},
+) {
   const fetchMock = mockFetch(routes);
-  const onBack = vi.fn();
   const onLoggedIn = vi.fn();
-  const rendered = renderWithProviders(<LoginForm onBack={onBack} onLoggedIn={onLoggedIn} />);
-  return { fetchMock, onBack, onLoggedIn, user: userEvent.setup(), ...rendered };
+  const rendered = renderWithProviders(<LoginForm onLoggedIn={onLoggedIn} {...props} />);
+  return { fetchMock, onLoggedIn, user: userEvent.setup(), ...rendered };
 }
 
 async function fillAndSubmit(user: ReturnType<typeof userEvent.setup>, login = "chris", password = "pw") {
@@ -28,9 +31,13 @@ describe("LoginForm", () => {
     vi.useRealTimers();
   });
 
-  it("focuses its heading on entry and shows the forgotten-password line", () => {
+  it("is the page's h1, focusable by the page change only, and shows the forgotten-password line", () => {
     setup({});
-    expect(screen.getByRole("heading", { name: "Log in" })).toHaveFocus();
+    const heading = screen.getByRole("heading", { level: 1, name: "Log in" });
+    expect(heading).toHaveAttribute("tabindex", "-1");
+    // The page change focuses it (router.tsx); a first render leaves focus alone (navigation spec §3.6).
+    expect(heading).not.toHaveFocus();
+    expect(screen.queryByRole("button", { name: "Back" })).not.toBeInTheDocument();
     expect(
       screen.getByText(
         "There is no way to recover a forgotten password yourself. Ask the owner to set a new one.",
@@ -178,9 +185,19 @@ describe("LoginForm", () => {
     expect(screen.getByRole("button", { name: "Log in" })).not.toHaveAttribute("aria-disabled");
   });
 
-  it("Back returns to the choice", async () => {
-    const { user, onBack } = setup({});
-    await user.click(screen.getByRole("button", { name: "Back" }));
-    expect(onBack).toHaveBeenCalledTimes(1);
+  it("shows the guard line under the heading and the cross-link before the forgotten-password line", () => {
+    setup({}, { guardLine: "Log in to see your collection.", crossLink: <p>No account yet? Register</p> });
+    const texts = Array.from(document.querySelectorAll("h1, p"), (element) => element.textContent);
+    expect(texts.indexOf("Log in to see your collection.")).toBe(texts.indexOf("Log in") + 1);
+    expect(texts.indexOf("No account yet? Register")).toBe(
+      texts.indexOf(
+        "There is no way to recover a forgotten password yourself. Ask the owner to set a new one.",
+      ) - 1,
+    );
+  });
+
+  it("shows no guard line without one", () => {
+    setup({});
+    expect(screen.queryByText(/^Log in to /)).not.toBeInTheDocument();
   });
 });

@@ -25,10 +25,9 @@
 	}
 }
 
-:8080 {
-	root * /srv
-	encode zstd gzip
-
+# The site's security headers, imported by the site and by its error
+# handler, so an error response carries them too.
+(site_headers) {
 	header {
 		# style-src is strict on purpose. React applies the `style` prop through
 		# the CSSOM (element.style.setProperty), which CSP does not govern, and
@@ -48,32 +47,62 @@
 		-Server
 		-Via
 	}
+}
+
+:8080 {
+	root * /srv
+	encode zstd gzip
+
+	import site_headers
 
 	# Liveness probe for the image HEALTHCHECK and the CI smoke test.
 	handle /healthz {
 		respond "ok" 200
 	}
 
-	# The api owns everything under /api. Caddy only forwards, so the browser
-	# sees one origin and connect-src stays 'self'. `api` is a network alias
-	# compose.yml gives the api service of each profile; the api's own
+	# The api owns /api itself and everything under it. Caddy only forwards,
+	# so the browser sees one origin and connect-src stays 'self'; an unknown
+	# api path gets the api's JSON 404, never the app shell. `api` is a network
+	# alias compose.yml gives the api service of each profile; the api's own
 	# /healthz is not under /api and stays reachable only inside the network.
-	handle /api/* {
+	@api path /api /api/*
+	handle @api {
 		reverse_proxy api:3000
 	}
 
 	# Vite content-hashes everything under /assets, so a file at a given name
-	# never changes and can be cached forever; a new build gets new names.
+	# never changes and can be cached forever; a new build gets new names. A
+	# missing asset is a plain 404, never index.html served as a script: a
+	# page whose chunk a deploy replaced fails loudly instead of blankly. The
+	# 404 is a response rather than file_server's error, because Caddy's error
+	# path drops the site headers above (and lets `Server` through), and it is
+	# not given the year-long cache that only an existing file has earned.
 	handle /assets/* {
-		header Cache-Control "public, max-age=31536000, immutable"
+		@asset file
+		@missing not file
+		header @asset Cache-Control "public, max-age=31536000, immutable"
+		respond @missing 404
 		file_server
 	}
 
-	# Everything else is the SPA: unknown paths fall back to index.html, which
-	# must be revalidated on every load so a new deploy is seen immediately.
+	# Everything else is the app: every path that is not a file in the build
+	# gets index.html with 200, and the app's router decides what it is, its
+	# not-found page included (docs/design/navigation-and-landing.md §3.12).
+	# No route list lives here, so a new page never needs a change in this
+	# file. index.html is revalidated on every load so a deploy is seen at once.
 	handle {
 		header Cache-Control "no-cache"
 		try_files {path} /index.html
 		file_server
+	}
+
+	# An error (the api down: 502; a method file_server does not serve: 405)
+	# skips the routes above, and with them the site headers, so it would go
+	# out without the CSP or nosniff and with `Server: Caddy`. Here it gets the
+	# same headers, its status and an empty body. The "" is that body: a lone
+	# placeholder would be taken as the body, not the status.
+	handle_errors {
+		import site_headers
+		respond "" {err.status_code}
 	}
 }

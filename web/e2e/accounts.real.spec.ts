@@ -17,7 +17,7 @@ import { isolated, mockAniList } from "./support/fake-api";
  * 1. Register with the invite code typed in another case with spaces (the server trims and
  *    case-folds); the browser holds __Host-session as HttpOnly, Secure, SameSite=Lax.
  * 2. Open a pack: 5 cards, Collection (5).
- * 3. Log out: Account screen, title reset; GET /api/session answers signed out.
+ * 3. Log out: the landing page at /, title reset; GET /api/session answers signed out.
  * 4. Log in with the login in a different case: signed in under the stored display login; the
  *    collection is empty again (in memory only until roadmap 1c).
  * 5. Rename: header, title and live region follow.
@@ -25,8 +25,11 @@ import { isolated, mockAniList } from "./support/fake-api";
  *    the old password no longer signs in and the new one does; this tab survives a reload.
  * 7. Five wrong passwords (each "incorrect"), then the server's wait: the button counts down from
  *    the server's retryAfterSeconds (≤ 10) to 1, then `Log in` and `You can try again now.`
- * 8. Delete with the new password: signed out on the Account screen, `Deleted <login>.`, and the
- *    database holds no row for either login.
+ * 8. Delete with the new password on /account: signed out on the landing page, `Deleted <login>.`,
+ *    and the database holds no row for either login.
+ * Since the navigation PR (navigation-and-landing.md) the Account screen is /login and /register,
+ * Manage account is the /account page, sign-in lands on /packs with its h1 focused, and the title
+ * names the page instead of the login.
  * Rate budget: 9 of the 10 log-in calls per minute the api allows one client (spec §6.6); wait a
  * minute between runs. Cleanup: DELETE on the app pool for this run's logins (accounts cascade to
  * sessions; auth_throttle rows by key), in afterAll, whatever happened. Never TRUNCATE: the
@@ -74,7 +77,7 @@ test.describe("accounts journey against the real api", () => {
     try {
       await test.step("register with the invite code; the session cookie is __Host-, HttpOnly, Secure, Lax", async () => {
         await page.goto("/");
-        await page.getByRole("button", { name: "Register", exact: true }).click();
+        await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Register" }).click();
         await page.getByRole("textbox", { name: "Invite code" }).fill(`  ${INVITE_CODE!.toUpperCase()}  `);
         await page.getByRole("button", { name: "Continue" }).click();
         await expect(page.getByText("Step 2 of 2")).toBeVisible();
@@ -84,15 +87,15 @@ test.describe("accounts journey against the real api", () => {
         await page.getByRole("button", { name: "Register", exact: true }).click();
 
         await expect(controlFor(page, LOGIN)).toBeVisible();
-        await expect(page.getByRole("button", { name: /open booster pack/i })).toBeFocused();
-        await expect(page).toHaveTitle(`${isolated(LOGIN)} · Anime TCG`);
+        await expect(page.getByRole("heading", { level: 1, name: "Packs" })).toBeFocused();
+        await expect(page).toHaveTitle("Packs · Anime TCG");
         await expectSessionCookie(page.context());
       });
 
       await test.step("open a pack", async () => {
         await page.getByRole("button", { name: /open booster pack/i }).click();
         await expect(page.getByRole("article")).toHaveCount(5);
-        await expect(page.getByRole("button", { name: "Collection (5)" })).toBeVisible();
+        await expect(page.getByRole("link", { name: "Collection (5)" })).toBeVisible();
       });
 
       await test.step("log out", async () => {
@@ -104,7 +107,7 @@ test.describe("accounts journey against the real api", () => {
         await openLogInForm(page);
         await logIn(page, LOGIN.toUpperCase(), PASSWORD_1);
         await expect(controlFor(page, LOGIN)).toBeVisible();
-        await expect(page.getByRole("button", { name: "Collection (0)" })).toBeVisible();
+        await expect(page.getByRole("link", { name: "Collection (0)" })).toBeVisible();
         await expectSessionCookie(page.context());
       });
 
@@ -113,12 +116,10 @@ test.describe("accounts journey against the real api", () => {
         await page.getByRole("textbox", { name: "New login" }).fill(RENAMED);
         await page.getByRole("button", { name: "Save" }).click();
         await expect(controlFor(page, RENAMED)).toBeAttached();
-        await expect(page).toHaveTitle(`${isolated(RENAMED)} · Anime TCG`);
+        await expect(page).toHaveTitle("Manage account · Anime TCG");
         await expect(
           page.getByRole("status").filter({ hasText: `Login changed to ${RENAMED}.` }),
         ).toHaveCount(1);
-        await page.getByRole("button", { name: "Close" }).click();
-        await expect(controlFor(page, RENAMED)).toBeFocused();
       });
 
       await test.step("change password: old cookie and old password are dead, this tab survives", async () => {
@@ -128,8 +129,7 @@ test.describe("accounts journey against the real api", () => {
         await page.getByLabel("New password", { exact: true }).fill(PASSWORD_2);
         await page.getByLabel("Confirm new password", { exact: true }).fill(PASSWORD_2);
         await page.getByRole("button", { name: "Change password" }).click();
-        await expect(page.getByRole("dialog").getByText("Password changed.")).toBeVisible();
-        await page.getByRole("button", { name: "Close" }).click();
+        await expect(page.getByRole("main").getByText("Password changed.")).toBeVisible();
 
         const after = await sessionCookieValue(page.context());
         expect(after).not.toBe(before);
@@ -202,9 +202,9 @@ test.describe("accounts journey against the real api", () => {
       await test.step("delete with the new password", async () => {
         await openManage(page, RENAMED);
         await page.getByRole("button", { name: "Delete account…" }).click();
-        await page.getByLabel("Password", { exact: true }).fill(PASSWORD_2);
+        await page.getByRole("dialog").getByLabel("Password", { exact: true }).fill(PASSWORD_2);
         await page.getByRole("button", { name: `Delete ${RENAMED}`, exact: true }).click();
-        await expect(page.getByRole("heading", { name: "Your account" })).toBeFocused();
+        await expect(page.getByRole("heading", { level: 1, name: "Anime TCG" })).toBeFocused();
         await expect(page.getByRole("status").filter({ hasText: `Deleted ${RENAMED}.` })).toHaveCount(1);
         await expect(page).toHaveTitle("Anime TCG");
         expect(await (await page.request.get("/api/session")).json()).toEqual({ signedIn: false });
@@ -223,29 +223,42 @@ async function newSignedOutContext(browser: Browser): Promise<BrowserContext> {
   return browser.newContext({ baseURL: REAL_API_URL });
 }
 
+/**
+ * Opens /account from the menu. Already on /account the item is the current page's own link, which
+ * does nothing (navigation-and-landing.md §3.5 step 3): the menu closes onto its button, the address
+ * and the history stay as they are, and the heading does not take focus.
+ */
 async function openManage(page: Page, login: string) {
+  const alreadyThere = new URL(page.url()).pathname === "/account";
+  const entries = await page.evaluate(() => history.length);
   await controlFor(page, login).click();
-  await page.getByRole("menuitem", { name: "Manage account…" }).click();
-  await expect(page.getByRole("dialog", { name: "Manage account" })).toBeVisible();
+  await page.getByRole("menuitem", { name: "Manage account" }).click();
+  if (alreadyThere) {
+    await expect(controlFor(page, login)).toBeFocused();
+    expect(new URL(page.url()).pathname).toBe("/account");
+    expect(await page.evaluate(() => history.length)).toBe(entries);
+  } else {
+    await expect(page.getByRole("heading", { level: 1, name: "Manage account" })).toBeFocused();
+  }
 }
 
 async function logOut(page: Page, login: string) {
   await controlFor(page, login).click();
   await page.getByRole("menuitem", { name: "Log out" }).click();
-  await expect(page.getByRole("heading", { name: "Your account" })).toBeFocused();
+  await expect(page.getByRole("heading", { level: 1, name: "Anime TCG" })).toBeFocused();
   await expect(page).toHaveTitle("Anime TCG");
 }
 
-/** From the Account screen's choice (waits for the boot check to answer first) to the Log in form. */
+/** From the landing page's header link to the Log in page (waits for the boot check to answer first). */
 async function openLogInForm(page: Page) {
-  await expect(page.getByRole("heading", { name: "Your account" })).toBeVisible();
-  await page.getByRole("button", { name: "Log in", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Log in" })).toBeFocused();
+  if (page.url().endsWith("/login")) return;
+  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Log in" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Log in" })).toBeFocused();
 }
 
 /** Submits the open Log in form; `incorrect` expects the one failure message. */
 async function logIn(page: Page, login: string, password: string, outcome: "ok" | "incorrect" = "ok") {
-  await expect(page.getByRole("heading", { name: "Log in" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Log in" })).toBeVisible();
   await page.getByRole("textbox", { name: "Login", exact: true }).fill(login);
   await page.getByLabel("Password", { exact: true }).fill(password);
   await page.getByRole("button", { name: "Log in", exact: true }).click();
@@ -257,7 +270,7 @@ async function logIn(page: Page, login: string, password: string, outcome: "ok" 
     );
     await expect(page.getByRole("textbox", { name: "Login", exact: true })).toBeFocused();
   } else {
-    await expect(page.getByRole("button", { name: /open booster pack/i })).toBeFocused();
+    await expect(page.getByRole("heading", { level: 1, name: "Packs" })).toBeFocused();
   }
 }
 

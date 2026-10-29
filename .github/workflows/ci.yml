@@ -206,6 +206,49 @@ jobs:
           [ "$(cat session.json)" = '{"signedIn":false}' ] || { echo "unexpected /api/session body: $(cat session.json)" >&2; exit 1; }
           status="$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:8080/api/session)"
           [ "$status" = "403" ] || { echo "POST without Origin answered $status, expected 403" >&2; exit 1; }
+
+          # The routed app, a missing asset, an error Caddy answers itself and /api itself
+          # (web/e2e/stack.spec.ts has the full set). fetch sets $status, $headers and body.txt.
+          fetch() {
+            path="$1"; shift
+            status="$(curl -sS -D headers.txt -o body.txt -w '%{http_code}' "$@" "http://127.0.0.1:8080$path")"
+            headers="$(tr -d '\r' < headers.txt)"
+          }
+          header() { echo "$headers" | sed -n "s/^$1: *//Ip"; }
+          check() {
+            if [ "$2" != "$3" ]; then
+              echo "$path $1 mismatch" >&2
+              echo "expected: $3" >&2
+              echo "actual:   $2" >&2
+              exit 1
+            fi
+          }
+          fail() { echo "$path: $1" >&2; exit 1; }
+
+          fetch /packs
+          check status "$status" 200
+          case "$(header content-type)" in text/html*) ;; *) fail "not text/html" ;; esac
+          check CSP "$(header content-security-policy)" "$EXPECTED_CSP"
+          check cache-control "$(header cache-control)" no-cache
+
+          fetch /assets/nope.js
+          check status "$status" 404
+          case "$(header content-type)" in text/html*) fail "a missing asset is served as text/html" ;; esac
+          case "$(header cache-control)" in *immutable*) fail "a missing asset is cached as immutable" ;; esac
+          check CSP "$(header content-security-policy)" "$EXPECTED_CSP"
+
+          fetch / -X POST
+          check status "$status" 405
+          check CSP "$(header content-security-policy)" "$EXPECTED_CSP"
+          check nosniff "$(header x-content-type-options)" nosniff
+          check Server "$(header server)" ""
+          check Via "$(header via)" ""
+          check body "$(cat body.txt)" ""
+
+          fetch /api
+          check status "$status" 404
+          case "$(header content-type)" in application/json*) ;; *) fail "not application/json" ;; esac
+          check body "$(cat body.txt)" '{"error":{"code":"not_found","message":"Route not found"}}'
       - name: The api reaches the database (internal probe)
         # The api's /healthz is not routed through Caddy on purpose; it is the
         # container's own healthcheck. Asking it from inside proves the
@@ -223,6 +266,28 @@ jobs:
           docker compose --env-file .env.ci --profile acceptance logs --no-color api-acceptance | grep -q '"remoteAddress":"203.0.113.9"'
       - name: The runtime image carries no dev modules
         run: docker compose --env-file .env.ci --profile acceptance exec -T api-acceptance test ! -e node_modules/typescript
+      - name: A 502 with the api stopped keeps the site headers
+        # Last, because it stops the api the steps above talk to. Caddy's
+        # handle_errors path: the 502 must carry the CSP and leak no Server or Via.
+        run: |
+          docker compose --env-file .env.ci --profile acceptance stop api-acceptance
+          [ "$(docker inspect anime-tcg-acceptance --format '{{.State.Running}}')" = true ] || { echo "caddy stopped with the api" >&2; exit 1; }
+          check() {
+            if [ "$2" != "$3" ]; then
+              echo "/api/session $1 mismatch" >&2
+              echo "expected: $3" >&2
+              echo "actual:   $2" >&2
+              exit 1
+            fi
+          }
+          status="$(curl -sS -D headers.txt -o body.txt -w '%{http_code}' http://127.0.0.1:8080/api/session)"
+          headers="$(tr -d '\r' < headers.txt)"
+          header() { echo "$headers" | sed -n "s/^$1: *//Ip"; }
+          check status "$status" 502
+          check CSP "$(header content-security-policy)" "$EXPECTED_CSP"
+          check Server "$(header server)" ""
+          check Via "$(header via)" ""
+          check body "$(cat body.txt)" ""
       - name: Container logs
         if: failure() && steps.up.outcome != 'skipped'
         run: docker compose --env-file .env.ci --profile acceptance logs --no-color

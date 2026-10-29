@@ -12,11 +12,13 @@ import { isolated, mockAniList } from "./support/fake-api";
  * the 10-account cap). It deletes what it creates at the end, and again after the test whatever
  * its outcome, so a failed run does not keep one of the cap's places. AniList stays mocked.
  *
- * - Register through the two steps; the browser stores the session cookie as __Host-session,
+ * - Register through the two steps at /register; the browser stores the session cookie as __Host-session,
  *   HttpOnly, Secure, SameSite=Lax, Path=/ and host-only (no Domain), and page script cannot read it.
- * - Log out: the cookie is gone and GET /api/session answers signed out.
- * - Log in again: a new cookie value with the same flags (sign-in rotates the session).
- * - Delete the account with its password: signed out, cookie cleared.
+ * - Log out: the landing page at /, the cookie is gone and GET /api/session answers signed out.
+ * - Log in again at /login: a new cookie value with the same flags (sign-in rotates the session).
+ * - Delete the account with its password on /account: signed out at /, cookie cleared.
+ * - Since the navigation PR (navigation-and-landing.md) the Account screen is the /login and
+ *   /register pages and Manage account is the /account page; the steps follow the links there.
  */
 
 const STACK_URL = process.env.STACK_URL?.replace(/\/$/, "");
@@ -38,7 +40,7 @@ test.describe("accounts journey through Caddy", () => {
     await mockAniList(page);
     await page.goto("/");
 
-    await page.getByRole("button", { name: "Register", exact: true }).click();
+    await nav(page).getByRole("link", { name: "Register" }).click();
     await page.getByRole("textbox", { name: "Invite code" }).fill(INVITE_CODE!);
     await page.getByRole("button", { name: "Continue" }).click();
     await page.getByRole("textbox", { name: "Login", exact: true }).fill(LOGIN);
@@ -50,11 +52,11 @@ test.describe("accounts journey through Caddy", () => {
 
     await control(page).click();
     await page.getByRole("menuitem", { name: "Log out" }).click();
-    await expect(page.getByRole("heading", { name: "Your account" })).toBeFocused();
+    await expect(page.getByRole("heading", { level: 1, name: "Anime TCG" })).toBeFocused();
     expect((await context.cookies()).map((cookie) => cookie.name)).not.toContain("__Host-session");
     expect(await (await page.request.get("/api/session")).json()).toEqual({ signedIn: false });
 
-    await page.getByRole("button", { name: "Log in", exact: true }).click();
+    await nav(page).getByRole("link", { name: "Log in" }).click();
     await page.getByRole("textbox", { name: "Login", exact: true }).fill(LOGIN);
     await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
     await page.getByRole("button", { name: "Log in", exact: true }).click();
@@ -63,11 +65,11 @@ test.describe("accounts journey through Caddy", () => {
     expect(loggedIn).not.toBe(registered);
 
     await control(page).click();
-    await page.getByRole("menuitem", { name: "Manage account…" }).click();
+    await page.getByRole("menuitem", { name: "Manage account" }).click();
     await page.getByRole("button", { name: "Delete account…" }).click();
-    await page.getByLabel("Password", { exact: true }).fill(PASSWORD);
+    await page.getByRole("dialog").getByLabel("Password", { exact: true }).fill(PASSWORD);
     await page.getByRole("button", { name: `Delete ${LOGIN}`, exact: true }).click();
-    await expect(page.getByRole("heading", { name: "Your account" })).toBeFocused();
+    await expect(page.getByRole("heading", { level: 1, name: "Anime TCG" })).toBeFocused();
     expect((await context.cookies()).map((cookie) => cookie.name)).not.toContain("__Host-session");
     expect(await (await page.request.get("/api/session")).json()).toEqual({ signedIn: false });
   });
@@ -89,6 +91,8 @@ async function deleteThrowawayAccount(request: APIRequestContext): Promise<void>
   const deleted = await request.post("/api/account/delete", { data: { password: PASSWORD }, headers });
   expect(deleted.status(), "cleanup: delete the throwaway account").toBe(204);
 }
+
+const nav = (page: Page) => page.getByRole("navigation", { name: "Main" });
 
 const control = (page: Page) =>
   page.getByRole("button", { name: `Account menu. Signed in as ${isolated(LOGIN)}`, exact: true });

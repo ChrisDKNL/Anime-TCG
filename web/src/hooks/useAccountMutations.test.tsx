@@ -19,11 +19,10 @@ function harness() {
   const queryClient = createQueryClient();
   const shell: ShellContextValue = {
     announce: vi.fn(),
-    requestFocus: vi.fn(),
     sessionEnded: vi.fn(() => queryClient.setQueryData(SESSION_QUERY_KEY, { signedIn: false })),
     unreachable: vi.fn(),
     clearNotice: vi.fn(),
-    register: vi.fn(() => () => undefined),
+    notice: "none",
   };
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>
