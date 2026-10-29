@@ -7,8 +7,29 @@
   --color-rarity-legendary: #f59e0b;
 }
 
+/*
+ * The pack reveal's card entrance (packs-page.md §6.3). It runs on each slot's list item, never on the
+ * card, because the Mythic frame animates its own background and one element holds one animation.
+ */
+@theme {
+  --animate-card-enter: card-enter 200ms ease-out both;
+
+  @keyframes card-enter {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
+
 :root {
   color-scheme: dark;
+  /* Slot i of the reveal starts i steps after the answer arrives. */
+  --card-enter-step: 50ms;
 }
 
 body {
