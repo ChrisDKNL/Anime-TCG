@@ -9,6 +9,18 @@ describe("errorEnvelopeFor", () => {
     });
   });
 
+  it("carries retryAfterSeconds into the body and asks for the Retry-After header, only when set", () => {
+    const blocked = new ApiError(429, "too_many_failures", "Wait a moment", 7);
+    expect(errorEnvelopeFor(blocked)).toEqual({
+      statusCode: 429,
+      body: { error: { code: "too_many_failures", message: "Wait a moment", retryAfterSeconds: 7 } },
+      retryAfterSeconds: 7,
+    });
+    const plain = errorEnvelopeFor(new ApiError(401, "bad_credentials", "Incorrect login or password"));
+    expect(plain.retryAfterSeconds).toBeUndefined();
+    expect(Object.keys(plain.body.error)).toEqual(["code", "message"]);
+  });
+
   it("turns a validation failure into 400 with the first failing path", () => {
     const err = {
       statusCode: 400,

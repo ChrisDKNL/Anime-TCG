@@ -14,6 +14,13 @@ export const ERROR_CODES = [
   "rate_limited",
   "bad_request",
   "internal",
+  "invite_invalid",
+  "cap_reached",
+  "login_taken",
+  "bad_credentials",
+  "wrong_password",
+  "too_many_failures",
+  "unauthenticated",
 ] as const;
 export type ErrorCode = (typeof ERROR_CODES)[number];
 
@@ -23,6 +30,8 @@ export const ErrorEnvelope = Type.Object(
       {
         code: Type.Union(ERROR_CODES.map((code) => Type.Literal(code))),
         message: Type.String(),
+        /** Only on `too_many_failures`: how long the sign-in breather still lasts, matching the `Retry-After` header. */
+        retryAfterSeconds: Type.Optional(Type.Integer({ minimum: 1 })),
       },
       { additionalProperties: false },
     ),

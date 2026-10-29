@@ -46,6 +46,10 @@ export const sessionPlugin = fp<SessionPluginOptions>(
     app.decorateRequest("session", null);
 
     app.decorateReply("createSession", async function (accountId: string | null) {
+      // Rotation: the id the request arrived with is never promoted, so a value an attacker
+      // planted in the browser before sign-in does not become the authenticated session.
+      const current = this.request.session;
+      if (current) await sessions.destroy(current.id);
       const now = new Date();
       const { cookieValue, session } = await sessions.create(
         accountId,

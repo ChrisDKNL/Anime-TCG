@@ -1,14 +1,17 @@
+import { characterCount, INVITE_CODE_LENGTH } from "@anime-tcg/shared/api";
 import { type Static, Type } from "@sinclair/typebox";
 import { Value } from "@sinclair/typebox/value";
 
 /** The placeholder shipped in `api/.env.example`; the api refuses to run with it. */
 export const EXAMPLE_SESSION_SECRET = "replace-with-32-plus-random-bytes-see-api/.env.example";
 export const MIN_SESSION_SECRET_BYTES = 32;
+export const DEFAULT_ACCOUNT_CAP = 10;
 
 const LOG_LEVELS = ["fatal", "error", "warn", "info", "debug", "trace", "silent"] as const;
 export type LogLevel = (typeof LOG_LEVELS)[number];
 
 const Origin = Type.String({ pattern: "^https?://[^/\\s]+$" });
+const PostgresUrl = Type.String({ pattern: "^postgres(ql)?://" });
 
 const ConfigSchema = Type.Object(
   {
@@ -22,12 +25,18 @@ const ConfigSchema = Type.Object(
     HOST: Type.String({ minLength: 1, default: "127.0.0.1" }),
     // 0 lets the OS pick a free port, which the start-up test relies on.
     PORT: Type.Integer({ minimum: 0, maximum: 65535, default: 3000 }),
-    DATABASE_URL: Type.String({ pattern: "^postgres(ql)?://" }),
+    /** The app role (`anime_app`, row access only): the pool every request runs on. */
+    DATABASE_URL: PostgresUrl,
+    /** The owner role (`anime`): one connection for `runMigrations` at start-up, closed afterwards. */
+    MIGRATIONS_DATABASE_URL: PostgresUrl,
     SESSION_SECRET: Type.String(),
     API_ORIGIN: Origin,
     WEB_ORIGIN: Origin,
     RATE_LIMIT_MAX: Type.Integer({ minimum: 1, default: 100 }),
     RATE_LIMIT_WINDOW_MS: Type.Integer({ minimum: 1000, default: 60_000 }),
+    /** The entries of the comma-separated variable, trimmed; empty means registration is closed. */
+    INVITE_CODES: Type.Array(Type.String()),
+    ACCOUNT_CAP: Type.Integer({ minimum: 1, default: DEFAULT_ACCOUNT_CAP }),
   },
   { additionalProperties: false },
 );
@@ -51,7 +60,7 @@ type Env = Readonly<Record<string, string | undefined>>;
  * `Value.Convert` is lenient with numeric strings ("3000.5" becomes 3000,
  * "1e3" becomes 1), so integers are checked as text first.
  */
-const INTEGER_VARIABLES = ["PORT", "RATE_LIMIT_MAX", "RATE_LIMIT_WINDOW_MS"] as const;
+const INTEGER_VARIABLES = ["PORT", "RATE_LIMIT_MAX", "RATE_LIMIT_WINDOW_MS", "ACCOUNT_CAP"] as const;
 const WHOLE_NUMBER = /^\d+$/;
 
 /**
@@ -60,16 +69,17 @@ const WHOLE_NUMBER = /^\d+$/;
  * `FOO=${FOO:-}` behaves like one that omits FOO.
  */
 export function parseConfig(env: Env): Config {
-  const present = Object.fromEntries(
-    Object.keys(ConfigSchema.properties)
-      .filter((name) => env[name] !== undefined && env[name] !== "")
-      .map((name) => [name, env[name]]),
-  );
+  const present: Record<string, string | string[]> = {};
+  for (const name of Object.keys(ConfigSchema.properties)) {
+    const value = env[name];
+    if (name !== "INVITE_CODES" && value !== undefined && value !== "") present[name] = value;
+  }
   for (const name of INTEGER_VARIABLES) {
-    const raw = present[name];
-    if (raw !== undefined && !WHOLE_NUMBER.test(raw))
+    const raw = env[name];
+    if (raw !== undefined && raw !== "" && !WHOLE_NUMBER.test(raw))
       throw new ConfigError(name, "must be a whole number (digits only)");
   }
+  present.INVITE_CODES = parseInviteCodes(env.INVITE_CODES);
   const candidate: unknown = Value.Default(ConfigSchema, Value.Convert(ConfigSchema, present));
   if (!Value.Check(ConfigSchema, candidate)) {
     const first = Value.Errors(ConfigSchema, candidate).First();
@@ -81,7 +91,55 @@ export function parseConfig(env: Env): Config {
   assertStrongSessionSecret(candidate.SESSION_SECRET);
   assertExactOrigin("API_ORIGIN", candidate.API_ORIGIN);
   assertExactOrigin("WEB_ORIGIN", candidate.WEB_ORIGIN);
+  assertDistinctDatabaseRoles(candidate.DATABASE_URL, candidate.MIGRATIONS_DATABASE_URL);
   return Object.freeze(candidate);
+}
+
+/**
+ * Comma-separated, each entry trimmed, blanks dropped (a trailing comma is
+ * not a code). An entry outside the length policy fails start-up by its
+ * position, never by its text: the codes are secrets.
+ */
+function parseInviteCodes(raw: string | undefined): string[] {
+  const codes = (raw ?? "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== "");
+  codes.forEach((code, index) => {
+    const length = characterCount(code);
+    if (length < INVITE_CODE_LENGTH.min || length > INVITE_CODE_LENGTH.max) {
+      throw new ConfigError(
+        "INVITE_CODES",
+        `entry ${index + 1} must be ${INVITE_CODE_LENGTH.min} to ${INVITE_CODE_LENGTH.max} characters after trimming`,
+      );
+    }
+  });
+  return codes;
+}
+
+/** The user part of a `postgres://user:password@host/db` URL, before any decoding; empty when there is no userinfo. */
+export function databaseUser(url: string): string {
+  return /^postgres(?:ql)?:\/\/([^:@/?#]*)(?::[^@/?#]*)?@/.exec(url)?.[1] ?? "";
+}
+
+/**
+ * The split in docs/design/accounts-api.md §4.1 only protects anything if the
+ * two URLs really are two roles: the same name in both means every request
+ * runs with the owner's rights and the migration grants are theatre.
+ */
+function assertDistinctDatabaseRoles(appUrl: string, migrationsUrl: string): void {
+  const app = databaseUser(appUrl);
+  const owner = databaseUser(migrationsUrl);
+  if (app === "") throw new ConfigError("DATABASE_URL", "must name the app role (postgres://<role>:...)");
+  if (owner === "") {
+    throw new ConfigError("MIGRATIONS_DATABASE_URL", "must name the owner role (postgres://<role>:...)");
+  }
+  if (app === owner) {
+    throw new ConfigError(
+      "MIGRATIONS_DATABASE_URL",
+      "must name a different role than DATABASE_URL (owner for migrations, app role for requests)",
+    );
+  }
 }
 
 function assertStrongSessionSecret(secret: string): void {

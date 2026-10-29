@@ -10,9 +10,10 @@
 #
 # Variables come from the shell or from a gitignored env file passed with
 # `--env-file` (`.env.example` lists every one). Required by acceptance and
-# production: POSTGRES_PASSWORD, SESSION_SECRET, WEB_ORIGIN. Optional: TAG,
-# ACCEPTANCE_PORT, PRODUCTION_PORT, LOG_LEVEL, DEV_DB_PORT. Env files are read
-# by compose only; `.dockerignore` keeps them out of every build context.
+# production: POSTGRES_PASSWORD, APP_DB_PASSWORD, SESSION_SECRET, WEB_ORIGIN. Optional: TAG,
+# ACCEPTANCE_PORT, PRODUCTION_PORT, LOG_LEVEL, DEV_DB_PORT, INVITE_CODES (registration
+# is closed without it), ACCOUNT_CAP. Env files are read by compose only;
+# `.dockerignore` keeps them out of every build context.
 
 x-hardened: &hardened
   read_only: true
@@ -52,12 +53,17 @@ x-api: &api
     NODE_ENV: production
     HOST: 0.0.0.0
     PORT: "3000"
-    DATABASE_URL: postgres://anime:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in the env file}@db:5432/anime
+    # Requests run as `anime_app` (rows only); migrations run as the owner `anime` over one connection at start-up.
+    DATABASE_URL: postgres://anime_app:${APP_DB_PASSWORD:?set APP_DB_PASSWORD in the env file}@db:5432/anime
+    MIGRATIONS_DATABASE_URL: postgres://anime:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in the env file}@db:5432/anime
     SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET in the env file to 32+ random bytes}
     # The browser's Origin on state-changing requests must equal this exactly.
     WEB_ORIGIN: ${WEB_ORIGIN:?set WEB_ORIGIN to the public origin, e.g. https://anime.example.com}
     API_ORIGIN: ${WEB_ORIGIN}
     LOG_LEVEL: ${LOG_LEVEL:-info}
+    # Registration: comma-separated invite codes (empty closes it) and how many accounts may exist.
+    INVITE_CODES: ${INVITE_CODES:-}
+    ACCOUNT_CAP: ${ACCOUNT_CAP:-10}
 
 x-db: &db
   <<: *hardened
@@ -73,6 +79,9 @@ x-db: &db
   shm_size: 128m
   mem_limit: 256m
   pids_limit: 128
+  # Each service also mounts ./db/init read-only at /docker-entrypoint-initdb.d: on an empty volume the
+  # entrypoint runs 01-app-role.sh, which creates the `anime_app` role from APP_DB_PASSWORD (an existing
+  # volume: docs/04-deployment.md). The role's grants come from the api's migrations.
   healthcheck:
     test: ["CMD-SHELL", "pg_isready -U anime -d anime"]
     interval: 5s
@@ -89,7 +98,9 @@ services:
       POSTGRES_USER: anime
       POSTGRES_DB: anime
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in the env file}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD in the env file}
     volumes:
+      - ./db/init:/docker-entrypoint-initdb.d:ro
       - db-acceptance:/var/lib/postgresql/data
     networks:
       acceptance-back:
@@ -129,7 +140,9 @@ services:
       POSTGRES_USER: anime
       POSTGRES_DB: anime
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in the env file}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD:?set APP_DB_PASSWORD in the env file}
     volumes:
+      - ./db/init:/docker-entrypoint-initdb.d:ro
       - db-production:/var/lib/postgresql/data
     networks:
       production-back:
@@ -177,7 +190,9 @@ services:
       POSTGRES_USER: anime
       POSTGRES_DB: anime
       POSTGRES_PASSWORD: anime
+      APP_DB_PASSWORD: anime_app
     volumes:
+      - ./db/init:/docker-entrypoint-initdb.d:ro
       - db-local:/var/lib/postgresql/data
     ports:
       - "127.0.0.1:${DEV_DB_PORT:-5432}:5432"

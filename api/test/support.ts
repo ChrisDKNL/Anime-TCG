@@ -1,17 +1,28 @@
+import type { AccountPublic } from "@anime-tcg/shared/api";
 import { Type } from "@sinclair/typebox";
+import type { InjectOptions, LightMyRequestResponse } from "fastify";
 import { type App, type BuildAppOptions, buildApp } from "../src/app.js";
 import { type Config, parseConfig } from "../src/config.js";
 import { createDb, type Db } from "../src/db/client.js";
-import { sessions } from "../src/db/schema.js";
+import { accounts, authThrottle, sessions } from "../src/db/schema.js";
+import { DUMMY_HASH } from "../src/domain/accounts/password.js";
 
 /** Obviously fake; only has to be 32+ bytes and not the .env.example placeholder. */
 export const TEST_SESSION_SECRET = "route-test-session-secret-not-for-real-use-0123456789";
 export const WEB_ORIGIN = "http://localhost:5173";
+/** Two valid codes so tests can prove membership is a set, not the first entry; a third one that is never configured. */
+export const TEST_INVITE_CODES = ["Route-Test-Invite-1", "second-code-2026"] as const;
+export const UNKNOWN_INVITE_CODE = "not-configured-code";
 export const FOREIGN_ORIGIN = "http://evil.example";
 
-/** CI points this at its service container; locally the compose `test` profile or any Postgres with these credentials. */
+/** The app role, as the api runs it. CI points this at its service container; locally the compose `test` profile. */
 export function testDatabaseUrl(): string {
-  return process.env.DATABASE_URL ?? "postgres://anime:anime@127.0.0.1:5432/anime";
+  return process.env.DATABASE_URL ?? "postgres://anime_app:anime_app@127.0.0.1:5432/anime";
+}
+
+/** The owner role: migrations and anything a test must read that the app role is not granted. */
+export function migrationsDatabaseUrl(): string {
+  return process.env.MIGRATIONS_DATABASE_URL ?? "postgres://anime:anime@127.0.0.1:5432/anime";
 }
 
 export function testConfig(overrides: Partial<Record<keyof Config, string>> = {}): Config {
@@ -19,9 +30,11 @@ export function testConfig(overrides: Partial<Record<keyof Config, string>> = {}
     NODE_ENV: "test",
     LOG_LEVEL: "silent",
     DATABASE_URL: testDatabaseUrl(),
+    MIGRATIONS_DATABASE_URL: migrationsDatabaseUrl(),
     SESSION_SECRET: TEST_SESSION_SECRET,
     API_ORIGIN: "http://localhost:3000",
     WEB_ORIGIN,
+    INVITE_CODES: TEST_INVITE_CODES.join(","),
     ...overrides,
   });
 }
@@ -36,8 +49,34 @@ export async function createTestApp(options: TestAppOptions = {}): Promise<App> 
   return buildApp({ config, db, ...rest });
 }
 
+/** DELETE rather than TRUNCATE: the app role has row access only, so the cleanup runs on the same pool the app uses. */
 export async function clearSessions(db: Db): Promise<void> {
   await db.delete(sessions);
+}
+
+/** Everything the account routes write; sessions first only for clarity, the foreign key would cascade anyway. */
+export async function clearAccountData(db: Db): Promise<void> {
+  await db.delete(sessions);
+  await db.delete(authThrottle);
+  await db.delete(accounts);
+}
+
+/**
+ * An account row for tests that only need a real id (sessions reference
+ * accounts). Its password hash is the dummy, so nothing can sign in as it.
+ */
+export async function insertAccount(db: Db, login: string): Promise<string> {
+  const [row] = await db
+    .insert(accounts)
+    .values({
+      login,
+      loginNormalized: login.toLowerCase(),
+      passwordHash: DUMMY_HASH,
+      inviteCodeHash: "fixture",
+    })
+    .returning({ id: accounts.id });
+  if (row === undefined) throw new Error("account insert returned no row");
+  return row.id;
 }
 
 const EchoBody = Type.Object({ name: Type.String({ minLength: 1 }) }, { additionalProperties: false });
@@ -52,6 +91,12 @@ const SessionProbe = Type.Object(
   { additionalProperties: false },
 );
 
+/** Until 1b has sign-in, this is how a test gets a session that belongs to an account. */
+const SessionProbeQuery = Type.Object(
+  { accountId: Type.Optional(Type.String({ format: "uuid" })) },
+  { additionalProperties: false },
+);
+
 /**
  * Routes that exist only in tests, so the cross-cutting behaviour (schemas,
  * CSRF, sessions, error mapping) can be exercised before 1b adds real ones.
@@ -60,10 +105,14 @@ export function registerProbeRoutes(app: App): void {
   app.post("/test/echo", { schema: { body: EchoBody, response: { 200: EchoReply } } }, (req) => ({
     name: req.body.name,
   }));
-  app.post("/test/sessions", { schema: { response: { 200: SessionProbe } } }, async (_req, reply) => {
-    const session = await reply.createSession(null);
-    return { session: { id: session.id, accountId: session.accountId } };
-  });
+  app.post(
+    "/test/sessions",
+    { schema: { querystring: SessionProbeQuery, response: { 200: SessionProbe } } },
+    async (req, reply) => {
+      const session = await reply.createSession(req.query.accountId ?? null);
+      return { session: { id: session.id, accountId: session.accountId } };
+    },
+  );
   app.delete("/test/sessions", { schema: { response: { 200: SessionProbe } } }, async (_req, reply) => {
     await reply.destroySession();
     return { session: null };
@@ -86,4 +135,83 @@ export function sessionCookieFrom(setCookie: string | string[] | undefined): str
 
 export function cookieHeader(value: string): string {
   return `__Host-session=${value}`;
+}
+
+let clientCounter = 0;
+
+/**
+ * A client address nobody else in the run has used: the auth routes allow 10
+ * requests per minute per address, and one test file sends far more than that.
+ * The TEST-NET-3 block has 256 addresses, so a wrap-around is still well
+ * under the limit for any single one.
+ */
+export function nextClientAddress(): string {
+  clientCounter += 1;
+  return `203.0.113.${clientCounter % 256}`;
+}
+
+export interface Call {
+  method: "GET" | "POST" | "PATCH" | "DELETE";
+  url: string;
+  /** Anything at all: tests send shapes the schema must refuse. */
+  payload?: unknown;
+  /** A session cookie value; omitted means no cookie at all. */
+  cookie?: string;
+  /** `null` sends no Origin header (the CSRF check must refuse); default is the web origin. */
+  origin?: string | null;
+  headers?: Record<string, string>;
+}
+
+/** One request from a fresh client address, with the web origin unless told otherwise. */
+export function send(app: App, call: Call): Promise<LightMyRequestResponse> {
+  const { method, url, payload, cookie, origin = WEB_ORIGIN, headers = {} } = call;
+  return app.inject({
+    method,
+    url,
+    payload: payload as InjectOptions["payload"],
+    remoteAddress: nextClientAddress(),
+    headers: {
+      ...headers,
+      ...(origin === null ? {} : { origin }),
+      ...(cookie === undefined ? {} : { cookie: cookieHeader(cookie) }),
+    },
+  });
+}
+
+export interface Credentials {
+  login: string;
+  password: string;
+  inviteCode?: string;
+}
+
+export interface SignedInClient {
+  cookie: string;
+  account: AccountPublic;
+}
+
+/** Registers through the real route and returns the cookie and the account the api answered with. */
+export async function registerAccount(app: App, credentials: Credentials): Promise<SignedInClient> {
+  const { login, password, inviteCode = TEST_INVITE_CODES[0] } = credentials;
+  const res = await send(app, {
+    method: "POST",
+    url: "/api/accounts/register",
+    payload: { inviteCode, login, password },
+  });
+  if (res.statusCode !== 201) throw new Error(`register answered ${res.statusCode}: ${res.body}`);
+  const cookie = sessionCookieFrom(res.headers["set-cookie"]);
+  if (cookie === undefined) throw new Error("register set no session cookie");
+  return { cookie, account: res.json<{ account: AccountPublic }>().account };
+}
+
+/** Signs in through the real route; the account must exist. */
+export async function loginAccount(app: App, credentials: Credentials): Promise<SignedInClient> {
+  const res = await send(app, {
+    method: "POST",
+    url: "/api/session/login",
+    payload: { login: credentials.login, password: credentials.password },
+  });
+  if (res.statusCode !== 200) throw new Error(`login answered ${res.statusCode}: ${res.body}`);
+  const cookie = sessionCookieFrom(res.headers["set-cookie"]);
+  if (cookie === undefined) throw new Error("login set no session cookie");
+  return { cookie, account: res.json<{ account: AccountPublic }>().account };
 }

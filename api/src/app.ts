@@ -7,11 +7,13 @@ import type { Logger } from "pino";
 import type { Config } from "./config.js";
 import type { Db } from "./db/client.js";
 import type { ErrorEnvelope } from "@anime-tcg/shared/errors";
+import { accountsPlugin } from "./plugins/accounts.js";
 import { dbPlugin } from "./plugins/db.js";
 import { errorsPlugin } from "./plugins/errors.js";
 import { createLogger, quieterOf } from "./plugins/logging.js";
 import { securityPlugin } from "./plugins/security.js";
 import { sessionPlugin } from "./plugins/session.js";
+import { accountRoutes } from "./routes/accounts/index.js";
 import { healthRoutes } from "./routes/health/index.js";
 import { sessionRoutes } from "./routes/session/index.js";
 
@@ -94,10 +96,12 @@ export async function buildApp({
   await app.register(dbPlugin, { db });
   await app.register(securityPlugin, { config });
   await app.register(sessionPlugin, { config });
+  await app.register(accountsPlugin, { config });
   await app.register(errorsPlugin);
   // Probed every 30 s by the image healthcheck: only failures are worth a line, unless the operator asked for less.
   await app.register(healthRoutes, { logLevel: quieterOf(config.LOG_LEVEL, "warn") });
   await app.register(sessionRoutes, { prefix: "/api" });
+  await app.register(accountRoutes, { prefix: "/api" });
 
   return app;
 }

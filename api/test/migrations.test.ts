@@ -4,20 +4,27 @@ import { sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, type Db } from "../src/db/client.js";
 import { runMigrations } from "../src/db/migrate.js";
-import { testDatabaseUrl } from "./support.js";
+import { migrationsDatabaseUrl, testDatabaseUrl } from "./support.js";
 
-const MIGRATION_SQL = new URL("../src/db/migrations/0000_create_sessions.sql", import.meta.url);
+const MIGRATION_FILES = [
+  "0000_create_sessions.sql",
+  "0001_app_role_grants.sql",
+  "0002_accounts_and_throttle.sql",
+];
+const MIGRATION_WHEN = ["1793207773838", "1793217582152", "1793220843481"];
 
 /**
  * Spec §5: migrations run at every start-up, so running them against an
  * already-migrated database must be a no-op, and the SQL that ran must be the
  * SQL that is committed. Drizzle records the sha256 of each applied file, which
- * makes the second property checkable without trusting the migrator.
+ * makes the second property checkable without trusting the migrator. The
+ * queries here run as the owner: `drizzle.__drizzle_migrations` is never
+ * granted to the app role (spec §4.1), which `db-role.test.ts` proves.
  */
 describe("migrations", () => {
   let db: Db;
   beforeAll(() => {
-    db = createDb(testDatabaseUrl());
+    db = createDb(migrationsDatabaseUrl());
   });
   afterAll(() => db.$client.end());
 
@@ -29,23 +36,29 @@ describe("migrations", () => {
   }
 
   it("is idempotent: a second run applies nothing and changes nothing", async () => {
-    await runMigrations(db);
+    await runMigrations(migrationsDatabaseUrl());
     const before = await appliedMigrations();
-    expect(before).toHaveLength(1);
+    expect(before).toHaveLength(MIGRATION_FILES.length);
 
-    await runMigrations(db);
-    await runMigrations(db);
+    await runMigrations(migrationsDatabaseUrl());
+    await runMigrations(migrationsDatabaseUrl());
     expect(await appliedMigrations()).toEqual(before);
   });
 
+  it("refuses to run as the app role, which cannot touch the migrations table", async () => {
+    await expect(runMigrations(testDatabaseUrl())).rejects.toMatchObject({ cause: { code: "42501" } });
+  });
+
   it("applied exactly the committed SQL, byte for byte", async () => {
-    const committed = createHash("sha256")
-      .update(await readFile(MIGRATION_SQL))
-      .digest("hex");
-    const [applied] = await appliedMigrations();
-    // A mismatch means a committed migration was edited after it ran somewhere; add a new file instead.
-    expect(applied?.hash).toBe(committed);
-    expect(String(applied?.created_at)).toBe("1793207773838");
+    const applied = await appliedMigrations();
+    for (const [index, file] of MIGRATION_FILES.entries()) {
+      const committed = createHash("sha256")
+        .update(await readFile(new URL(`../src/db/migrations/${file}`, import.meta.url)))
+        .digest("hex");
+      // A mismatch means a committed migration was edited after it ran somewhere; add a new file instead.
+      expect(applied[index]?.hash, file).toBe(committed);
+      expect(String(applied[index]?.created_at), file).toBe(MIGRATION_WHEN[index]);
+    }
   });
 
   it("produced the sessions table the schema and spec describe", async () => {
@@ -72,6 +85,27 @@ describe("migrations", () => {
       "sessions_expires_at_idx",
       "sessions_pkey",
     ]);
+  });
+
+  it("produced the accounts and auth_throttle tables, with sessions cascading from accounts", async () => {
+    const tables = await db.execute<{ table_name: string }>(sql`
+      select table_name from information_schema.tables
+      where table_schema = 'public' order by table_name
+    `);
+    expect(tables.rows.map((row) => row.table_name)).toEqual(["accounts", "auth_throttle", "sessions"]);
+
+    const unique = await db.execute<{ constraint_name: string }>(sql`
+      select constraint_name from information_schema.table_constraints
+      where table_schema = 'public' and table_name = 'accounts' and constraint_type = 'UNIQUE'
+    `);
+    expect(unique.rows.map((row) => row.constraint_name)).toEqual(["accounts_login_normalized_unique"]);
+
+    const cascade = await db.execute<{ delete_rule: string }>(sql`
+      select rc.delete_rule from information_schema.referential_constraints rc
+      join information_schema.table_constraints tc on tc.constraint_name = rc.constraint_name
+      where tc.table_schema = 'public' and tc.table_name = 'sessions'
+    `);
+    expect(cascade.rows).toEqual([{ delete_rule: "CASCADE" }]);
   });
 
   it("the purge query can use the expires_at index rather than scanning every session", async () => {

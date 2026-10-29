@@ -1,11 +1,16 @@
 import type { ErrorCode, ErrorEnvelope } from "@anime-tcg/shared/errors";
 
-/** The one error type domain code throws; the error plugin maps it to the envelope. */
+/**
+ * The one error type domain code throws; the error plugin maps it to the
+ * envelope. `retryAfterSeconds` rides along for `too_many_failures` so the
+ * plugin can set `Retry-After` and the body from the same number.
+ */
 export class ApiError extends Error {
   constructor(
     readonly statusCode: number,
     readonly code: ErrorCode,
     message: string,
+    readonly retryAfterSeconds?: number,
   ) {
     super(message);
     this.name = "ApiError";
@@ -15,6 +20,8 @@ export class ApiError extends Error {
 export interface EnvelopeResponse {
   statusCode: number;
   body: ErrorEnvelope;
+  /** Set when the response must carry a `Retry-After` header of this many seconds. */
+  retryAfterSeconds?: number;
 }
 
 /**
@@ -41,7 +48,16 @@ const FIXED_MESSAGES: Partial<Record<number, { code: ErrorCode; message: string 
  * the caller logs the real error under the request id.
  */
 export function errorEnvelopeFor(err: unknown): EnvelopeResponse {
-  if (err instanceof ApiError) return { statusCode: err.statusCode, body: envelope(err.code, err.message) };
+  if (err instanceof ApiError) {
+    if (err.retryAfterSeconds === undefined) {
+      return { statusCode: err.statusCode, body: envelope(err.code, err.message) };
+    }
+    return {
+      statusCode: err.statusCode,
+      body: { error: { code: err.code, message: err.message, retryAfterSeconds: err.retryAfterSeconds } },
+      retryAfterSeconds: err.retryAfterSeconds,
+    };
+  }
   if (!isThrownError(err)) return internal();
 
   const [first] = err.validation ?? [];

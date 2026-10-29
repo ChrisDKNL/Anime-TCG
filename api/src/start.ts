@@ -17,7 +17,7 @@ export interface RunningServer {
 export async function startServer(config: Config, logger: Logger): Promise<RunningServer> {
   const db = createDb(config.DATABASE_URL);
   const app = await buildApp({ config, db, logger });
-  await runMigrations(db);
+  await runMigrations(config.MIGRATIONS_DATABASE_URL);
   app.log.info("migrations applied");
   await app.listen({ host: config.HOST, port: config.PORT });
 
