@@ -33,8 +33,9 @@ async function holdings(tx: Queryable, accountId: string): Promise<{ cards: numb
 /**
  * The owner's reset of one account's collection (collection-packs.md §5.6):
  * under the account row's lock, the same one every opening takes, its
- * openings go (and their cards by cascade) and the allowance is full again,
- * so a racing opening is either wholly removed or wholly kept. The login,
+ * openings go (and their cards by cascade), the allowance is full again and
+ * both pack counters are 0, as on registration, so a racing opening is
+ * either wholly removed or wholly kept. The login,
  * password, sessions and account id stay. Without `confirm` it only counts.
  */
 export async function resetCollection(
@@ -53,7 +54,10 @@ export async function resetCollection(
     const held = await holdings(tx, account.id);
     if (options.confirm) {
       await tx.delete(packOpenings).where(eq(packOpenings.accountId, account.id));
-      await tx.update(accounts).set({ packsAnchorAt: null }).where(eq(accounts.id, account.id));
+      await tx
+        .update(accounts)
+        .set({ packsAnchorAt: null, packsSinceMythic: 0, freePacksOpened: 0 })
+        .where(eq(accounts.id, account.id));
     }
     return { accountId: account.id, login: account.login, ...held, applied: options.confirm };
   });

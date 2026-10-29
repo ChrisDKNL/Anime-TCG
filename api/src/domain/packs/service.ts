@@ -1,4 +1,4 @@
-import type { OpenedCard, PackAllowance, PackOpened, PacksResponse } from "@anime-tcg/shared/api";
+import type { OpenedCard, PackAllowance, PackKind, PackOpened, PacksResponse } from "@anime-tcg/shared/api";
 import type { Rarity } from "@anime-tcg/shared/rarity";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import type { Logger } from "pino";
@@ -9,20 +9,34 @@ import { currentSnapshot, describeCharacters, franchiseRefs, tierPool } from "..
 import { perRarity } from "../pool/tiers.js";
 import { allowanceAt, anchorAfterOpening } from "./allowance.js";
 import { publishedOdds } from "./odds.js";
-import { drawPack, type TierPool } from "./roll.js";
+import {
+  countersAfter,
+  drawPack,
+  type PackCounters,
+  type PackSource,
+  packsUntilGuarantee,
+  planPack,
+  type TierPool,
+} from "./roll.js";
 import type { Rng } from "./rng.js";
 
 /** What the service logs through: the request's logger, so each line carries the request id. */
 export type PackLog = Pick<Logger, "info">;
 
 /** The characters an opening may deal and the snapshot they belong to; a themed pack passes a subset. */
-export interface PackSource {
+export interface PackPool {
   snapshotId: number;
   tiers: TierPool;
 }
 
+/** The account row as the opening read it under its lock: the allowance clock and both pack counters. */
+export interface LockedAccount extends PackCounters {
+  id: string;
+  packsAnchorAt: Date | null;
+}
+
 export interface OpeningRequest {
-  accountId: string;
+  account: LockedAccount;
   requestId: string;
   openedAt: Date;
 }
@@ -32,34 +46,50 @@ export interface StoredOpening {
   openingId: string;
   openedAt: Date;
   snapshotId: number;
+  kind: PackKind;
+  pity: boolean;
   cards: { slot: number; characterId: number; rarity: Rarity; isNew: boolean }[];
 }
 
+export interface DealtOpening {
+  opening: StoredOpening;
+  /** The account row as the deal left it. */
+  account: LockedAccount;
+}
+
 /**
- * Steps 5 to 7 of collection-packs.md §5.3, inside the caller's transaction
- * and under its account lock: roll and pick the cards from `source`, mark
- * each new to the account or not, and write the opening and its cards.
+ * Steps 5 to 8 of collection-packs.md §5.3, inside the caller's transaction
+ * and under its account lock: plan the pack from the counters, roll and pick
+ * the cards from `pool`, mark each new to the account or not, write the
+ * opening and its cards, and move the allowance clock and the counters. A
+ * free pack spends the allowance; a shop pack (economy.md) does not, and
+ * moves only what §5.4.7 says it moves.
  */
 export async function dealPack(
   tx: Queryable,
   request: OpeningRequest,
   rng: Rng,
+  pool: PackPool,
   source: PackSource,
-): Promise<StoredOpening> {
-  const dealt = drawPack(source.tiers, rng);
+): Promise<DealtOpening> {
+  const { account } = request;
+  const plan = planPack(account, source, rng);
+  const dealt = drawPack(pool.tiers, plan, rng);
   const dealtIds = dealt.map((card) => card.characterId);
   const owned = await tx
     .selectDistinct({ characterId: cards.characterId })
     .from(cards)
-    .where(and(eq(cards.accountId, request.accountId), inArray(cards.characterId, dealtIds)));
+    .where(and(eq(cards.accountId, account.id), inArray(cards.characterId, dealtIds)));
   const ownedIds = new Set(owned.map((row) => row.characterId));
 
   const [opening] = await tx
     .insert(packOpenings)
     .values({
-      accountId: request.accountId,
+      accountId: account.id,
       requestId: request.requestId,
-      snapshotId: source.snapshotId,
+      snapshotId: pool.snapshotId,
+      kind: plan.kind,
+      pity: plan.pity,
       openedAt: request.openedAt,
     })
     .returning({ id: packOpenings.id });
@@ -74,28 +104,57 @@ export async function dealPack(
   await tx.insert(cards).values(
     written.map((card) => ({
       ...card,
-      accountId: request.accountId,
+      accountId: account.id,
       openingId: opening.id,
       variant: "standard" as const,
-      snapshotId: source.snapshotId,
+      snapshotId: pool.snapshotId,
       pulledAt: request.openedAt,
     })),
   );
-  return { openingId: opening.id, openedAt: request.openedAt, snapshotId: source.snapshotId, cards: written };
+
+  const counters = countersAfter(
+    account,
+    source,
+    written.map((card) => card.rarity),
+  );
+  const packsAnchorAt =
+    source === "free" ? anchorAfterOpening(account.packsAnchorAt, request.openedAt) : account.packsAnchorAt;
+  await tx
+    .update(accounts)
+    .set({ packsAnchorAt, ...counters })
+    .where(eq(accounts.id, account.id));
+  return {
+    opening: {
+      openingId: opening.id,
+      openedAt: request.openedAt,
+      snapshotId: pool.snapshotId,
+      kind: plan.kind,
+      pity: plan.pity,
+      cards: written,
+    },
+    account: { ...account, ...counters, packsAnchorAt },
+  };
 }
 
 function signedOut(): ApiError {
   return new ApiError(401, "unauthenticated", "Sign in first");
 }
 
+const LOCKED_ACCOUNT = {
+  id: accounts.id,
+  packsAnchorAt: accounts.packsAnchorAt,
+  packsSinceMythic: accounts.packsSinceMythic,
+  freePacksOpened: accounts.freePacksOpened,
+};
+
 /**
- * Packs for one account: the allowance, the published odds and the opening
- * itself. Every path with stakes locks the account row first, so one
- * account's openings, and its reset, run one after another.
+ * Packs for one account: the allowance, the published odds, the pity count
+ * and the opening itself. Every path with stakes locks the account row
+ * first, so one account's openings, and its reset, run one after another.
  */
 export class PackService {
   /** Snapshots never change once written, so a pool read for an id is good for as long as the process runs. */
-  private cachedPool: PackSource | null = null;
+  private cachedPool: PackPool | null = null;
 
   constructor(
     private readonly db: Db,
@@ -104,15 +163,16 @@ export class PackService {
 
   async status(accountId: string, now: Date): Promise<PacksResponse> {
     const [account] = await this.db
-      .select({ anchor: accounts.packsAnchorAt })
+      .select(LOCKED_ACCOUNT)
       .from(accounts)
       .where(eq(accounts.id, accountId))
       .limit(1);
     if (account === undefined) throw signedOut();
     const snapshot = await currentSnapshot(this.db);
     return {
-      allowance: allowanceAt(account.anchor, now),
+      allowance: allowanceAt(account.packsAnchorAt, now),
       odds: snapshot === null ? null : publishedOdds(snapshot.tierSizes, snapshot.info),
+      packsUntilGuarantee: snapshot === null ? null : packsUntilGuarantee(account),
     };
   }
 
@@ -123,20 +183,18 @@ export class PackService {
     requestId: string,
     now: Date,
   ): Promise<{ replayed: boolean; opened: PackOpened }> {
-    const { replayed, opening, allowance } = await this.db.transaction(async (tx) => {
-      const [account] = await tx
-        .select({ anchor: accounts.packsAnchorAt })
+    const { replayed, opening, account } = await this.db.transaction(async (tx) => {
+      const [locked] = await tx
+        .select(LOCKED_ACCOUNT)
         .from(accounts)
         .where(eq(accounts.id, accountId))
         .for("update");
-      if (account === undefined) throw signedOut();
+      if (locked === undefined) throw signedOut();
 
       const stored = await storedOpening(tx, accountId, requestId);
-      if (stored !== null) {
-        return { replayed: true, opening: stored, allowance: allowanceAt(account.anchor, now) };
-      }
+      if (stored !== null) return { replayed: true, opening: stored, account: locked };
 
-      const before = allowanceAt(account.anchor, now);
+      const before = allowanceAt(locked.packsAnchorAt, now);
       if (before.available === 0) {
         throw new ApiError(
           409,
@@ -148,11 +206,9 @@ export class PackService {
       const snapshot = await currentSnapshot(tx);
       if (snapshot === null) throw new ApiError(503, "pool_unavailable", "Cards are not available right now");
 
-      const source = await this.poolFor(tx, snapshot.id);
-      const dealt = await dealPack(tx, { accountId, requestId, openedAt: now }, this.rng, source);
-      const anchor = anchorAfterOpening(account.anchor, now);
-      await tx.update(accounts).set({ packsAnchorAt: anchor }).where(eq(accounts.id, accountId));
-      return { replayed: false, opening: dealt, allowance: allowanceAt(anchor, now) };
+      const pool = await this.poolFor(tx, snapshot.id);
+      const dealt = await dealPack(tx, { account: locked, requestId, openedAt: now }, this.rng, pool, "free");
+      return { replayed: false, ...dealt };
     });
 
     log.info(
@@ -160,22 +216,25 @@ export class PackService {
         accountId,
         openingId: opening.openingId,
         snapshotId: opening.snapshotId,
+        kind: opening.kind,
+        pity: opening.pity,
         rarities: countRarities(opening.cards.map((card) => card.rarity)),
+        packsSinceMythic: account.packsSinceMythic,
         replayed,
       },
       "pack opened",
     );
-    return { replayed, opened: await this.describe(opening, allowance) };
+    return { replayed, opened: await this.describe(opening, account, now) };
   }
 
-  private async poolFor(tx: Queryable, snapshotId: number): Promise<PackSource> {
+  private async poolFor(tx: Queryable, snapshotId: number): Promise<PackPool> {
     if (this.cachedPool?.snapshotId !== snapshotId) {
       this.cachedPool = { snapshotId, tiers: await tierPool(tx, snapshotId) };
     }
     return this.cachedPool;
   }
 
-  private async describe(opening: StoredOpening, allowance: PackAllowance): Promise<PackOpened> {
+  private async describe(opening: StoredOpening, account: LockedAccount, now: Date): Promise<PackOpened> {
     const current = await currentSnapshot(this.db);
     const described = await describeCharacters(
       this.db,
@@ -194,12 +253,16 @@ export class PackService {
         isNew: card.isNew,
       };
     });
+    const allowance: PackAllowance = allowanceAt(account.packsAnchorAt, now);
     return {
       openingId: opening.openingId,
       openedAt: opening.openedAt.toISOString(),
+      packKind: opening.kind,
+      pityMythic: opening.pity,
       cards: openedCards,
       franchises: await franchiseRefs(this.db, described.franchiseIds),
       allowance,
+      packsUntilGuarantee: current === null ? null : packsUntilGuarantee(account),
     };
   }
 }
@@ -210,7 +273,13 @@ async function storedOpening(
   requestId: string,
 ): Promise<StoredOpening | null> {
   const [opening] = await tx
-    .select({ id: packOpenings.id, openedAt: packOpenings.openedAt, snapshotId: packOpenings.snapshotId })
+    .select({
+      id: packOpenings.id,
+      openedAt: packOpenings.openedAt,
+      snapshotId: packOpenings.snapshotId,
+      kind: packOpenings.kind,
+      pity: packOpenings.pity,
+    })
     .from(packOpenings)
     .where(and(eq(packOpenings.accountId, accountId), eq(packOpenings.requestId, requestId)))
     .limit(1);
@@ -220,7 +289,14 @@ async function storedOpening(
     .from(cards)
     .where(eq(cards.openingId, opening.id))
     .orderBy(asc(cards.slot));
-  return { openingId: opening.id, openedAt: opening.openedAt, snapshotId: opening.snapshotId, cards: rows };
+  return {
+    openingId: opening.id,
+    openedAt: opening.openedAt,
+    snapshotId: opening.snapshotId,
+    kind: opening.kind,
+    pity: opening.pity,
+    cards: rows,
+  };
 }
 
 function countRarities(rarities: readonly Rarity[]): Record<Rarity, number> {

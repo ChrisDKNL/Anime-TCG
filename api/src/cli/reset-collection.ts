@@ -14,8 +14,9 @@ import { createLogger } from "../plugins/logging.js";
  *   node api/dist/cli/reset-collection.js <login>             what a reset would remove
  *   node api/dist/cli/reset-collection.js <login> --confirm   reset it
  *
- * Removes the account's openings and cards and fills its pack allowance;
- * the login, password and sessions stay. Uses DATABASE_URL: the app role has
+ * Removes the account's openings and cards, fills its pack allowance and
+ * sets its pity and Enchanted counters to zero; the login, password and
+ * sessions stay. Uses DATABASE_URL: the app role has
  * every statement this needs. There is no route for it, by design.
  */
 
@@ -23,8 +24,8 @@ const USAGE = "Usage: node api/dist/cli/reset-collection.js <login> [--confirm]"
 
 export function describeReset(result: CollectionResetResult): string {
   return result.applied
-    ? `Collection reset for ${result.login}: ${result.cards} cards and ${result.openings} openings removed; packs full.`
-    : `Would reset ${result.login}: ${result.cards} cards, ${result.openings} openings.`;
+    ? `Collection reset for ${result.login}: ${result.cards} cards and ${result.openings} openings removed; packs full; counters reset.`
+    : `Would reset ${result.login}: ${result.cards} cards, ${result.openings} openings; pity and Enchanted counters to zero.`;
 }
 
 export interface ResetIo {

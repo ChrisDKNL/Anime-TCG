@@ -7,21 +7,22 @@ describe("totalsOf", () => {
       totalsOf([
         { rarity: "common", count: 3 },
         { rarity: "common", count: 1 },
+        { rarity: "uncommon", count: 1 },
         { rarity: "epic", count: 2 },
         { rarity: "mythic", count: 1 },
       ]),
     ).toEqual({
-      cards: 7,
+      cards: 8,
       duplicates: 3,
-      byRarity: { common: 4, rare: 0, epic: 2, legendary: 0, mythic: 1 },
+      byRarity: { common: 4, uncommon: 1, rare: 0, epic: 2, legendary: 0, mythic: 1 },
     });
   });
 
-  it("is all zeros, all five tiers present, for an empty collection", () => {
+  it("is all zeros, all six tiers present, for an empty collection", () => {
     expect(totalsOf([])).toEqual({
       cards: 0,
       duplicates: 0,
-      byRarity: { common: 0, rare: 0, epic: 0, legendary: 0, mythic: 0 },
+      byRarity: { common: 0, uncommon: 0, rare: 0, epic: 0, legendary: 0, mythic: 0 },
     });
   });
 
