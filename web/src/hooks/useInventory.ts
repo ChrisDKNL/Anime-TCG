@@ -1,19 +1,6 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { RARITIES, type Rarity } from "@anime-tcg/shared/rarity";
 import type { Card } from "../types";
-
-const STORAGE_KEY = "anime-tcg:inventory:v1";
-
-function loadInventory(): Card[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as Card[]) : [];
-  } catch {
-    return [];
-  }
-}
 
 /**
  * The inventory is a flat, append-only array of `Card` instances. Every pull
@@ -22,18 +9,13 @@ function loadInventory(): Card[] {
  * character, per rarity, "new vs. dupe" — with `useMemo` instead of keeping
  * multiple sources of truth in sync.
  *
- * Persisted to localStorage so a refresh doesn't wipe the collection.
+ * Held in memory for the signed-in session only. The collection moves to the
+ * server in roadmap item 1c (ADR 0008); until then nothing account-scoped is
+ * kept in the browser (accounts.md §3.7), and the pre-accounts
+ * `anime-tcg:inventory:v1` key is neither read nor touched (§3.1.3).
  */
 export function useInventory() {
-  const [cards, setCards] = useState<Card[]>(loadInventory);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(cards));
-    } catch {
-      // Ignore quota / private-mode errors; the in-memory state still works.
-    }
-  }, [cards]);
+  const [cards, setCards] = useState<Card[]>([]);
 
   /** Append newly opened cards. Functional update so rapid pack-opens never clobber each other. */
   const addCards = useCallback((newCards: Card[]) => {

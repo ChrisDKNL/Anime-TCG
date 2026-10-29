@@ -30,19 +30,16 @@ describe("useInventory", () => {
     });
   });
 
-  it("persists to localStorage and rehydrates on the next mount", () => {
-    const first = renderHook(() => useInventory());
-    act(() => first.result.current.addCards([makeCard({ uid: "persisted" })]));
-    first.unmount();
-
-    const second = renderHook(() => useInventory());
-    expect(second.result.current.cards.map((c) => c.uid)).toEqual(["persisted"]);
-  });
-
-  it("ignores corrupt localStorage rather than crashing", () => {
-    localStorage.setItem("anime-tcg:inventory:v1", "{not json");
+  it("neither reads nor writes the pre-accounts localStorage key", () => {
+    localStorage.setItem("anime-tcg:inventory:v1", JSON.stringify([makeCard({ uid: "old" })]));
     const { result } = renderHook(() => useInventory());
     expect(result.current.cards).toEqual([]);
+
+    act(() => result.current.addCards([makeCard({ uid: "fresh" })]));
+    expect(JSON.parse(localStorage.getItem("anime-tcg:inventory:v1") ?? "[]")).toMatchObject([
+      { uid: "old" },
+    ]);
+    expect(localStorage.length).toBe(1);
   });
 
   it("clear() empties the collection", () => {

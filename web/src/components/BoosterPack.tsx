@@ -1,17 +1,21 @@
+import type { Ref } from "react";
 import { BASE_WEIGHTS } from "@anime-tcg/shared/rarity";
 
 interface Props {
   disabled: boolean;
   opening: boolean;
   onOpen: () => void;
+  /** The button itself, so sign-in can move focus to it (accounts.md §3.3.4). */
+  ref?: Ref<HTMLButtonElement>;
 }
 
 const pct = (n: number) => `${Math.round(n * 100)}%`;
 
-export function BoosterPack({ disabled, opening, onOpen }: Props) {
+export function BoosterPack({ disabled, opening, onOpen, ref }: Props) {
   return (
     <div className="flex flex-col items-center gap-3">
       <button
+        ref={ref}
         type="button"
         onClick={onOpen}
         disabled={disabled || opening}
