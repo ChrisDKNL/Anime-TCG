@@ -105,10 +105,14 @@ function isRelationType(value: string): value is Edge["relationType"] {
 /** Whitespace, a control character (C0, DEL, C1) or a backslash anywhere: what a URL served as is may not hold. */
 const SPACE_CONTROL_OR_BACKSLASH = /[\s\p{Cc}\\]/u;
 
-/** Whitespace and Unicode format characters (General Category Cf): zero-width spaces, direction marks, BOMs, soft hyphens. */
-const INVISIBLE = /[\s\p{Cf}]/gu;
+/**
+ * Whitespace, control characters (General Category Cc: C0, DEL, C1) and
+ * Unicode format characters (Cf: zero-width spaces, direction marks, BOMs,
+ * soft hyphens).
+ */
+const INVISIBLE = /[\s\p{Cc}\p{Cf}]/gu;
 
-/** At least one character is left once every whitespace and format character is removed (round 4, decision 7). */
+/** At least one character is left once every whitespace, control and format character is removed (round 4, decision 7). */
 function hasVisibleCharacter(text: string): boolean {
   return text.replace(INVISIBLE, "") !== "";
 }
@@ -164,10 +168,10 @@ function entryRejection(item: SeriesItem): { reason: string; path: string } | Om
   if (item.id < 1) return { reason: "id", path: "id" };
   const { english, romaji, native } = item.title;
   if (hasNul(english, romaji, native, ...(item.genres ?? []))) return { reason: "nul", path: "title" };
-  // English, else romaji: a romaji title only stands in when there is no English one, not when the English one is too long.
-  const title = optionalText(english?.trim() ? english : romaji, TITLE_MAX);
+  // English, else romaji: a romaji title only stands in when there is no English one, not when the English one is too long or invisible.
+  const title = visibleText(english?.trim() ? english : romaji, TITLE_MAX);
   if (title === null || title === undefined) return { reason: "title", path: "title" };
-  const titleNative = optionalText(native, TITLE_MAX);
+  const titleNative = visibleText(native, TITLE_MAX);
   if (titleNative === undefined) return { reason: "title", path: "title.native" };
   const year = item.startDate?.year ?? null;
   if (year !== null && (year < START_YEAR.min || year > START_YEAR.max)) {

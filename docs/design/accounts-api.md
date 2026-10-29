@@ -159,7 +159,7 @@ The UI maps codes to its copy (`accounts.md` §3.7): `invite_invalid` → invali
 docker compose --env-file .env.production.local --profile production exec -T api-production node api/dist/cli/reset-password.js <login>
 ```
 
-Reads the new password from stdin (not an argument, so it never lands in shell history or `ps`), validates 8–128 characters, rehashes, writes it, and destroys every session of the account. Prints one line: `Password reset for <login>; 3 sessions ended.` Uses `DATABASE_URL` (the app role has the DML it needs). Exit 1 with a one-line reason on unknown login or bad input. Unit-tested through its exported function; the stdin wrapper is a thin shell. Documented in `docs/04-deployment.md` under "Operations".
+Reads the new password from stdin (not an argument, so it never lands in shell history or `ps`), validates 8–128 characters, rehashes, writes it, and destroys every session of the account. Prints one line: `Password reset for "<login>"; 3 sessions ended.`, the login JSON-quoted and then with every remaining control character (Cc: DEL, C1), format character (Cf: bidi and zero-width marks) and U+2028/U+2029 written as `\uXXXX` (`quote` in `api/src/cli/quote.ts`; `JSON.stringify` alone escapes only C0), so none of them reaches the terminal raw. Uses `DATABASE_URL` (the app role has the DML it needs). Exit 1 with a one-line reason on unknown login or bad input. Unit-tested through its exported function; the stdin wrapper is a thin shell. Documented in `docs/04-deployment.md` under "Operations".
 
 ## 9. Tests required (minimum, T3)
 

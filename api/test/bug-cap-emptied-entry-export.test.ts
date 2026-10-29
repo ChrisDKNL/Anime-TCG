@@ -123,7 +123,7 @@ describe("regression: an entry the franchise cap empties keeps the --export roun
       throw new Error(`snapshot ${current} is current; a previous test run left it behind`);
   });
   afterAll(async () => {
-    await deleteSnapshots(app.db, snapshots);
+    await deleteSnapshots(snapshots);
     await app.close();
   });
 

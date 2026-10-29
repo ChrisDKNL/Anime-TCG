@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { eq, sql } from "drizzle-orm";
+import { PACK_SIZE } from "@anime-tcg/shared/economy";
+import { eq, inArray, sql } from "drizzle-orm";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { App } from "../src/app.js";
 import {
@@ -8,10 +9,17 @@ import {
   cards,
   characters,
   packOpenings,
+  poolFetches,
+  poolFetchPages,
+  poolSnapshotCharacters,
+  poolSnapshotSeries,
   poolSnapshots,
+  series,
   sessions,
 } from "../src/db/schema.js";
-import { clearAccountData, createTestApp, insertAccount } from "./support.js";
+import { createDb } from "../src/db/client.js";
+import { resetCollection } from "../src/domain/collection/reset.js";
+import { clearAccountData, createTestApp, insertAccount, migrationsDatabaseUrl } from "./support.js";
 
 /** Postgres `insufficient_privilege`; drizzle wraps the pg error as `cause`. */
 const PERMISSION_DENIED = "42501";
@@ -85,8 +93,14 @@ describe("app database role", () => {
     expect(await app.db.select().from(accounts)).toEqual([]);
   });
 
-  it("can write the 1c tables down to a card, which 0001's default privileges granted as well", async () => {
-    const accountId = await insertAccount(app.db, "CardProbe");
+  /** Postgres `check_violation`. */
+  const CHECK_VIOLATION = "23514";
+  const PROBE_CHARACTER = 999_000_001;
+  const PROBE_IMAGE = "https://s4.anilist.co/file/anilistcdn/character/large/b999000001.png";
+  const probeSnapshots: number[] = [];
+
+  /** A snapshot, a character and an opening for `accountId`, written as the app role, ready for a card. */
+  async function seedOpening(accountId: string): Promise<{ snapshotId: number; openingId: string }> {
     const now = new Date();
     const [snapshot] = await app.db
       .insert(poolSnapshots)
@@ -102,10 +116,11 @@ describe("app database role", () => {
       })
       .returning({ id: poolSnapshots.id });
     if (snapshot === undefined) throw new Error("snapshot insert returned no row");
-    const characterId = 999_000_001;
+    probeSnapshots.push(snapshot.id);
     await app.db
       .insert(characters)
-      .values({ id: characterId, name: "Probe", imageUrl: "https://s4.anilist.co/probe.png" });
+      .values({ id: PROBE_CHARACTER, name: "Probe", imageUrl: PROBE_IMAGE })
+      .onConflictDoNothing();
     const [opening] = await app.db
       .insert(packOpenings)
       .values({
@@ -118,24 +133,157 @@ describe("app database role", () => {
       })
       .returning({ id: packOpenings.id });
     if (opening === undefined) throw new Error("opening insert returned no row");
-    await app.db.insert(cards).values({
-      accountId,
-      openingId: opening.id,
-      slot: 0,
-      characterId,
-      rarity: "mythic",
-      snapshotId: snapshot.id,
-      isNew: true,
-      pulledAt: now,
-    });
+    return { snapshotId: snapshot.id, openingId: opening.id };
+  }
+
+  const card = (accountId: string, seeded: { snapshotId: number; openingId: string }, slot: number) => ({
+    accountId,
+    openingId: seeded.openingId,
+    slot,
+    characterId: PROBE_CHARACTER,
+    rarity: "mythic" as const,
+    snapshotId: seeded.snapshotId,
+    isNew: true,
+    pulledAt: new Date(),
+  });
+
+  /** The app role may not delete a snapshot or a character (0004), so the probe rows go as the owner. */
+  afterAll(async () => {
+    const owner = createDb(migrationsDatabaseUrl());
+    try {
+      await owner.delete(accounts);
+      await owner.delete(characters).where(eq(characters.id, PROBE_CHARACTER));
+      if (probeSnapshots.length > 0)
+        await owner.delete(poolSnapshots).where(inArray(poolSnapshots.id, probeSnapshots));
+    } finally {
+      await owner.$client.end();
+    }
+  });
+
+  it("can write the 1c tables down to a card, which 0001's default privileges granted as well", async () => {
+    const accountId = await insertAccount(app.db, "CardProbe");
+    const seeded = await seedOpening(accountId);
+    await app.db.insert(cards).values(card(accountId, seeded, 0));
     expect(
       await app.db.select({ variant: cards.variant }).from(cards).where(eq(cards.accountId, accountId)),
     ).toEqual([{ variant: "standard" }]);
+  });
 
+  it("holds exactly the rights 0001 granted less 0004's revokes, table by table", async () => {
+    const grants = await app.db.execute<{ table_name: string; rights: string }>(sql`
+      select table_name, string_agg(privilege_type, ',' order by privilege_type) as rights
+      from information_schema.role_table_grants
+      where grantee = 'anime_app' and table_schema = 'public'
+      group by table_name order by table_name
+    `);
+    const all = "DELETE,INSERT,SELECT,UPDATE";
+    expect(grants.rows).toEqual([
+      { table_name: "accounts", rights: all },
+      { table_name: "auth_throttle", rights: all },
+      { table_name: "cards", rights: "INSERT,SELECT" },
+      { table_name: "characters", rights: "INSERT,SELECT,UPDATE" },
+      { table_name: "pack_openings", rights: "DELETE,INSERT,SELECT" },
+      { table_name: "pool_fetch_pages", rights: "INSERT,SELECT" },
+      { table_name: "pool_fetches", rights: "DELETE,INSERT,SELECT" },
+      { table_name: "pool_snapshot_characters", rights: "INSERT,SELECT" },
+      { table_name: "pool_snapshot_franchises", rights: "INSERT,SELECT" },
+      { table_name: "pool_snapshot_memberships", rights: "INSERT,SELECT" },
+      { table_name: "pool_snapshot_relations", rights: "INSERT,SELECT" },
+      { table_name: "pool_snapshot_series", rights: "INSERT,SELECT" },
+      { table_name: "pool_snapshots", rights: "INSERT,SELECT,UPDATE" },
+      { table_name: "series", rights: "INSERT,SELECT,UPDATE" },
+      { table_name: "sessions", rights: all },
+    ]);
+  });
+
+  it("cannot rewrite a granted card's rarity, delete a card on its own or change an opening (0004)", async () => {
+    const accountId = await insertAccount(app.db, "RarityProbe");
+    await app.db.insert(cards).values(card(accountId, await seedOpening(accountId), 0));
+    await expect(
+      app.db.update(cards).set({ rarity: "common" }).where(eq(cards.accountId, accountId)),
+    ).rejects.toMatchObject({ cause: { code: PERMISSION_DENIED } });
+    await expect(app.db.delete(cards).where(eq(cards.accountId, accountId))).rejects.toMatchObject({
+      cause: { code: PERMISSION_DENIED },
+    });
+    await expect(app.db.update(packOpenings).set({ pity: true })).rejects.toMatchObject({
+      cause: { code: PERMISSION_DENIED },
+    });
+  });
+
+  it("cannot change or delete a snapshot's rows, delete the snapshot, or delete a character or series (0004)", async () => {
+    await seedOpening(await insertAccount(app.db, "SnapshotProbe"));
+    await expect(
+      app.db.delete(poolSnapshotCharacters).where(eq(poolSnapshotCharacters.characterId, PROBE_CHARACTER)),
+    ).rejects.toMatchObject({ cause: { code: PERMISSION_DENIED } });
+    await expect(app.db.update(poolSnapshotSeries).set({ popularity: 0 })).rejects.toMatchObject({
+      cause: { code: PERMISSION_DENIED },
+    });
+    await expect(app.db.delete(poolSnapshots)).rejects.toMatchObject({ cause: { code: PERMISSION_DENIED } });
+    await expect(app.db.delete(characters)).rejects.toMatchObject({ cause: { code: PERMISSION_DENIED } });
+    await expect(app.db.delete(series)).rejects.toMatchObject({ cause: { code: PERMISSION_DENIED } });
+  });
+
+  it("still deletes an account with its openings and cards, by cascade", async () => {
+    const accountId = await insertAccount(app.db, "CascadeProbe");
+    await app.db.insert(cards).values(card(accountId, await seedOpening(accountId), 0));
     await app.db.delete(accounts).where(eq(accounts.id, accountId));
     expect(await app.db.select().from(cards).where(eq(cards.accountId, accountId))).toEqual([]);
-    await app.db.delete(characters).where(eq(characters.id, characterId));
-    await app.db.delete(poolSnapshots).where(eq(poolSnapshots.id, snapshot.id));
+    expect(await app.db.select().from(packOpenings).where(eq(packOpenings.accountId, accountId))).toEqual([]);
+  });
+
+  it("still resets a collection: the openings go and their cards by cascade", async () => {
+    const accountId = await insertAccount(app.db, "ResetProbe");
+    await app.db.insert(cards).values(card(accountId, await seedOpening(accountId), 0));
+    const result = await resetCollection(app.db, "ResetProbe", { confirm: true });
+    expect(result).toMatchObject({ applied: true, cards: 1, openings: 1 });
+    expect(await app.db.select().from(cards).where(eq(cards.accountId, accountId))).toEqual([]);
+    expect(await app.db.select().from(packOpenings).where(eq(packOpenings.accountId, accountId))).toEqual([]);
+  });
+
+  it("cannot change or delete a staged page or change a fetch, and a fetch still takes its pages by cascade (0004)", async () => {
+    const [fetch] = await app.db
+      .insert(poolFetches)
+      .values({ startedAt: new Date() })
+      .returning({ id: poolFetches.id });
+    if (fetch === undefined) throw new Error("fetch insert returned no row");
+    await app.db
+      .insert(poolFetchPages)
+      .values({ fetchId: fetch.id, kind: "series", key: "", page: 1, body: {}, fetchedAt: new Date() });
+    await expect(app.db.update(poolFetchPages).set({ body: { forged: true } })).rejects.toMatchObject({
+      cause: { code: PERMISSION_DENIED },
+    });
+    await expect(app.db.delete(poolFetchPages)).rejects.toMatchObject({ cause: { code: PERMISSION_DENIED } });
+    await expect(app.db.update(poolFetches).set({ startedAt: new Date(0) })).rejects.toMatchObject({
+      cause: { code: PERMISSION_DENIED },
+    });
+    await app.db.delete(poolFetches).where(eq(poolFetches.id, fetch.id));
+    expect(await app.db.select().from(poolFetchPages).where(eq(poolFetchPages.fetchId, fetch.id))).toEqual(
+      [],
+    );
+  });
+
+  it("refuses a card slot outside the pack's five (0004)", async () => {
+    const accountId = await insertAccount(app.db, "SlotProbe");
+    const seeded = await seedOpening(accountId);
+    await app.db.insert(cards).values(card(accountId, seeded, PACK_SIZE - 1));
+    for (const slot of [-1, PACK_SIZE]) {
+      await expect(app.db.insert(cards).values(card(accountId, seeded, slot))).rejects.toMatchObject({
+        cause: { code: CHECK_VIOLATION, constraint: "cards_slot_check" },
+      });
+    }
+  });
+
+  it("refuses a character image off https://IMAGE_HOST/ (0004)", async () => {
+    for (const imageUrl of [
+      "http://s4.anilist.co/file/b1.png",
+      "https://s4.anilist.co.evil.example/b1.png",
+      "https://evil.example/https://s4.anilist.co/b1.png",
+      "javascript:alert(1)",
+    ]) {
+      await expect(
+        app.db.insert(characters).values({ id: PROBE_CHARACTER + 1, name: "Probe", imageUrl }),
+      ).rejects.toMatchObject({ cause: { code: CHECK_VIOLATION, constraint: "characters_image_url_check" } });
+    }
   });
 
   it("cannot truncate or alter the new tables either", async () => {

@@ -9,3 +9,5 @@ dist
 coverage
 playwright-report
 test-results
+# AniList content (snapshot-pool --export); kept outside the repository, see docs/04-deployment.md
+snapshot*.json

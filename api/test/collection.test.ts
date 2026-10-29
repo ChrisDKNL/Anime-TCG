@@ -64,7 +64,7 @@ describe("GET /api/collection (collection-packs.md §5.5)", () => {
   });
   afterAll(async () => {
     await deleteAccounts(app.db, made);
-    await deleteSnapshots(app.db, snapshots);
+    await deleteSnapshots(snapshots);
     await app.close();
   });
 

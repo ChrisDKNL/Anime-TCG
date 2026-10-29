@@ -10,7 +10,7 @@ import { PITY_PACKS } from "@anime-tcg/shared/rarity";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { App } from "../src/app.js";
-import { main } from "../src/cli/reset-collection.js";
+import { describeReset, main } from "../src/cli/reset-collection.js";
 import { accounts, cards, packOpenings } from "../src/db/schema.js";
 import { ResetCollectionError, resetCollection } from "../src/domain/collection/reset.js";
 import { standardPool } from "./fixtures/pool.js";
@@ -68,7 +68,7 @@ describe("reset-collection", () => {
   });
   afterAll(async () => {
     await deleteAccounts(app.db, made);
-    await deleteSnapshots(app.db, snapshots);
+    await deleteSnapshots(snapshots);
     await app.close();
   });
 
@@ -156,15 +156,23 @@ describe("reset-collection", () => {
       const { account } = await playerWithPacks(2);
       expect(await run([account.login])).toEqual({
         code: 0,
-        stdout: `Would reset ${account.login}: 10 cards, 2 openings; pity and Enchanted counters to zero.\n`,
+        stdout: `Would reset "${account.login}": 10 cards, 2 openings; pity and Enchanted counters to zero.\n`,
         stderr: "",
       });
       expect(await run([account.login, "--confirm"])).toEqual({
         code: 0,
-        stdout: `Collection reset for ${account.login}: 10 cards and 2 openings removed; packs full; counters reset.\n`,
+        stdout: `Collection reset for "${account.login}": 10 cards and 2 openings removed; packs full; counters reset.\n`,
         stderr: "",
       });
       expect(await holdings(account.id)).toEqual({ cards: 0, openings: 0 });
+    });
+
+    it("prints the login quoted, with C0, C1 and format characters escaped", () => {
+      const counts = { accountId: "id", login: "a\u001b[2Jb\n\u009b2J\u202e", cards: 1, openings: 1 };
+      expect(describeReset({ ...counts, applied: false })).toBe(
+        'Would reset "a\\u001b[2Jb\\n\\u009b2J\\u202e": 1 cards, 1 openings; pity and Enchanted counters to zero.',
+      );
+      expect(describeReset({ ...counts, applied: true })).toMatch(/^Collection reset for "a\\u001b\[2Jb/);
     });
 
     it("exits 1 with a one-line reason for an unknown login", async () => {

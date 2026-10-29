@@ -72,7 +72,7 @@ describe.skipIf(path === undefined)("the real snapshot of 2026-10-29", () => {
         throw new Error(`snapshot ${current} is current; a previous test run left it behind`);
     });
     afterAll(async () => {
-      await deleteSnapshots(app.db, snapshots);
+      await deleteSnapshots(snapshots);
       await app.close();
     });
 

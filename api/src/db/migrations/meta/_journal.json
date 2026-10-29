@@ -29,6 +29,13 @@
       "when": 1793285235582,
       "tag": "0003_collection_packs",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1793296711999,
+      "tag": "0004_packs_hardening",
+      "breakpoints": true
     }
   ]
 }

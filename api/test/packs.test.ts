@@ -89,7 +89,7 @@ describe("pack routes (collection-packs.md §6.3)", () => {
   });
   afterAll(async () => {
     await deleteAccounts(app.db, made);
-    await deleteSnapshots(app.db, snapshots);
+    await deleteSnapshots(snapshots);
     await app.close();
   });
 

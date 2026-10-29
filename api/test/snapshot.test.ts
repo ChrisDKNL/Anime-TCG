@@ -104,7 +104,7 @@ describe("snapshot-pool against a local AniList stand-in (collection-packs.md §
   afterAll(async () => {
     await fake.close();
     await deleteAccounts(app.db, made);
-    await deleteSnapshots(app.db, snapshots);
+    await deleteSnapshots(snapshots);
     await app.close();
   });
 
@@ -223,8 +223,10 @@ describe("snapshot-pool against a local AniList stand-in (collection-packs.md §
 
   it("starts over when the unfinished fetch began more than FETCH_RESUME_MAX_AGE ago, and on --restart", async () => {
     fake.failNext(null, null, ...failures(6, () => faults.status(503)));
-    await expect(take(client())).rejects.toThrow(FetchPaused);
-    await app.db.update(poolFetches).set({ startedAt: new Date(Date.now() - 25 * 60 * 60_000) });
+    const dayAgo = () => new Date(Date.now() - 25 * 60 * 60_000);
+    await expect(
+      snapshotFromAniList(app.db, client(), { dryRun: false, restart: false }, silent, dayAgo),
+    ).rejects.toThrow(FetchPaused);
     fake.requests.length = 0;
     await take(client(), { dryRun: true, restart: false });
     expect(fake.requests[0]?.kind).toBe("series");
@@ -256,6 +258,13 @@ describe("snapshot-pool against a local AniList stand-in (collection-packs.md §
       /^Dry run, nothing activated\. The snapshot would hold 100 entries in 99 franchises/,
     );
     expect(lines).toContain('  1. "Series 1" (900001): 2 entries, 12 characters');
+
+    const [first] = outcome.summary.franchises;
+    if (first === undefined) throw new Error("the dry run listed no franchise");
+    const hostile = { ...first, title: "Series\u009b2J\u202e 1" };
+    expect(describeOutcome({ ...outcome, summary: { ...outcome.summary, franchises: [hostile] } })).toContain(
+      '  1. "Series\\u009b2J\\u202e 1" (900001): 2 entries, 12 characters',
+    );
   });
 
   it("leaves the current snapshot exactly as it was when the build is refused", async () => {
@@ -308,7 +317,7 @@ describe("snapshot-pool as a command", () => {
   });
   afterAll(async () => {
     await app.db.delete(poolFetches);
-    await deleteSnapshots(app.db, snapshots);
+    await deleteSnapshots(snapshots);
     await app.close();
   });
 
@@ -432,6 +441,10 @@ describe("snapshot-pool as a command", () => {
       stdout: "",
       stderr: "The file is not a snapshot: it is not valid JSON.\n",
     });
+    const file = JSON.parse(snapshotText(standardPool())) as Record<string, unknown>;
+    const strayKey = await run(["--stdin"], JSON.stringify({ ...file, "x\u009b2J": 1 }));
+    expect(strayKey.code).toBe(1);
+    expect(strayKey.stderr).toMatch(/^The file is not a snapshot: \/x\\u009b2J .+\.\n$/);
   });
 
   it("exits 2 with how to resume when a fetch pauses", async () => {
