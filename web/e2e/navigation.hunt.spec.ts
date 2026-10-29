@@ -261,6 +261,8 @@ test.describe("dialogs, openings and the session (§3.10, §3.5)", () => {
       return envelope(401, "unauthenticated");
     });
     api.on("POST /api/session/login", signedIn(CHRIS));
+    // A fake clock that flows like the real one, so the reveal timer can be run out below instead of waited for.
+    await page.clock.install();
     await signedInAt(page, "/account");
     await page.getByRole("main").getByRole("textbox", { name: "New login" }).fill("Kris");
     await page.getByRole("main").getByRole("button", { name: "Save" }).click();
@@ -275,8 +277,9 @@ test.describe("dialogs, openings and the session (§3.10, §3.5)", () => {
     await expect(h1(page, "Log in")).toBeFocused();
     await expect(page.getByRole("status").filter({ hasText: SESSION_ENDED })).toBeVisible();
     expect(await heldReturnTo(page)).toBe("/packs");
-    // Well past the 350 ms the pack takes to land, while signed out.
-    await page.waitForTimeout(800);
+    // Fires every timer due in the next second, useGame's 350 ms reveal among them: the pack has
+    // landed, while signed out, before the next sign-in starts.
+    await page.clock.runFor(1_000);
     await logIn(page);
     await expect(page).toHaveURL(/\/packs$/);
     await expect(h1(page, "Packs")).toBeFocused();

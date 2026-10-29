@@ -64,11 +64,14 @@ describe("useAccountSession", () => {
 
   it("a second component asking for the session does not ask the server again, even after a failure", async () => {
     const fetchMock = mockFetch({ "GET /api/session": { status: 502, raw: "bad gateway" } });
-    const { wrapper } = withClient();
+    const { queryClient, wrapper } = withClient();
     const first = renderHook(() => useAccountSession(), { wrapper });
     await waitFor(() => expect(first.result.current.session.status).toBe("unreachable"));
-    renderHook(() => useAccountSession(), { wrapper });
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    const second = renderHook(() => useAccountSession(), { wrapper });
+    // renderHook has committed the second observer, and a fetch on mount starts in that commit: by now
+    // the query would be fetching, so nothing needs waiting for.
+    expect(queryClient.isFetching()).toBe(0);
+    expect(second.result.current.session).toEqual({ status: "unreachable", retrying: false });
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
