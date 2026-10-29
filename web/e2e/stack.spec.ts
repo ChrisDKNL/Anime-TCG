@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type APIResponse } from "@playwright/test";
 import { mockAniList } from "./support/fake-api";
 
 /**
@@ -32,6 +32,8 @@ import { mockAniList } from "./support/fake-api";
  * - (tester) /assets without a slash is the shell like any page address, not a listing, with no-cache.
  * - In a browser through Caddy: a deep link signed out lands on /login with its guard line and survives a
  *   reload; an unknown path is the not-found page (§3.12 item 8). AniList is mocked.
+ * - An error Caddy answers itself (a POST to a page: 405) keeps the site headers and sends no Server;
+ *   with STACK_API_DOWN=1 against a stack whose api is stopped, so does the 502 for /api.
  */
 
 const STACK_URL = process.env.STACK_URL?.replace(/\/$/, "");
@@ -233,4 +235,38 @@ test.describe("deployed stack through Caddy", () => {
     const viaApi = await request.get(`${STACK_URL}/api/healthz`);
     expect(viaApi.status()).toBe(404);
   });
+
+  test("an error Caddy answers itself keeps the site headers and sends no Server", async ({ request }) => {
+    // file_server serves GET and HEAD only, so a POST to a page is Caddy's own 405: the same error
+    // path a 502 from a stopped api takes (handle_errors in the Caddyfile).
+    const res = await request.post(`${STACK_URL}/packs`, { headers: { Origin: STACK_URL ?? "" } });
+    expectErrorHeaders(res, 405);
+    expect(res.headers()["allow"]).toBe("GET, HEAD");
+  });
 });
+
+/**
+ * Opt-in, against a stack whose api is stopped (`docker stop anime-tcg-api-acceptance`, then
+ * `STACK_API_DOWN=1`): Caddy's 502 keeps the site headers and sends no Server.
+ */
+test.describe("deployed stack through Caddy, api stopped", () => {
+  test.skip(!STACK_URL || process.env.STACK_API_DOWN !== "1", "set STACK_URL and STACK_API_DOWN=1");
+
+  test("a 502 for /api keeps the site headers and sends no Server or Via", async ({ request }) => {
+    for (const path of ["/api/session", "/api"]) {
+      expectErrorHeaders(await request.get(`${STACK_URL}${path}`), 502);
+    }
+  });
+});
+
+function expectErrorHeaders(res: APIResponse, status: number) {
+  const url = res.url();
+  expect(res.status(), url).toBe(status);
+  const headers = res.headers();
+  expect(headers["content-security-policy"], url).toBe(EXPECTED_CSP);
+  expect(headers["x-content-type-options"], url).toBe("nosniff");
+  expect(headers["referrer-policy"], url).toBe("strict-origin-when-cross-origin");
+  expect(headers["permissions-policy"], url).toBe("camera=(), microphone=(), geolocation=()");
+  expect(headers["server"], url).toBeUndefined();
+  expect(headers["via"], url).toBeUndefined();
+}
