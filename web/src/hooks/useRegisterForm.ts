@@ -6,6 +6,7 @@ import { firstInvalid, OK, withMessage, type FieldState } from "../lib/fieldStat
 import { checkConfirmation, checkInviteCode, checkLogin, checkNewPassword } from "../lib/validation";
 import { useCheckInviteMutation, useRegisterMutation } from "./useAccountMutations";
 import { useFieldFocus } from "./useFieldFocus";
+import { useSingleFlight } from "./useSingleFlight";
 
 export type RegisterField = "code" | "login" | "password" | "confirm";
 export type RegisterStep = 1 | 2;
@@ -32,6 +33,7 @@ export function useRegisterForm({ onRegistered }: Options) {
   const { focusField, fieldRef } = useFieldFocus<RegisterField>();
   const checkInvite = useCheckInviteMutation();
   const registration = useRegisterMutation();
+  const singleFlight = useSingleFlight();
 
   const setValue = useCallback((field: RegisterField, value: string) => {
     setValues((previous) => ({ ...previous, [field]: value }));
@@ -94,63 +96,67 @@ export function useRegisterForm({ onRegistered }: Options) {
     [codeRejected, focusField],
   );
 
-  const submitStep1 = async (event: FormEvent) => {
+  const submitStep1 = (event: FormEvent) => {
     event.preventDefault();
-    setUnreachable(false);
-    const code = checkInviteCode(values.code);
-    if (code.issue !== null) {
-      setFields({ ...ALL_OK, code: withMessage(registerCopy.emptyCode) });
-      focusField("code");
-      return;
-    }
-    setFields(ALL_OK);
-    try {
-      await checkInvite.mutateAsync({ inviteCode: code.value });
-      setStep(2);
-      focusField("login");
-    } catch (err) {
-      applyStep1Failure(toFailure(err));
-    }
+    return singleFlight(async () => {
+      setUnreachable(false);
+      const code = checkInviteCode(values.code);
+      if (code.issue !== null) {
+        setFields({ ...ALL_OK, code: withMessage(registerCopy.emptyCode) });
+        focusField("code");
+        return;
+      }
+      setFields(ALL_OK);
+      try {
+        await checkInvite.mutateAsync({ inviteCode: code.value });
+        setStep(2);
+        focusField("login");
+      } catch (err) {
+        applyStep1Failure(toFailure(err));
+      }
+    });
   };
 
-  const submitStep2 = async (event: FormEvent) => {
+  const submitStep2 = (event: FormEvent) => {
     event.preventDefault();
-    setUnreachable(false);
-    const login = checkLogin(values.login);
-    const password = checkNewPassword(values.password);
-    const confirmation = checkConfirmation(values.password, values.confirm);
-    const next: Record<RegisterField, FieldState> = {
-      code: OK,
-      login:
-        login.issue === "empty"
-          ? withMessage(registerCopy.emptyLogin)
-          : login.issue === "length"
-            ? withMessage(common.loginLength)
-            : OK,
-      password:
-        password === "empty"
-          ? withMessage(registerCopy.emptyPassword)
-          : password === "length"
-            ? withMessage(common.passwordLength)
-            : OK,
-      confirm: confirmation === null ? OK : withMessage(common.mismatch),
-    };
-    setFields(next);
-    const invalid = firstInvalid(next, STEP2_ORDER);
-    if (invalid !== null) {
-      focusField(invalid);
-      return;
-    }
-    try {
-      const signedIn = await registration.mutateAsync({
-        inviteCode: checkInviteCode(values.code).value,
-        login: login.value,
-        password: values.password,
-      });
-      onRegistered(signedIn.account);
-    } catch (err) {
-      applyStep2Failure(toFailure(err), login.value);
-    }
+    return singleFlight(async () => {
+      setUnreachable(false);
+      const login = checkLogin(values.login);
+      const password = checkNewPassword(values.password);
+      const confirmation = checkConfirmation(values.password, values.confirm);
+      const next: Record<RegisterField, FieldState> = {
+        code: OK,
+        login:
+          login.issue === "empty"
+            ? withMessage(registerCopy.emptyLogin)
+            : login.issue === "length"
+              ? withMessage(common.loginLength)
+              : OK,
+        password:
+          password === "empty"
+            ? withMessage(registerCopy.emptyPassword)
+            : password === "length"
+              ? withMessage(common.passwordLength)
+              : OK,
+        confirm: confirmation === null ? OK : withMessage(common.mismatch),
+      };
+      setFields(next);
+      const invalid = firstInvalid(next, STEP2_ORDER);
+      if (invalid !== null) {
+        focusField(invalid);
+        return;
+      }
+      try {
+        const signedIn = await registration.mutateAsync({
+          inviteCode: checkInviteCode(values.code).value,
+          login: login.value,
+          password: values.password,
+        });
+        onRegistered(signedIn.account);
+      } catch (err) {
+        applyStep2Failure(toFailure(err), login.value);
+      }
+    });
   };
 
   /** Step 2's Back: to step 1 with the code kept (§3.3.2). */

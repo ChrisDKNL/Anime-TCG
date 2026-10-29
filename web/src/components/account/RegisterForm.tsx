@@ -3,7 +3,7 @@ import { useEffect, useRef } from "react";
 import { useRegisterForm, type RegisterStep } from "../../hooks/useRegisterForm";
 import { common, registerCopy } from "../../lib/copy";
 import { FormBanner } from "./FormBanner";
-import { PasswordField, TextField } from "./fields";
+import { PasswordField, SubmitButton, TextField } from "./fields";
 import { BODY_TEXT, BUTTON, HINT_TEXT, PANEL_HEADING } from "./styles";
 
 interface Props {
@@ -69,9 +69,9 @@ export function RegisterForm({ onBack, onRegistered }: Props) {
             inputClassName="font-mono tracking-wide"
           />
           <div className="flex flex-col gap-2 sm:flex-row-reverse sm:justify-start">
-            <button type="submit" disabled={busy} className={`${BUTTON.primary} w-full sm:w-auto`}>
+            <SubmitButton blocked={busy} className={`${BUTTON.primary} w-full sm:w-auto`}>
               {form.checking ? registerCopy.checking : registerCopy.continue}
-            </button>
+            </SubmitButton>
             <button
               type="button"
               onClick={onBack}
@@ -123,9 +123,9 @@ export function RegisterForm({ onBack, onRegistered }: Props) {
             autoComplete="new-password"
           />
           <div className="flex flex-col gap-2 sm:flex-row-reverse sm:justify-start">
-            <button type="submit" disabled={busy} className={`${BUTTON.primary} w-full sm:w-auto`}>
+            <SubmitButton blocked={busy} className={`${BUTTON.primary} w-full sm:w-auto`}>
               {form.submitting ? registerCopy.submitting : registerCopy.submit}
-            </button>
+            </SubmitButton>
             <button
               type="button"
               onClick={form.backToStep1}

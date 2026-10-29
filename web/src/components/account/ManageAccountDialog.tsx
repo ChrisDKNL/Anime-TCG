@@ -6,7 +6,7 @@ import { useRenameForm } from "../../hooks/useRenameForm";
 import { cardCount, common, manageCopy, metaLine } from "../../lib/copy";
 import { Avatar } from "./Avatar";
 import { FormBanner } from "./FormBanner";
-import { PasswordField, TextField } from "./fields";
+import { PasswordField, SubmitButton, TextField } from "./fields";
 import { BODY_TEXT, BUTTON, HINT_TEXT, PANEL_HEADING, SECTION_HEADING } from "./styles";
 
 type Panel = "sections" | "confirmDelete";
@@ -162,13 +162,12 @@ function LoginSection({ login, onRenamed }: { login: string; onRenamed: (account
               maxLength={24}
             />
           </div>
-          <button
-            type="submit"
-            disabled={!form.changed || form.saving}
+          <SubmitButton
+            blocked={!form.changed || form.saving}
             className={`${BUTTON.primary} w-full sm:w-auto`}
           >
             {form.saving ? manageCopy.saving : manageCopy.save}
-          </button>
+          </SubmitButton>
         </div>
       </form>
     </section>
@@ -226,13 +225,12 @@ function PasswordSection() {
           autoComplete="new-password"
         />
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <button
-            type="submit"
-            disabled={form.submitting || form.waitRemaining !== null}
+          <SubmitButton
+            blocked={form.submitting || form.waitRemaining !== null}
             className={`${BUTTON.primary} w-full sm:w-auto ${form.waitRemaining !== null ? "tabular-nums" : ""}`}
           >
             {submitLabel}
-          </button>
+          </SubmitButton>
           {form.changed && <p className={BODY_TEXT}>{manageCopy.passwordChanged}</p>}
         </div>
         {form.breather && (
@@ -280,13 +278,14 @@ function ConfirmDelete({ account, onCancel, onDeleted }: ConfirmDeleteProps) {
         autoComplete="current-password"
       />
       <div className="flex flex-col gap-2 sm:flex-row-reverse sm:justify-start">
-        <button
-          type="submit"
-          disabled={form.password.length === 0 || form.deleting || waiting}
+        {/* An empty password keeps the real `disabled`: focus is in the field then, and Enter must do nothing (§7 "Dialog"). */}
+        <SubmitButton
+          blocked={form.deleting || waiting}
+          disabled={form.password.length === 0}
           className={`${BUTTON.dangerSolid} w-full break-words sm:w-auto ${waiting ? "tabular-nums" : ""}`}
         >
           {label}
-        </button>
+        </SubmitButton>
         <button
           type="button"
           onClick={onCancel}

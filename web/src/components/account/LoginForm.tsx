@@ -3,7 +3,7 @@ import { useEffect, useRef } from "react";
 import { useLoginForm } from "../../hooks/useLoginForm";
 import { common, loginCopy } from "../../lib/copy";
 import { FormBanner } from "./FormBanner";
-import { PasswordField, TextField } from "./fields";
+import { PasswordField, SubmitButton, TextField } from "./fields";
 import { BUTTON, HINT_TEXT, PANEL_HEADING } from "./styles";
 
 interface Props {
@@ -63,13 +63,12 @@ export function LoginForm({ onBack, onLoggedIn }: Props) {
           autoComplete="current-password"
         />
         <div className="flex flex-col gap-2 sm:flex-row-reverse sm:justify-start">
-          <button
-            type="submit"
-            disabled={form.submitting || waiting}
+          <SubmitButton
+            blocked={form.submitting || waiting}
             className={`${BUTTON.primary} w-full sm:w-auto ${waiting ? "tabular-nums" : ""}`}
           >
             {submitLabel}
-          </button>
+          </SubmitButton>
           <button
             type="button"
             onClick={onBack}

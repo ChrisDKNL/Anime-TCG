@@ -6,6 +6,7 @@ import { useDeleteAccountMutation } from "./useAccountMutations";
 import { useFieldFocus } from "./useFieldFocus";
 import { useRetryWait } from "./useRetryWait";
 import { useShellContext } from "./useShell";
+import { useSingleFlight } from "./useSingleFlight";
 
 interface Options {
   onDeleted: () => void;
@@ -22,6 +23,7 @@ export function useDeleteForm({ onDeleted }: Options) {
   const onWaitEnd = useCallback(() => announce(common.waitOver), [announce]);
   const wait = useRetryWait(onWaitEnd);
   const deletion = useDeleteAccountMutation();
+  const singleFlight = useSingleFlight();
 
   const applyFailure = useCallback(
     (failure: Failure) => {
@@ -49,18 +51,20 @@ export function useDeleteForm({ onDeleted }: Options) {
     [focusField, wait],
   );
 
-  const submit = async (event: FormEvent) => {
+  const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (password.length === 0) return;
-    setUnreachable(false);
-    setBreather(false);
-    setField(OK);
-    try {
-      await deletion.mutateAsync({ password });
-      onDeleted();
-    } catch (err) {
-      applyFailure(toFailure(err));
-    }
+    return singleFlight(async () => {
+      if (password.length === 0 || wait.remaining !== null) return;
+      setUnreachable(false);
+      setBreather(false);
+      setField(OK);
+      try {
+        await deletion.mutateAsync({ password });
+        onDeleted();
+      } catch (err) {
+        applyFailure(toFailure(err));
+      }
+    });
   };
 
   return {

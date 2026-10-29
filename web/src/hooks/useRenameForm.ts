@@ -6,6 +6,7 @@ import { OK, withMessage } from "../lib/fieldState";
 import { checkLogin } from "../lib/validation";
 import { useRenameMutation } from "./useAccountMutations";
 import { useFieldFocus } from "./useFieldFocus";
+import { useSingleFlight } from "./useSingleFlight";
 
 interface Options {
   login: string;
@@ -19,6 +20,8 @@ export function useRenameForm({ login, onRenamed }: Options) {
   const [unreachable, setUnreachable] = useState(false);
   const { focusField, fieldRef } = useFieldFocus<"login">();
   const rename = useRenameMutation();
+  const singleFlight = useSingleFlight();
+  const changed = value.trim() !== login;
 
   const applyFailure = useCallback(
     (failure: Failure, attempted: string) => {
@@ -45,29 +48,32 @@ export function useRenameForm({ login, onRenamed }: Options) {
     [focusField],
   );
 
-  const submit = async (event: FormEvent) => {
+  const submit = (event: FormEvent) => {
     event.preventDefault();
-    setUnreachable(false);
-    const check = checkLogin(value);
-    if (check.issue !== null) {
-      setField(withMessage(check.issue === "empty" ? registerCopy.emptyLogin : common.loginLength));
-      focusField("login");
-      return;
-    }
-    setField(OK);
-    try {
-      const { account } = await rename.mutateAsync({ login: check.value });
-      onRenamed(account);
-    } catch (err) {
-      applyFailure(toFailure(err), check.value);
-    }
+    return singleFlight(async () => {
+      if (!changed) return;
+      setUnreachable(false);
+      const check = checkLogin(value);
+      if (check.issue !== null) {
+        setField(withMessage(check.issue === "empty" ? registerCopy.emptyLogin : common.loginLength));
+        focusField("login");
+        return;
+      }
+      setField(OK);
+      try {
+        const { account } = await rename.mutateAsync({ login: check.value });
+        onRenamed(account);
+      } catch (err) {
+        applyFailure(toFailure(err), check.value);
+      }
+    });
   };
 
   return {
     value,
     field,
     unreachable,
-    changed: value.trim() !== login,
+    changed,
     saving: rename.isPending,
     setValue,
     fieldRef,

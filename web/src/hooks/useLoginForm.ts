@@ -8,6 +8,7 @@ import { useLoginMutation } from "./useAccountMutations";
 import { useFieldFocus } from "./useFieldFocus";
 import { useRetryWait } from "./useRetryWait";
 import { useShellContext } from "./useShell";
+import { useSingleFlight } from "./useSingleFlight";
 
 export type LoginField = "login" | "password";
 
@@ -29,6 +30,7 @@ export function useLoginForm({ onLoggedIn }: Options) {
   const onWaitEnd = useCallback(() => announce(common.waitOver), [announce]);
   const wait = useRetryWait(onWaitEnd);
   const loginMutation = useLoginMutation();
+  const singleFlight = useSingleFlight();
 
   const setValue = useCallback((field: LoginField, value: string) => {
     setValues((previous) => ({ ...previous, [field]: value }));
@@ -63,29 +65,32 @@ export function useLoginForm({ onLoggedIn }: Options) {
     [incorrect, wait],
   );
 
-  const submit = async (event: FormEvent) => {
+  const submit = (event: FormEvent) => {
     event.preventDefault();
-    setUnreachable(false);
-    setBreather(false);
-    const next: Record<LoginField, FieldState> = {
-      login: checkRequired(values.login.trim()) === null ? OK : withMessage(loginCopy.emptyLogin),
-      password: checkRequired(values.password) === null ? OK : withMessage(loginCopy.emptyPassword),
-    };
-    setFields(next);
-    const invalid = firstInvalid(next, ORDER);
-    if (invalid !== null) {
-      focusField(invalid);
-      return;
-    }
-    try {
-      const signedIn = await loginMutation.mutateAsync({
-        login: values.login.trim(),
-        password: values.password,
-      });
-      onLoggedIn(signedIn.account);
-    } catch (err) {
-      applyFailure(toFailure(err));
-    }
+    return singleFlight(async () => {
+      if (wait.remaining !== null) return;
+      setUnreachable(false);
+      setBreather(false);
+      const next: Record<LoginField, FieldState> = {
+        login: checkRequired(values.login.trim()) === null ? OK : withMessage(loginCopy.emptyLogin),
+        password: checkRequired(values.password) === null ? OK : withMessage(loginCopy.emptyPassword),
+      };
+      setFields(next);
+      const invalid = firstInvalid(next, ORDER);
+      if (invalid !== null) {
+        focusField(invalid);
+        return;
+      }
+      try {
+        const signedIn = await loginMutation.mutateAsync({
+          login: values.login.trim(),
+          password: values.password,
+        });
+        onLoggedIn(signedIn.account);
+      } catch (err) {
+        applyFailure(toFailure(err));
+      }
+    });
   };
 
   return {

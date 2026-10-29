@@ -13,6 +13,32 @@ interface FieldShellProps {
   children: (describedBy: string | undefined) => React.ReactNode;
 }
 
+interface SubmitButtonProps extends Omit<
+  ComponentPropsWithoutRef<"button">,
+  "type" | "onClick" | "aria-disabled"
+> {
+  /** In flight, waiting, or nothing to submit: looks and is announced as disabled, but keeps focus. */
+  blocked: boolean;
+}
+
+/**
+ * A form's submit button that never takes the `disabled` attribute while it
+ * is blocked, because Chrome drops focus to <body> when the focused button
+ * becomes disabled (accounts.md §7 "Forms"). `aria-disabled` plus a cancelled
+ * click (which also stops Enter's implicit submission) do the job instead; the
+ * form hook's single-flight guard covers activations React has not re-rendered for.
+ */
+export function SubmitButton({ blocked, ...attributes }: SubmitButtonProps) {
+  return (
+    <button
+      {...attributes}
+      type="submit"
+      aria-disabled={blocked || undefined}
+      onClick={blocked ? (event) => event.preventDefault() : undefined}
+    />
+  );
+}
+
 /** Label, optional hint, the control, and the error line, wired with `aria-describedby`. */
 function FieldShell({ id, label, labelHidden = false, hint, state, children }: FieldShellProps) {
   const hintId = hint === undefined ? null : `${id}-hint`;

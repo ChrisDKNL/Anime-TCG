@@ -7,6 +7,7 @@ import { useChangePasswordMutation } from "./useAccountMutations";
 import { useFieldFocus } from "./useFieldFocus";
 import { useRetryWait } from "./useRetryWait";
 import { useShellContext } from "./useShell";
+import { useSingleFlight } from "./useSingleFlight";
 
 export type PasswordField = "current" | "next" | "confirm";
 
@@ -26,6 +27,7 @@ export function useChangePasswordForm() {
   const onWaitEnd = useCallback(() => announce(common.waitOver), [announce]);
   const wait = useRetryWait(onWaitEnd);
   const change = useChangePasswordMutation();
+  const singleFlight = useSingleFlight();
 
   const setValue = useCallback((field: PasswordField, value: string) => {
     setValues((previous) => ({ ...previous, [field]: value }));
@@ -60,36 +62,39 @@ export function useChangePasswordForm() {
     [focusField, wait],
   );
 
-  const submit = async (event: FormEvent) => {
+  const submit = (event: FormEvent) => {
     event.preventDefault();
-    setUnreachable(false);
-    setChanged(false);
-    setBreather(false);
-    const next = checkNewPassword(values.next);
-    const fieldsAfterCheck: Record<PasswordField, FieldState> = {
-      current: checkRequired(values.current) === null ? OK : withMessage(loginCopy.emptyPassword),
-      next:
-        next === "empty"
-          ? withMessage(registerCopy.emptyPassword)
-          : next === "length"
-            ? withMessage(common.passwordLength)
-            : OK,
-      confirm: checkConfirmation(values.next, values.confirm) === null ? OK : withMessage(common.mismatch),
-    };
-    setFields(fieldsAfterCheck);
-    const invalid = firstInvalid(fieldsAfterCheck, ORDER);
-    if (invalid !== null) {
-      focusField(invalid);
-      return;
-    }
-    try {
-      await change.mutateAsync({ currentPassword: values.current, newPassword: values.next });
-      setValues(EMPTY);
-      setChanged(true);
-      announce(manageCopy.passwordChanged);
-    } catch (err) {
-      applyFailure(toFailure(err));
-    }
+    return singleFlight(async () => {
+      if (wait.remaining !== null) return;
+      setUnreachable(false);
+      setChanged(false);
+      setBreather(false);
+      const next = checkNewPassword(values.next);
+      const fieldsAfterCheck: Record<PasswordField, FieldState> = {
+        current: checkRequired(values.current) === null ? OK : withMessage(loginCopy.emptyPassword),
+        next:
+          next === "empty"
+            ? withMessage(registerCopy.emptyPassword)
+            : next === "length"
+              ? withMessage(common.passwordLength)
+              : OK,
+        confirm: checkConfirmation(values.next, values.confirm) === null ? OK : withMessage(common.mismatch),
+      };
+      setFields(fieldsAfterCheck);
+      const invalid = firstInvalid(fieldsAfterCheck, ORDER);
+      if (invalid !== null) {
+        focusField(invalid);
+        return;
+      }
+      try {
+        await change.mutateAsync({ currentPassword: values.current, newPassword: values.next });
+        setValues(EMPTY);
+        setChanged(true);
+        announce(manageCopy.passwordChanged);
+      } catch (err) {
+        applyFailure(toFailure(err));
+      }
+    });
   };
 
   return {

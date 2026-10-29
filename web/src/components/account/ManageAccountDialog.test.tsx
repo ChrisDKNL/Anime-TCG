@@ -65,16 +65,20 @@ describe("ManageAccountDialog", () => {
       const field = screen.getByLabelText("New login");
       expect(field).toHaveValue("Chris");
       const save = screen.getByRole("button", { name: "Save" });
-      expect(save).toBeDisabled();
+      expect(save).toHaveAttribute("aria-disabled", "true");
+      // Unchanged, Enter in the field sends nothing.
+      await user.type(field, "{Enter}");
+      expect(fetchMock).not.toHaveBeenCalled();
 
       await user.type(field, " ");
-      expect(save).toBeDisabled();
+      expect(save).toHaveAttribute("aria-disabled", "true");
       await user.type(field, "2");
-      expect(save).toBeEnabled();
+      expect(save).not.toHaveAttribute("aria-disabled");
       await user.click(save);
 
       await waitFor(() => expect(onRenamed).toHaveBeenCalledWith(renamed));
       expect(sentBody(fetchMock)).toEqual({ login: "Chris 2" });
+      expect(fetchMock).toHaveBeenCalledTimes(1);
       expect(queryClient.getQueryData(SESSION_QUERY_KEY)).toEqual({ signedIn: true, account: renamed });
     });
 
@@ -141,12 +145,14 @@ describe("ManageAccountDialog", () => {
       await user.type(screen.getByLabelText("New password"), "a new long one");
       await user.type(screen.getByLabelText("Confirm new password"), "a new long one");
       await user.click(screen.getByRole("button", { name: "Change password" }));
-      expect(await screen.findByRole("button", { name: "Try again in 3 s" })).toBeDisabled();
+      const button = await screen.findByRole("button", { name: "Try again in 3 s" });
+      expect(button).toHaveAttribute("aria-disabled", "true");
+      expect(button).not.toBeDisabled();
       expect(screen.getByText(/Five misses in a row/)).toHaveAttribute("role", "status");
       act(() => {
         vi.advanceTimersByTime(3000);
       });
-      expect(screen.getByRole("button", { name: "Change password" })).toBeEnabled();
+      expect(screen.getByRole("button", { name: "Change password" })).not.toHaveAttribute("aria-disabled");
       expect(liveRegion()).toHaveTextContent("You can try again now.");
     });
   });
