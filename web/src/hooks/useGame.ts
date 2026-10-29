@@ -1,6 +1,13 @@
 import type { AccountPublic } from "@anime-tcg/shared/api";
 import { createContext, useCallback, useContext, useMemo, useReducer } from "react";
-import { collectionStats, gameReducer, initialGame, type CollectionStats, type GameState } from "../lib/game";
+import {
+  collectionStats,
+  gameReducer,
+  initialGame,
+  nextGame,
+  type CollectionStats,
+  type GameState,
+} from "../lib/game";
 import { openPack } from "../lib/pack";
 import type { CharacterPool } from "./useCharacterPool";
 
@@ -28,20 +35,22 @@ export function useGameState(account: AccountPublic | null, pool: CharacterPool)
   const accountId = account?.id ?? null;
   const [stored, dispatch] = useReducer(gameReducer, accountId, initialGame);
   if (stored.accountId !== accountId) dispatch({ type: "reset", accountId });
-  const state = stored.accountId === accountId ? stored : initialGame(accountId);
+  const state = stored.accountId === accountId ? stored : nextGame(stored, accountId);
 
-  const { opening } = state;
+  const { opening, session } = state;
   const open = useCallback(() => {
     if (accountId === null || pool.status !== "ready" || opening) return;
     const cards = openPack(pool.characters);
-    dispatch({ type: "openStarted", accountId, at: cards[0]?.pulledAt ?? Date.now() });
-    // Dispatched whatever page is showing by then: the reveal waits on /packs (§3.5 step 4).
-    window.setTimeout(() => dispatch({ type: "packLanded", accountId, cards }), REVEAL_DELAY_MS);
-  }, [accountId, pool, opening]);
+    const owner = { accountId, session };
+    dispatch({ type: "openStarted", ...owner, at: cards[0]?.pulledAt ?? Date.now() });
+    // Dispatched whatever page is showing by then: the reveal waits on /packs (§3.5 step 4). A session
+    // that ended meanwhile is a different `session`, so its pack is dropped even for the same account.
+    window.setTimeout(() => dispatch({ type: "packLanded", ...owner, cards }), REVEAL_DELAY_MS);
+  }, [accountId, session, pool, opening]);
 
   const clearCollection = useCallback(() => {
-    if (accountId !== null) dispatch({ type: "cleared", accountId });
-  }, [accountId]);
+    if (accountId !== null) dispatch({ type: "cleared", accountId, session });
+  }, [accountId, session]);
 
   const stats = useMemo(() => collectionStats(state.cards), [state.cards]);
 
