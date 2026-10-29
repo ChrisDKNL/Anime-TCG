@@ -1,5 +1,5 @@
 import { expect, test, type APIResponse } from "@playwright/test";
-import { mockAniList } from "./support/fake-api";
+import { mockCardImages } from "./support/fake-api";
 
 /**
  * Test plan: the deployed stack, through Caddy (spec §7, e2e).
@@ -31,7 +31,7 @@ import { mockAniList } from "./support/fake-api";
  * - /healthz stays Caddy's own `ok`, whatever the fallback.
  * - (tester) /assets without a slash is the shell like any page address, not a listing, with no-cache.
  * - In a browser through Caddy: a deep link signed out lands on /login with its guard line and survives a
- *   reload; an unknown path is the not-found page (§3.12 item 8). AniList is mocked.
+ *   reload; an unknown path is the not-found page (§3.12 item 8). AniList's image CDN is mocked.
  * - An error Caddy answers itself (a POST to a page: 405) keeps the site headers, sends no Server and
  *   has an empty body; with STACK_API_DOWN=1 against a stack whose api is stopped, so does the 502 for /api.
  */
@@ -40,7 +40,7 @@ const STACK_URL = process.env.STACK_URL?.replace(/\/$/, "");
 
 // Must match the Caddyfile byte for byte; mirrored in .github/workflows/ci.yml.
 const EXPECTED_CSP =
-  "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https://s4.anilist.co; connect-src 'self' https://graphql.anilist.co; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'";
+  "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https://s4.anilist.co; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'";
 
 test.describe("deployed stack through Caddy", () => {
   test.skip(!STACK_URL, "set STACK_URL to a running compose stack, e.g. http://127.0.0.1:8080");
@@ -213,7 +213,7 @@ test.describe("deployed stack through Caddy", () => {
   test("in a browser through Caddy: a deep link signed out lands on /login, a reload keeps it, an unknown path is the not-found page", async ({
     page,
   }) => {
-    await mockAniList(page);
+    await mockCardImages(page);
     await page.goto(`${STACK_URL}/collection`);
     await expect(page).toHaveURL(`${STACK_URL}/login`);
     await expect(page.getByRole("heading", { level: 1, name: "Log in" })).toBeVisible();

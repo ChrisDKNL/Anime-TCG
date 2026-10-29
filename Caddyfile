@@ -35,9 +35,10 @@
 		# The dev server, which does inject <style>, never runs behind this
 		# Caddyfile. Revisit this if SSR or a `?inline` CSS import is ever
 		# introduced: both would need inline style allowances (a nonce or hash).
-		# img-src and connect-src list the only remote hosts the app talks to
-		# (src/lib/anilist.ts).
-		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https://s4.anilist.co; connect-src 'self' https://graphql.anilist.co; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+		# img-src lists the only remote host the app loads from: AniList's
+		# image CDN. The browser talks to this origin alone (the api is behind
+		# /api), so connect-src is 'self' (docs/design/collection-packs.md §8).
+		Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https://s4.anilist.co; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
 		X-Content-Type-Options "nosniff"
 		Referrer-Policy "strict-origin-when-cross-origin"
 		Permissions-Policy "camera=(), microphone=(), geolocation=()"
