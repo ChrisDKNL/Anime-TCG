@@ -293,6 +293,27 @@ describe("ManageAccount", () => {
       expect(within(screen.getByRole("dialog")).getByLabelText("Password")).toHaveValue("");
     });
 
+    it("a press between the browser closing the dialog and its late close event opens it again", async () => {
+      const { user } = setup({});
+      await user.click(screen.getByRole("button", { name: "Delete account…" }));
+      const dialog = screen.getByRole("dialog");
+      if (!(dialog instanceof HTMLDialogElement)) throw new Error("the confirmation is not a <dialog>");
+      await user.type(within(dialog).getByLabelText("Password"), "typed");
+
+      // What Escape does in a browser: the dialog is shut at once, the `close` event follows a task later.
+      dialog.removeAttribute("open");
+      await user.click(screen.getByRole("button", { name: "Delete account…" }));
+      act(() => {
+        dialog.dispatchEvent(new Event("close"));
+      });
+
+      const reopened = screen.getByRole("dialog", { name: "Delete Chris?" });
+      expect(reopened).toHaveAttribute("open");
+      const password = within(reopened).getByLabelText("Password");
+      expect(password).toHaveValue("");
+      await waitFor(() => expect(password).toHaveFocus());
+    });
+
     it("with no cards the body does not mention any", async () => {
       const { user } = setup({}, { cards: 0 });
       await user.click(screen.getByRole("button", { name: "Delete account…" }));

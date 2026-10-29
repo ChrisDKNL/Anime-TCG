@@ -26,12 +26,19 @@ interface Props {
  * like any other. `Delete account…` opens the confirmation as a modal dialog.
  */
 export function ManageAccount({ account, onRenamed, onDeleted }: Props) {
-  const [confirming, setConfirming] = useState(false);
+  /**
+   * Each press of `Delete account…` is a new opening with its own id, so a
+   * press that lands before React has seen the previous close (Escape closes
+   * the native dialog at once; the `close` event comes a task later) still
+   * opens a fresh confirmation instead of finding `open` already true.
+   */
+  const [confirmation, setConfirmation] = useState({ open: false, id: 0 });
   const deleteTriggerRef = useRef<HTMLButtonElement>(null);
 
+  const openConfirm = () => setConfirmation(({ id }) => ({ open: true, id: id + 1 }));
   /** Cancel and Escape return focus to `Delete account…` (accounts.md §11). */
   const closeConfirm = () => {
-    setConfirming(false);
+    setConfirmation(({ id }) => ({ open: false, id }));
     deleteTriggerRef.current?.focus();
   };
 
@@ -63,20 +70,28 @@ export function ManageAccount({ account, onRenamed, onDeleted }: Props) {
         <button
           ref={deleteTriggerRef}
           type="button"
-          onClick={() => setConfirming(true)}
+          onClick={openConfirm}
           className={`${BUTTON.dangerOutline} self-start`}
         >
           {manageCopy.deleteTrigger}
         </button>
       </section>
 
-      <DeleteDialog open={confirming} account={account} onClose={closeConfirm} onDeleted={onDeleted} />
+      <DeleteDialog
+        open={confirmation.open}
+        openingId={confirmation.id}
+        account={account}
+        onClose={closeConfirm}
+        onDeleted={onDeleted}
+      />
     </div>
   );
 }
 
 interface DeleteDialogProps {
   open: boolean;
+  /** Changes with every opening: the form remounts (empty, password focused) for each one. */
+  openingId: number;
   account: AccountPublic;
   onClose: () => void;
   onDeleted: (login: string) => void;
@@ -88,7 +103,7 @@ interface DeleteDialogProps {
  * takes focus as it opens (accounts.md §7 "Dialog"). Its form mounts only
  * while open, so the field starts empty every time.
  */
-function DeleteDialog({ open, account, onClose, onDeleted }: DeleteDialogProps) {
+function DeleteDialog({ open, openingId, account, onClose, onDeleted }: DeleteDialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
 
   // A layout effect, so the dialog is open before the form's own effect focuses its password field.
@@ -97,18 +112,26 @@ function DeleteDialog({ open, account, onClose, onDeleted }: DeleteDialogProps) 
     if (dialog === null) return;
     if (open && !dialog.open) dialog.showModal();
     else if (!open && dialog.open) dialog.close();
-  }, [open]);
+  }, [open, openingId]);
 
   return (
     <dialog
       ref={ref}
       aria-labelledby="delete-heading"
       aria-describedby="delete-body"
-      onClose={onClose}
+      // A `close` event for an earlier opening can arrive after the dialog was opened again: ignore it.
+      onClose={() => {
+        if (ref.current?.open !== true) onClose();
+      }}
       className="pop-in m-auto max-h-[85vh] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-100 backdrop:bg-zinc-950/70 backdrop:backdrop-blur-sm focus:outline-none"
     >
       {open && (
-        <ConfirmDelete account={account} onCancel={() => ref.current?.close()} onDeleted={onDeleted} />
+        <ConfirmDelete
+          key={openingId}
+          account={account}
+          onCancel={() => ref.current?.close()}
+          onDeleted={onDeleted}
+        />
       )}
     </dialog>
   );
