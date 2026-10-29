@@ -42,7 +42,9 @@ describe("the api server and AniList", () => {
     }
   });
 
-  it("sends no outbound request while building and answering", async () => {
+  // Building the whole app takes about 2 s on its own and shares the unit run with the CPU-bound odds
+  // tests (collection-packs.md §9), so it gets the route tests' 15 s rather than the default 5 s.
+  it("sends no outbound request while building and answering", { timeout: 15_000 }, async () => {
     const outbound = vi.spyOn(globalThis, "fetch");
     const config = parseConfig({
       NODE_ENV: "test",
