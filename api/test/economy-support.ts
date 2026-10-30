@@ -138,10 +138,10 @@ const HOUR = 3_600_000;
 
 /**
  * Where a suite's fake clock starts: on the hour, 30 days behind the real
- * one, so a suite's advances never carry it past the database's now(). The
+ * one, so a suite's advances never carry it past the database's time. The
  * reset stamps `last_reset_at` from the same clock as every ledger row,
  * recycle and opening, and 0005's `accounts_last_reset_forward` refuses a
- * last reset more than 5 seconds after the database's now().
+ * last reset more than 5 seconds after the database's statement_timestamp().
  */
 export function pastClockStart(): Date {
   return new Date(Math.floor(Date.now() / HOUR) * HOUR - 30 * 24 * HOUR);

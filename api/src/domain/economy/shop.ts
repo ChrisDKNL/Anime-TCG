@@ -79,12 +79,17 @@ export class ShopService {
     };
   }
 
-  /** `replayed` is true when `requestId` named a purchase of the same theme this account already made (200, not 201). */
+  /**
+   * `replayed` is true when `requestId` named a purchase of the same theme
+   * this account already made (200, not 201). The time is read from `clock`
+   * once the account row is locked (economy.md §8.9, manager decision,
+   * 2026-10-30).
+   */
   async buy(
     log: EconomyLog,
     accountId: string,
     body: ShopBuyBody,
-    now: Date,
+    clock: () => Date,
   ): Promise<{ replayed: boolean; receipt: ShopReceipt }> {
     const result = await this.db.transaction(async (tx) => {
       const [locked] = await tx
@@ -93,12 +98,13 @@ export class ShopService {
         .where(eq(accounts.id, accountId))
         .for("update");
       if (locked === undefined) throw signedOut();
+      const now = clock();
       const { balance, ...account } = locked;
 
       const stored = await storedOpening(tx, accountId, body.requestId);
       if (stored !== null) {
         if (!sameShopRequest(stored, body.themeId) || stored.shop === null) throw requestIdReused();
-        return { replayed: true, opening: stored, account, price: stored.shop.price, balance };
+        return { replayed: true, opening: stored, account, price: stored.shop.price, balance, now };
       }
 
       const snapshot = await currentSnapshot(tx);
@@ -115,10 +121,10 @@ export class ShopService {
         "shop",
         { themeId: theme.id, ledgerEntryId: entry.id, price: THEMED_PACK_PRICE },
       );
-      return { replayed: false, ...dealt, price: THEMED_PACK_PRICE, balance: entry.balanceAfter };
+      return { replayed: false, ...dealt, price: THEMED_PACK_PRICE, balance: entry.balanceAfter, now };
     });
 
-    const { replayed, opening, account, price, balance } = result;
+    const { replayed, opening, account, price, balance, now } = result;
     log.info(
       {
         accountId,

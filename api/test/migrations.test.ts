@@ -441,6 +441,15 @@ describe("migrations", () => {
           "CREATE TRIGGER accounts_last_reset_forward BEFORE INSERT OR UPDATE OF last_reset_at ON public.accounts FOR EACH ROW EXECUTE FUNCTION accounts_keep_last_reset()",
       },
     ]);
+    // The tolerance runs from the writing statement's time, not the transaction's, so a reset that waited for the lock passes.
+    const body = await db.execute<{ source: string }>(
+      sql`select prosrc as source from pg_proc where proname = 'accounts_keep_last_reset'`,
+    );
+    expect(body.rows).toHaveLength(1);
+    expect(body.rows[0]?.source).toContain(
+      `NEW."last_reset_at" > statement_timestamp() + interval '5 seconds'`,
+    );
+    expect(body.rows[0]?.source).not.toContain("now()");
   });
 
   it("checks a card's slot against the pack size and a character's image against IMAGE_HOST (0004)", async () => {

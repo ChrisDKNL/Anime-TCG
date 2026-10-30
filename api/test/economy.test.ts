@@ -783,8 +783,10 @@ describe("economy routes (economy.md §8, §11.3, §14)", () => {
             createdAt: minted,
           });
           await tx.update(accounts).set({ balance: credit }).where(eq(accounts.id, client.account.id));
-          // The latest last reset the trigger allows: the database's now.
-          await tx.execute(sql`update accounts set last_reset_at = now() where id = ${client.account.id}`);
+          // A last reset the trigger allows: the database's time of this statement.
+          await tx.execute(
+            sql`update accounts set last_reset_at = statement_timestamp() where id = ${client.account.id}`,
+          );
         });
         const held = await app.db
           .select({ id: cards.id })
@@ -800,6 +802,60 @@ describe("economy routes (economy.md §8, §11.3, §14)", () => {
             lines: held.map((card) => `card ${card.id} predates the last reset`),
           },
         ]);
+      });
+
+      it("races an owner reset against an opening: the opening that waited is dated after the reset, and the audit is clean", async () => {
+        const client = await holder(ID.common(44), 1);
+        /** Sessions of the app role waiting for a lock: the reset and the opening queued behind the held account row. */
+        const waiting = async (count: number) => {
+          for (let attempt = 0; attempt < 200; attempt += 1) {
+            const [row] = (
+              await app.db.execute<{ n: number }>(
+                sql`select count(*)::int as n from pg_stat_activity
+                    where datname = current_database() and wait_event_type = 'Lock'`,
+              )
+            ).rows;
+            if ((row?.n ?? 0) >= count) return;
+            await new Promise((resolve) => setTimeout(resolve, 25));
+          }
+          throw new Error(`fewer than ${count} sessions waiting for the account lock`);
+        };
+        await forceNextPack(app.db, rng, snapshotId, packWith(ID.common(46), "common"));
+        const queuedAt = now;
+        const resetAt = new Date(queuedAt.getTime() + MINUTE);
+        // The owner holds the account row; the reset queues first, the opening behind it.
+        const owner = createDb(migrationsDatabaseUrl());
+        let reset: ReturnType<typeof resetCollection> | undefined;
+        let opening: ReturnType<typeof openPack> | undefined;
+        try {
+          await owner.transaction(async (tx) => {
+            await tx.execute(sql`select id from accounts where id = ${client.account.id} for update`);
+            reset = resetCollection(app.db, client.account.login, { confirm: true, clock: () => now });
+            await waiting(1);
+            opening = openPack(app, client.cookie);
+            await waiting(2);
+            // Time passes while both wait; each reads the clock only once it holds the lock.
+            now = resetAt;
+          });
+        } finally {
+          await owner.$client.end();
+        }
+        if (reset === undefined || opening === undefined) throw new Error("both requests started");
+        const [applied, opened] = await Promise.all([reset, opening]);
+        expect(applied).toMatchObject({ applied: true, cards: PACK_SIZE });
+        expect(opened.statusCode, opened.body).toBe(201);
+        const [account] = await app.db
+          .select({ lastResetAt: accounts.lastResetAt })
+          .from(accounts)
+          .where(eq(accounts.id, client.account.id));
+        expect(account?.lastResetAt).toEqual(resetAt);
+        // The pack opened after the reset survives it, dated at the reset's time, not at when it queued.
+        const survivors = await app.db
+          .select({ openedAt: packOpenings.openedAt })
+          .from(packOpenings)
+          .where(eq(packOpenings.accountId, client.account.id));
+        expect(survivors).toEqual([{ openedAt: resetAt }]);
+        expect(await failuresOf(client.account.id)).toEqual([]);
       });
 
       it("finds a shop opening deleted after the last reset, its debit left behind", async () => {

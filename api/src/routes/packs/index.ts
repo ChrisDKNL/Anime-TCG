@@ -47,7 +47,7 @@ export const packRoutes: FastifyPluginAsyncTypebox = async (app) => {
     },
     async (req, reply): Promise<PackOpened> => {
       const { account } = await requireAccount(req, reply);
-      const { replayed, opened } = await app.packs.open(req.log, account.id, req.body.requestId, app.clock());
+      const { replayed, opened } = await app.packs.open(req.log, account.id, req.body.requestId, app.clock);
       reply.code(replayed ? 200 : 201);
       return opened;
     },

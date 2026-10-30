@@ -204,23 +204,30 @@ export class PackService {
     };
   }
 
-  /** `replayed` is true when `requestId` named an opening this account already has (answered 200, not 201). */
+  /**
+   * `replayed` is true when `requestId` named an opening this account
+   * already has (answered 200, not 201). The time is read from `clock` once
+   * the account row is locked, as the reset reads its own, so an opening
+   * that waited for a reset is never dated before it (economy.md §8.9,
+   * manager decision, 2026-10-30).
+   */
   async open(
     log: PackLog,
     accountId: string,
     requestId: string,
-    now: Date,
+    clock: () => Date,
   ): Promise<{ replayed: boolean; opened: PackOpened }> {
-    const { replayed, opening, account } = await this.db.transaction(async (tx) => {
+    const { replayed, opening, account, now } = await this.db.transaction(async (tx) => {
       const [locked] = await tx
         .select(LOCKED_ACCOUNT)
         .from(accounts)
         .where(eq(accounts.id, accountId))
         .for("update");
       if (locked === undefined) throw signedOut();
+      const now = clock();
 
       const stored = await storedOpening(tx, accountId, requestId);
-      if (stored?.shop === null) return { replayed: true, opening: stored, account: locked };
+      if (stored?.shop === null) return { replayed: true, opening: stored, account: locked, now };
       // A shop purchase shares the openings' keys, and a timer opening never matches one (economy.md §8.8).
       if (stored !== null) throw requestIdReused();
 
@@ -238,7 +245,7 @@ export class PackService {
 
       const pool = await this.poolFor(tx, snapshot.id);
       const dealt = await dealPack(tx, { account: locked, requestId, openedAt: now }, this.rng, pool, "free");
-      return { replayed: false, ...dealt };
+      return { replayed: false, ...dealt, now };
     });
 
     log.info(

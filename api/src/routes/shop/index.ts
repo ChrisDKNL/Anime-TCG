@@ -47,7 +47,7 @@ export const shopRoutes: FastifyPluginAsyncTypebox = async (app) => {
     },
     async (req, reply): Promise<ShopReceipt> => {
       const { account } = await requireAccount(req, reply);
-      const { replayed, receipt } = await app.shop.buy(req.log, account.id, req.body, app.clock());
+      const { replayed, receipt } = await app.shop.buy(req.log, account.id, req.body, app.clock);
       reply.code(replayed ? 200 : 201);
       return receipt;
     },

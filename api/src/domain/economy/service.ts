@@ -55,11 +55,13 @@ export class EconomyService {
     log: EconomyLog,
     accountId: string,
     body: RecycleBody,
-    now: Date,
+    clock: () => Date,
   ): Promise<{ replayed: boolean; receipt: RecycleReceipt }> {
     const requestHash = recycleRequestHash(body);
     const { replayed, receipt } = await this.db.transaction(async (tx) => {
       const locked = await lockBalance(tx, accountId);
+      // Read once the account row is locked, as the reset reads its own (economy.md §8.9, manager decision, 2026-10-30).
+      const now = clock();
       const stored = await storedRecycle(tx, accountId, body.requestId);
       if (stored !== null) {
         if (stored.requestHash !== requestHash) throw requestIdReused();

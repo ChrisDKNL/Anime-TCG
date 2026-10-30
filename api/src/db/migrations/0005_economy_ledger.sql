@@ -17,7 +17,9 @@
 -- (manager decision, 2026-10-30). A reset deletes the cards, so it is not
 -- affected. A second trigger keeps an account's last reset honest: it never
 -- moves back or to null, never lies more than 5 seconds past the database's
--- now(), and a new account starts with none (manager decision, 2026-10-30).
+-- time of the statement that writes it (statement_timestamp(), so a reset
+-- that waited for the account lock is measured from after the wait), and a
+-- new account starts with none (manager decision, 2026-10-30).
 CREATE TYPE "public"."ledger_kind" AS ENUM('recycle_credit', 'shop_purchase', 'market_purchase', 'market_sale', 'market_fee', 'owner_reset');--> statement-breakpoint
 CREATE TYPE "public"."opening_source" AS ENUM('timer', 'shop');--> statement-breakpoint
 CREATE TABLE "ledger_entries" (
@@ -100,7 +102,7 @@ BEGIN
     RAISE EXCEPTION 'account %: the last reset at % never moves back', OLD."id", OLD."last_reset_at"
       USING ERRCODE = 'integrity_constraint_violation';
   END IF;
-  IF NEW."last_reset_at" > now() + interval '5 seconds' THEN
+  IF NEW."last_reset_at" > statement_timestamp() + interval '5 seconds' THEN
     RAISE EXCEPTION 'account %: a last reset at % is in the future', NEW."id", NEW."last_reset_at"
       USING ERRCODE = 'integrity_constraint_violation';
   END IF;
