@@ -83,6 +83,18 @@ describe("stats (§3.2)", () => {
     expect(within(totals).getByText("Mythic")).toHaveClass("text-rarity-mythic-text");
   });
 
+  it("without a snapshot, entries held: no completion figure, percentage or bar; the totals stay (§4.1)", async () => {
+    const data = makeOverviewCollection();
+    data.snapshot = null;
+    data.completion = { pool: { owned: 0, total: 0 }, franchises: [] };
+    await openCollection({ status: 200, body: data });
+    expect(screen.queryByText(/characters$/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/%$/)).not.toBeInTheDocument();
+    const totals = screen.getByText("8 cards · 3 duplicates").parentElement!;
+    expect(totals.parentElement!.querySelector('[aria-hidden="true"]')).toBeNull();
+    expect(totals).toHaveTextContent("Common 1Uncommon 1Rare 2Epic 3Legendary 1Mythic 0");
+  });
+
   it("no search, filter or view changes a stat", async () => {
     const { user } = await openCollection();
     await user.type(screen.getByRole("searchbox", { name: "Search" }), "spike");

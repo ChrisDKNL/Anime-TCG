@@ -42,21 +42,25 @@ export function CompletionBar({
 /**
  * Completion and totals (collection-overview.md §3.2, §5.2): every figure is
  * the server's and describes the whole collection, whatever the search,
- * filters or view show.
+ * filters or view show. Without a snapshot there is no pool to complete, so
+ * only the totals show (§4.1 "loaded, no snapshot").
  */
 export function CollectionStats({ data, staleSince, series }: Props) {
   const { pool } = data.completion;
   const { totals } = data;
+  const hasPool = data.snapshot !== null;
   return (
     <div>
-      <p className="flex flex-wrap items-baseline gap-x-3">
-        <span className="text-base font-semibold text-zinc-100 tabular-nums">
-          {statsCopy.completion(pool.owned, pool.total)}
-        </span>
-        <span className="text-sm text-zinc-400 tabular-nums">
-          {statsCopy.percent(completionPercent(pool.owned, pool.total))}
-        </span>
-      </p>
+      {hasPool && (
+        <p className="flex flex-wrap items-baseline gap-x-3">
+          <span className="text-base font-semibold text-zinc-100 tabular-nums">
+            {statsCopy.completion(pool.owned, pool.total)}
+          </span>
+          <span className="text-sm text-zinc-400 tabular-nums">
+            {statsCopy.percent(completionPercent(pool.owned, pool.total))}
+          </span>
+        </p>
+      )}
       {series !== null && (
         <p
           className="truncate text-sm text-zinc-400 tabular-nums"
@@ -70,8 +74,10 @@ export function CollectionStats({ data, staleSince, series }: Props) {
           />
         </p>
       )}
-      <CompletionBar owned={pool.owned} total={pool.total} className="mt-2 block w-full max-w-md" />
-      <p className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-400">
+      {hasPool && (
+        <CompletionBar owned={pool.owned} total={pool.total} className="mt-2 block w-full max-w-md" />
+      )}
+      <p className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-400 first:mt-0">
         <span>{statsCopy.totals(totals.cards, totals.duplicates)}</span>
         {RARITIES.map((rarity) => (
           <span key={rarity}>
