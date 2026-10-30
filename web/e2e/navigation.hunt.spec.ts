@@ -226,7 +226,7 @@ test.describe("dialogs, openings and the session (§3.10, §3.5)", () => {
     expect((await statusTexts(page)).filter((text) => text === "Deleted Chris.")).toHaveLength(1);
   });
 
-  test("leaving /packs while a pack opens: the cards land, the count updates, the reveal waits without its entrance", async ({
+  test("leaving /packs/open while a pack opens: the cards land, the count updates, the reveal waits without its entrance", async ({
     page,
     api,
   }) => {
@@ -251,6 +251,9 @@ test.describe("dialogs, openings and the session (§3.10, §3.5)", () => {
 
     await mainNav(page).getByRole("link", { name: "Packs", exact: true }).click();
     await expect(h1(page, "Packs")).toBeFocused();
+    // The cards wait on /packs/open (packs-page.md §3.3 step 5), reached by its link.
+    await page.getByRole("link", { name: "See your latest pack" }).click();
+    await expect(h1(page, "Pack opening")).toBeFocused();
     await expect(page.getByRole("article")).toHaveCount(5);
     await expect(page.locator("li.animate-card-enter")).toHaveCount(0);
   });
@@ -545,7 +548,7 @@ test.describe("phone widths (§5.1, §7 touch targets)", () => {
         await expect(mainNav(page).getByRole("link", { name: `Collection (${pack * 5})` })).toBeVisible();
       }
       await expect(page.getByRole("article")).toHaveCount(5);
-      await checkHeader("/packs");
+      await checkHeader("/packs/open");
       const collectionLink = mainNav(page).getByRole("link", { name: "Collection (15)" });
       await collectionLink.click();
       await expect(h1(page, "Collection")).toBeFocused();
@@ -655,8 +658,9 @@ test.describe("scroll (§3.11)", () => {
     await scrollTo600(page);
     await expect.poll(() => scrollY(page)).toBeGreaterThan(500);
 
+    // The openings left /packs/open as the entry before the collection.
     await page.goBack();
-    await expect.poll(() => focusedHeading(page)).toBe("Packs");
+    await expect.poll(() => focusedHeading(page)).toBe("Pack opening");
     await page.goForward();
     await expect(page).toHaveURL(/\/collection$/);
     await expect.poll(() => focusedHeading(page)).toBe("Collection");
@@ -998,12 +1002,17 @@ test.describe("addresses on every route (§3.1 rule 2)", () => {
     await expect(packButton(page)).toBeEnabled();
     await packButton(page).click();
     await expect(page.getByRole("article")).toHaveCount(5);
+    // The opening pushed /packs/open after /packs: two entries back to the not-found page.
+    await page.goBack();
+    await expect.poll(() => focusedHeading(page)).toBe("Packs");
     await page.goBack();
     await expect.poll(() => focusedHeading(page)).toBe("Page not found");
     await expect(page).toHaveTitle("Page not found · Anime TCG");
     await expect(mainNav(page).getByRole("link", { name: "Collection (5)" })).toBeVisible();
     await page.goForward();
     await expect.poll(() => focusedHeading(page)).toBe("Packs");
+    await page.goForward();
+    await expect.poll(() => focusedHeading(page)).toBe("Pack opening");
     await expect(page.getByRole("article")).toHaveCount(5);
   });
 });

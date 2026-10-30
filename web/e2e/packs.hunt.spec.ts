@@ -154,9 +154,13 @@ test.describe("single flight (§3.3 step 2)", () => {
     await page.goto("/packs");
     await expect(page.getByText("3 of 3 packs ready")).toBeVisible();
 
+    const entries = await page.evaluate(() => history.length);
     await packButton(page).dblclick();
+    // The opening moves to /packs/open (packs-page.md §3.7) once; the second click lands on that page's
+    // own Open pack, which is busy and ignores it.
+    await expect(page).toHaveURL(/\/packs\/open$/);
     await expect(packButton(page, "Opening…")).toHaveAttribute("aria-disabled", "true");
-    await expect(packButton(page, "Opening…")).toBeFocused();
+    expect(await page.evaluate(() => history.length)).toBe(entries + 1);
     opening.release();
 
     await expect(revealList(page).getByRole("article")).toHaveCount(5);
@@ -190,7 +194,7 @@ test.describe("single flight (§3.3 step 2)", () => {
     await page.keyboard.up("Enter");
 
     await expect(revealList(page).getByRole("article")).toHaveCount(5);
-    await expect(packButton(page)).toBeFocused();
+    await expect(h1(page, "Pack opening")).toBeFocused();
     expect(api.count("POST /api/packs/open")).toBe(1);
     expect(api.game.opened).toBe(1);
   });
@@ -212,9 +216,13 @@ test.describe("single flight (§3.3 step 2)", () => {
     const x = box.x + box.width / 2;
     const y = box.y + box.height / 2;
 
-    // The first click of the double click; the server answers before the second one.
+    // The first click of the double click; the server answers before the second one, and the page is
+    // /packs/open by then, so the second click lands on that page's own Open pack.
     await page.mouse.click(x, y);
     await expect(page.getByText("2 of 3 packs ready")).toBeVisible();
+    const next = await packButton(page).boundingBox();
+    if (next === null) throw new Error("/packs/open's Open pack has no box");
+    await page.mouse.move(next.x + next.width / 2, next.y + next.height / 2);
     // The second click of the same double click, `detail` 2 as the browser sends it.
     await page.mouse.down({ clickCount: 2 });
     await page.mouse.up({ clickCount: 2 });
@@ -224,8 +232,8 @@ test.describe("single flight (§3.3 step 2)", () => {
     await expect(page.getByText("2 of 3 packs ready")).toBeVisible();
     expect(await revealNames(page)).toEqual(namesOfOpening(1));
 
-    // A deliberate single click after the double click (`detail` 1 again) opens the next pack.
-    await page.mouse.click(x, y);
+    // A deliberate single click after the double click (`detail` 1 again) opens the next pack, in place.
+    await page.mouse.click(next.x + next.width / 2, next.y + next.height / 2);
     await expect(page.getByText("1 of 3 packs ready")).toBeVisible();
     await expect.poll(() => revealNames(page)).toEqual(namesOfOpening(2));
     expect(api.count("POST /api/packs/open")).toBe(2);
@@ -248,7 +256,8 @@ test.describe("single flight (§3.3 step 2)", () => {
     await expect(page.getByText("2 of 3 packs ready")).toBeVisible();
     expect(await revealNames(page)).toEqual(namesOfOpening(1));
 
-    // A new press of Enter is a new activation.
+    // A new press of Enter on /packs/open's Open pack is a new activation.
+    await packButton(page).focus();
     await page.keyboard.press("Enter");
     await expect(page.getByText("1 of 3 packs ready")).toBeVisible();
     await expect.poll(() => revealNames(page)).toEqual(namesOfOpening(2));
@@ -274,13 +283,16 @@ test.describe("a lost answer never costs a pack (§3.3, §10 item 6)", () => {
       await packButton(page).click();
       await expect(page.getByRole("alert").filter({ hasText: UNREACHABLE })).toBeVisible();
       await expect(main(page).getByText(NO_ANSWER)).toBeVisible();
+      // An answer without cards replaces /packs/open with /packs, whose h1 takes focus (§3.7 step 6).
+      await expect(page).toHaveURL(/\/packs$/);
+      await expect(h1(page, "Packs")).toBeFocused();
       const retry = packButton(page, "Try again");
       await expect(retry).toBeVisible();
       await expect(retry).not.toHaveAttribute("aria-disabled");
-      await expect(retry).toBeFocused();
-      // The answer never arrived, so the page shows what it held.
-      await expect(page.getByText("3 of 3 packs ready")).toBeVisible();
-      await expect(page.getByText("Mythic guaranteed within 300 free packs.")).toBeVisible();
+      // The answer never arrived; /packs, shown again, asks the server, which dealt that pack. The key
+      // still stands, so the next press replays it rather than opening a second one.
+      await expect(page.getByText("2 of 3 packs ready")).toBeVisible();
+      await expect(page.getByText("Mythic guaranteed within 299 free packs.")).toBeVisible();
       await expect(revealList(page)).toHaveCount(0);
       expect(api.game.opened).toBe(1);
 
@@ -291,14 +303,15 @@ test.describe("a lost answer never costs a pack (§3.3, §10 item 6)", () => {
       // The pack the lost answer carried, not a second one.
       expect(await revealNames(page)).toEqual(namesOfOpening(1));
       await expect(page.getByText("2 of 3 packs ready")).toBeVisible();
-      await expect(page.getByText("Mythic guaranteed within 299 free packs.")).toBeVisible();
       await expect(mainNav(page).getByRole("link", { name: "Collection (5)" })).toBeVisible();
       await expect(main(page).getByText(NO_ANSWER)).toHaveCount(0);
       // The replay is an answer: the banner the lost one raised goes (§4.1, manager decision 2026-10-30).
       await expect(page.getByText(UNREACHABLE)).toHaveCount(0);
-      await expect(packButton(page)).toBeFocused();
+      await expect(h1(page, "Pack opening")).toBeFocused();
       expect(api.game.opened).toBe(1);
       expect(api.count("POST /api/packs/open")).toBe(2);
+      await main(page).getByRole("link", { name: "Back to packs" }).click();
+      await expect(page.getByText("Mythic guaranteed within 299 free packs.")).toBeVisible();
     });
   }
 
@@ -333,6 +346,7 @@ test.describe("a lost answer never costs a pack (§3.3, §10 item 6)", () => {
     expect(ids[1]).toBe(ids[0]);
     await expect(page.getByText("0 of 3 packs ready")).toBeVisible();
     await expect(packButton(page)).toHaveAttribute("aria-disabled", "true");
+    await main(page).getByRole("link", { name: "Back to packs" }).click();
     await expect(page.getByText(/^Next pack in (10:00|9:5\d)$/)).toBeVisible();
     expect(api.game.opened).toBe(1);
   });
@@ -426,10 +440,12 @@ test("newest request wins: a GET sent before an opening and answered after it do
   await packButton(page).click();
   await expect(revealList(page).getByRole("article")).toHaveCount(5);
   await expect(page.getByText("2 of 3 packs ready")).toBeVisible();
-  await expect(page.getByText("Mythic guaranteed within 299 free packs.")).toBeVisible();
 
   slow.release();
   await page.waitForLoadState("networkidle");
+  // On /packs/open the stale answer does not step the count line back.
+  await expect(page.getByText("2 of 3 packs ready")).toBeVisible();
+  await main(page).getByRole("link", { name: "Back to packs" }).click();
   await expect(page.getByText("2 of 3 packs ready")).toBeVisible();
   await expect(page.getByText("Mythic guaranteed within 299 free packs.")).toBeVisible();
   await expect(page.getByText(/^Next pack in (10:00|9:5\d)$/)).toBeVisible();
@@ -479,7 +495,9 @@ test("409: another tab opened the last pack; this one says so, counts down and a
   await expect(line).toBeVisible();
   await expect(page.getByText("0 of 3 packs ready")).toBeVisible();
   await expect(packButton(page)).toHaveAttribute("aria-disabled", "true");
-  await expect(packButton(page)).toBeFocused();
+  // Opened on /packs/open, answered without cards: /packs replaced it, and its h1 has focus.
+  await expect(page).toHaveURL(/\/packs$/);
+  await expect(h1(page, "Packs")).toBeFocused();
   await expect(page.getByText(/^Next pack in (10:00|9:5\d)$/)).toBeVisible();
   await expect(revealList(page)).toHaveCount(0);
   // Another tab changed the collection: it is asked again.
@@ -592,7 +610,9 @@ test.describe("429 with Retry-After (§3.3, §4.1, §9 questions 2 and 3)", () =
     const waiting = packButton(page, /^Try again in \d+ s$/);
     await expect(waiting).toHaveText("Try again in 3 s");
     await expect(waiting).toHaveAttribute("aria-disabled", "true");
-    await expect(waiting).toBeFocused();
+    // Back on /packs from /packs/open: its h1 has focus; the player then reaches the button.
+    await expect(h1(page, "Packs")).toBeFocused();
+    await waiting.focus();
     await expect(main(page).getByRole("status").filter({ hasText: WAIT_LINE })).toBeVisible();
     await expect(page.getByText("3 of 3 packs ready")).toBeVisible();
     await expect(page.getByText("Mythic guaranteed within 300 free packs.")).toBeVisible();
@@ -620,7 +640,8 @@ test.describe("429 with Retry-After (§3.3, §4.1, §9 questions 2 and 3)", () =
     expect(ids[1]).toBe(ids[0]);
     await expect(page.getByText("2 of 3 packs ready")).toBeVisible();
     const texts = await statusTexts(page);
-    expect(texts.filter((text) => text === WAIT_LINE)).toHaveLength(1);
+    // The line itself, and its one reading by the live region after the replace (packs-page.md §3.7 step 6).
+    expect(texts.filter((text) => text === WAIT_LINE)).toHaveLength(2);
     expect(texts.filter((text) => text === "You can try again now.")).toHaveLength(1);
   });
 
@@ -880,6 +901,9 @@ test("nothing nags: no notification, permission, badge, sound or title change th
   await page.clock.runFor(2_000);
   await packButton(page, "Try again").click();
   await expect(revealList(page).getByRole("article")).toHaveCount(5);
+  // The countdown runs on /packs (packs-page.md §3.7 step 5): back there for its zero.
+  await main(page).getByRole("link", { name: "Back to packs" }).click();
+  await expect(h1(page, "Packs")).toBeFocused();
   // Past the next countdown's zero: its one `GET` lands, and the title still does not change.
   const gets = api.count("GET /api/packs");
   await page.clock.runFor(11 * 60_000);
@@ -887,7 +911,12 @@ test("nothing nags: no notification, permission, badge, sound or title change th
 
   expect(await page.evaluate(() => window.__nags)).toEqual([]);
   const titles = (await page.evaluate(() => window.__titles)) ?? [];
-  expect(titles.slice(titles.indexOf("Packs · Anime TCG"))).toEqual(["Packs · Anime TCG"]);
+  // Only page changes name the tab (/packs and the opening's own page), never a pack, a count or a wait.
+  const since = titles.slice(titles.indexOf("Packs · Anime TCG"));
+  expect(
+    since.filter((title) => title !== "Packs · Anime TCG" && title !== "Pack opening · Anime TCG"),
+  ).toEqual([]);
+  expect(since.at(-1)).toBe("Packs · Anime TCG");
   await expect(page).toHaveTitle("Packs · Anime TCG");
   expect(await favicon()).toEqual(iconsBefore);
 
@@ -945,15 +974,19 @@ test.describe("`free` only as `free pack(s)`, only on /packs and in the odds dia
     await page.goto("/packs");
     await packButton(page).click();
     await expect(page.getByRole("heading", { level: 2, name: "Enchanted pack" })).toBeVisible();
+    // The reveal's lines are on /packs/open; the pity line and the odds stay on /packs.
+    const revealStrings = await pageStrings(page);
+    await page.getByRole("link", { name: "Back to packs" }).click();
     await page.getByRole("button", { name: "Pack odds" }).click();
     const dialog = page.getByRole("dialog", { name: "Pack odds" });
     await expect(dialog).toBeVisible();
 
-    const strings = await pageStrings(page);
+    const strings = [...revealStrings, ...(await pageStrings(page))];
     const dialogText = await dialog.innerText();
     expect(looseFree([...strings, dialogText])).toEqual([]);
-    // The phrase is there (the scan is not vacuous): the pity line, both reveal lines, the dialog.
-    expect(strings.join("\n")).toContain("Mythic guaranteed within 299 free packs.");
+    // The phrase is there (the scan is not vacuous): the pity line (the server's own count, read again
+    // when /packs is shown), both reveal lines, the dialog.
+    expect(strings.join("\n")).toContain("Mythic guaranteed within 300 free packs.");
     expect(strings.join("\n")).toContain("Every 10th free pack is Enchanted");
     expect(strings.join("\n")).toContain("a 300th free pack in a row");
     expect(dialogText).toMatch(/\bfree pack\b/);
@@ -971,11 +1004,14 @@ test.describe("`free` only as `free pack(s)`, only on /packs and in the odds dia
     await page.goto("/packs");
     await packButton(page).click();
     await expect(page.getByRole("heading", { level: 2, name: "Enchanted pack" })).toBeVisible();
-    await expect(page.getByText("Mythic guaranteed within 299 packs.")).toBeVisible();
+    const revealStrings = await pageStrings(page);
+    await page.getByRole("link", { name: "Back to packs" }).click();
+    // The scripted server's own count, read again when /packs is shown.
+    await expect(page.getByText("Mythic guaranteed within 300 packs.")).toBeVisible();
     await page.getByRole("button", { name: "Pack odds" }).click();
     const dialog = page.getByRole("dialog", { name: "Pack odds" });
     await expect(dialog).toBeVisible();
-    expect(anyFree([...(await pageStrings(page)), await dialog.innerText()])).toEqual([]);
+    expect(anyFree([...revealStrings, ...(await pageStrings(page)), await dialog.innerText()])).toEqual([]);
   });
 
   test("signed in, every other page: no `free` anywhere", async ({ page, api }) => {
@@ -1002,7 +1038,7 @@ test.describe("`free` only as `free pack(s)`, only on /packs and in the odds dia
     await recordStatusTexts(page);
     api.on("GET /api/session", signedOut);
     const seen: string[] = [];
-    for (const path of ["/", "/login", "/register", "/no-such-page"]) {
+    for (const path of ["/", "/demo", "/login", "/register", "/no-such-page"]) {
       await page.goto(path);
       await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
       seen.push(...(await pageStrings(page)));

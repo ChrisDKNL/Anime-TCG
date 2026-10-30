@@ -20,7 +20,8 @@ import {
  *
  * - The header shows the server's balance, and every receipt's balance replaces it.
  * - Shop: the Shop link, the page's heading and title, a purchase from the confirmation to the
- *   reveal (focus on its heading), until the balance no longer covers the price.
+ *   bought pack's own page, /shop/open (focus on its h1, Back to the shop, no buy button there),
+ *   until the balance no longer covers the price.
  * - Shop refusals: `insufficient_funds` with the server's balance, 503 `pool_unavailable`, a 429
  *   with its countdown, and a lost answer whose `Try again` replays the same `requestId`, so the
  *   pack is bought once.
@@ -80,10 +81,17 @@ test.describe("the Shop page", () => {
       await theme(page).getByRole("button", { name: "Buy…" }).click();
       await expect(confirmation(page).getByRole("heading")).toBeFocused();
       await confirmation(page).getByRole("button", { name: "Buy for 400 Karma" }).click();
-      const reveal = page.getByRole("heading", { level: 2, name: "Action pack", exact: true });
-      await expect(reveal).toBeFocused();
+      // The bought pack opens on its own page (owner, 2026-10-30), focus on its h1.
+      await expect(page).toHaveURL(/\/shop\/open$/);
+      await expect(page).toHaveTitle("Shop pack · Anime TCG");
+      await expect(h1(page, "Shop pack")).toBeFocused();
+      await expect(page.getByRole("heading", { level: 2, name: "Action pack", exact: true })).toBeVisible();
       await expect(page.getByRole("list", { name: "Action pack" }).getByRole("article")).toHaveCount(5);
       await expect(header(page).getByText(`${balance} Karma`)).toBeVisible();
+      await expect(page.getByRole("main").getByRole("button")).toHaveCount(0);
+      await page.getByRole("link", { name: "Back to the shop" }).click();
+      await expect(h1(page, "Shop")).toBeFocused();
+      await expect(page.getByRole("link", { name: "See your latest shop pack" })).toBeVisible();
     }
     expect(await statusTexts(page)).toContain(
       `Bought the ${isolated("Action")} pack for 400 Karma. You have 40 Karma.`,
@@ -142,7 +150,8 @@ test.describe("the Shop page", () => {
     );
     await expect(header(page).getByText("1,240 Karma")).toBeVisible();
     await button.click();
-    await expect(page.getByRole("heading", { level: 2, name: "Action pack", exact: true })).toBeFocused();
+    await expect(h1(page, "Shop pack")).toBeFocused();
+    await expect(page.getByRole("heading", { level: 2, name: "Action pack", exact: true })).toBeVisible();
     const [first, second] = requestIds(api, "POST /api/shop/buy");
     expect(second).not.toBe(first);
   });
@@ -162,7 +171,8 @@ test.describe("the Shop page", () => {
     const button = confirmation(page).getByRole("button", { name: "Buy for 400 Karma" });
     await expect(button).toBeVisible({ timeout: 5_000 });
     await button.click();
-    await expect(page.getByRole("heading", { level: 2, name: "Action pack", exact: true })).toBeFocused();
+    await expect(h1(page, "Shop pack")).toBeFocused();
+    await expect(page.getByRole("heading", { level: 2, name: "Action pack", exact: true })).toBeVisible();
     const [first, second] = requestIds(api, "POST /api/shop/buy");
     expect(second).toBe(first);
   });
@@ -178,7 +188,8 @@ test.describe("the Shop page", () => {
       "Couldn't reach the game server, so this may not have gone through.",
     );
     await confirmation(page).getByRole("button", { name: "Try again" }).click();
-    await expect(page.getByRole("heading", { level: 2, name: "Action pack", exact: true })).toBeFocused();
+    await expect(h1(page, "Shop pack")).toBeFocused();
+    await expect(page.getByRole("heading", { level: 2, name: "Action pack", exact: true })).toBeVisible();
     await expect(header(page).getByText("840 Karma")).toBeVisible();
     const [first, second] = requestIds(api, "POST /api/shop/buy");
     expect(second).toBe(first);

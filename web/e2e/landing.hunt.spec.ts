@@ -23,10 +23,12 @@ import {
 
 /**
  * Test plan (tester's hunt): what the demo PR's own landing e2e does not reach, against the scripted
- * api (docs/design/navigation-and-landing.md §3.7, §3.8, §3.12 item 6, §6.2, §7, §8;
- * card-and-rarity.md §5.3; packs-page.md §3.3 step 2). The cap across a soft navigation was a bug
- * (tester, 2026-10-30) and is a regression test at the end of this file: the count and a 429's wait
- * last for the page load (manager decision, 2026-10-30).
+ * api (docs/design/navigation-and-landing.md §3.7, §3.8, §3.12 item 6, §3.14, §6.2, §7, §8;
+ * card-and-rarity.md §5.3; packs-page.md §3.3 step 2). Since the landing revision the demo opens on
+ * `/demo`: each test starts on `/` (whose button pushes `/demo`) or on `/demo` itself, and the demo's
+ * rules are checked where the cards now are. The cap across a soft navigation was a bug (tester,
+ * 2026-10-30) and is a regression test at the end of this file: the count, a 429's wait and the
+ * current cards last for the page load (manager decision, 2026-10-30).
  *
  * - Join offer focus (§7 "Landing demo"): after the tenth pack the Join sentence has focus, the live
  *   region still reads the tenth summary, and `Register` is the next Tab stop.
@@ -48,7 +50,7 @@ import {
  * - Single flight (§3.7 item 1.3): three separate clicks while one opening is in flight send one
  *   `POST`.
  *
- * Not here: the reload (landing.spec.ts covers it: a reload starts the count over, which §3.7 item
+ * Not here: the reload (demo.spec.ts covers it: a reload starts the count over, which §3.7 item
  * 1.7 accepts), the real api's rate limit (api/test), the stack's CSP header (stack.spec.ts; this
  * file never runs against the acceptance stack).
  */
@@ -130,8 +132,8 @@ test("after the tenth pack the Join sentence has focus, the summary is still rea
   const register = main(page).getByRole("link", { name: "Register", exact: true }).first();
   await expect(register).toBeFocused();
   await expect(register).toHaveAttribute("href", "/register");
-  // The offer replaces the button, and the Join section below still has its own pair.
-  await expect(main(page).getByRole("link", { name: "Register", exact: true })).toHaveCount(2);
+  // The offer replaces the button on /demo, which has no Join section of its own.
+  await expect(main(page).getByRole("link", { name: "Register", exact: true })).toHaveCount(1);
 });
 
 test("hostile names and series titles on a demo card are text, isolated, and kept out of the summary (T1)", async ({
@@ -442,7 +444,8 @@ test("three separate clicks while one demo opening is in flight send one POST", 
     await held.promise;
     return pack(["common", "common", "common", "uncommon", "rare"], 6_400);
   });
-  await page.goto("/");
+  // On /demo the button opens in place and keeps focus (§3.14 step 4); from `/` the h1 would take it.
+  await page.goto("/demo");
   await demoButton(page).click();
   const busy = demoButton(page, "Opening…");
   await expect(busy).toHaveAttribute("aria-disabled", "true");
@@ -458,9 +461,9 @@ test("three separate clicks while one demo opening is in flight send one POST", 
 /**
  * Regression (tester, 2026-10-30): the count of demo packs restarted on a soft navigation, because it
  * lived in the landing page's own state. §3.7 item 1.7 caps the demo per page load, which is the
- * document's lifetime (manager decision, 2026-10-30): following a link out of `/` and coming back
- * with Back, Forward or the wordmark keeps the count, and any 429 wait; the cards are not kept (§3.7
- * "Demo cards are not kept"), and a reload starts the count over.
+ * document's lifetime (manager decision, 2026-10-30): following a link out of `/demo` and coming back
+ * with Back, Forward or a link keeps the count, any 429 wait and, since the revision of 2026-10-30,
+ * the current cards (§3.7 "Demo cards are not kept", §3.14 step 6); a reload starts the count over.
  */
 test.describe("the visit's count across a soft navigation (regression)", () => {
   const KEEP = "To keep cards, register with an invite code.";
@@ -478,7 +481,7 @@ test.describe("the visit's count across a soft navigation (regression)", () => {
     }
   }
 
-  test("a link out of `/` and Back: the cards are gone but the page load's count goes on (§3.7 item 1.7)", async ({
+  test("a link out of /demo and Back: the cards and the page load's count both go on (§3.7 item 1.7, §3.14 step 6)", async ({
     page,
     api,
   }) => {
@@ -487,9 +490,9 @@ test.describe("the visit's count across a soft navigation (regression)", () => {
     await main(page).getByText(KEEP).getByRole("link", { name: "register" }).click();
     await expect(h1(page, "Register")).toBeFocused();
     await page.goBack();
-    await expect(h1(page, "Anime TCG")).toBeVisible();
-    // Not kept (§3.7): the round trip discards the cards.
-    await expect(demoList(page)).toHaveCount(0);
+    await expect(h1(page, "Demo pack")).toBeVisible();
+    // Held for the page load: the round trip shows the fourth pack's cards again.
+    await expect(demoList(page).getByRole("article").first()).toHaveAccessibleName(/Character 5040\b/);
 
     // Six more is ten in this page load: the Join offer takes the button's place.
     await openPacks(page, api, 6);
@@ -509,12 +512,16 @@ test.describe("the visit's count across a soft navigation (regression)", () => {
     await main(page).getByRole("link", { name: "Log in" }).first().click();
     await expect(h1(page, "Log in")).toBeFocused();
     await page.goBack();
-    await expect(h1(page, "Anime TCG")).toBeVisible();
+    await expect(h1(page, "Demo pack")).toBeVisible();
     await expect(demoButton(page)).toHaveCount(0);
     await page.goForward();
     await expect(h1(page, "Log in")).toBeVisible();
     await page.goBack();
-    await expect(h1(page, "Anime TCG")).toBeVisible();
+    await expect(h1(page, "Demo pack")).toBeVisible();
+    await expect(demoButton(page)).toHaveCount(0);
+    // `/` shows the offer in the button's place as well.
+    await main(page).getByRole("link", { name: "Back to the landing page" }).click();
+    await expect(h1(page, "Anime TCG")).toBeFocused();
     await expect(demoButton(page)).toHaveCount(0);
     expect(api.count("POST /api/demo/open")).toBe(10);
 
@@ -535,13 +542,20 @@ test.describe("the visit's count across a soft navigation (regression)", () => {
     await page.goto("/");
     await demoButton(page).click();
     await expect(demoButton(page, "Try again in 30 s")).toHaveAttribute("aria-disabled", "true");
-    await main(page).getByRole("link", { name: "Log in" }).first().click();
+    await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Log in" }).click();
     await expect(h1(page, "Log in")).toBeFocused();
     await page.goBack();
-    await expect(h1(page, "Anime TCG")).toBeFocused();
+    await expect(h1(page, "Demo pack")).toBeFocused();
     const waiting = main(page).getByRole("button", { name: /^Try again in \d+ s$/ });
     await expect(waiting).toHaveAttribute("aria-disabled", "true");
     await waiting.dispatchEvent("click");
     expect(api.count("POST /api/demo/open")).toBe(1);
+    // Back once more: `/` shows the same wait on its button.
+    await page.goBack();
+    await expect(h1(page, "Anime TCG")).toBeFocused();
+    await expect(main(page).getByRole("button", { name: /^Try again in \d+ s$/ })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
   });
 });
