@@ -1,6 +1,6 @@
 # Accounts API (Sprint 1b, server side)
 
-Manager-written technical spec (non-UI). The UI half is `docs/design/accounts.md`; this file defines the API it calls, the data model, the owner-side commands and the two prerequisites carried from the 1a security review (`accounts.md` §10). Implements ADR 0008 §3–5 on the 1a foundation (`backend-foundation.md`). Security tier **T3** (authentication, sessions, password handling, invite codes). `security-officer` review and an adversarial test pass are required before each PR opens; a T3 change never merges on the day it is opened unless the owner says so.
+Manager-written technical spec (non-UI). The UI half is `docs/design/accounts.md`; this file defines the API it calls, the data model, the owner-side commands and the two prerequisites carried from the 1a security review (`accounts.md` §10). Implements ADR 0008 §3–5 on the 1a foundation (`backend-foundation.md`). Security tier **T3** (authentication, sessions, password handling, invite codes). `security-officer` review and an adversarial test pass are required before each PR opens; the owner is informed through the PR's sign-offs (since 2026-10-30 a T3 PR may merge the day it opens).
 
 Written 2026-10-28.
 
