@@ -373,6 +373,8 @@ describe("app database role", () => {
       for (const db of [app.db, owner]) {
         for (const change of [
           { removedByPurchase: other.purchaseId },
+          // To null only once the purchase is gone (0008, manager decision, 2026-10-30).
+          { removedByPurchase: null },
           { removedAt: null, removedByPurchase: null },
           { removedByRecycle: null, removedAt: new Date(0) },
         ]) {

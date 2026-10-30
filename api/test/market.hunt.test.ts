@@ -103,8 +103,9 @@ import { createTestApp, send, type SignedInClient, testConfig, testDatabaseUrl }
  *   the account has an active listing (0007), exactly what it then lets it
  *   do to another account, and that `audit-ledger` sees a stray call;
  *   PUBLIC has no EXECUTE; a temp table named `cards` does not redirect it;
- * - the app role can null `removed_by_purchase` on a sold card (the trigger
- *   allows it for the foreign key's set null): `audit-ledger` must catch it.
+ * - the app role cannot null `removed_by_purchase` on a sold card while its
+ *   purchase exists (0008); the foreign key's set null after the buyer's
+ *   account is deleted still passes.
  * Search and exposure
  * - fullwidth `％`, `＿` and `＼` fold to the LIKE specials under NFKC and must
  *   still match as text;
@@ -950,21 +951,27 @@ describe("market hunt (tester, economy.md PR 3)", () => {
       expect([{ deleted: 0, kept: 1 }, { refused: PERMISSION_DENIED }]).toContainEqual(shadow);
     });
 
-    it("the app role can null removed_by_purchase on a sold card (the trigger lets the foreign key do it); audit-ledger must report it", async () => {
+    it("the app role cannot null removed_by_purchase while the purchase exists (0008); the buyer's account deletion still does", async () => {
       const seller = await holding([ID.common(56)]);
       const buyer = await funded(100);
       const [card] = await heldCopies(app, seller.account.id, ID.common(56));
-      const receipt = await bought(app, buyer, (await listed(app, seller, ID.common(56), 5)).listingId);
-      const updated = await app.db
+      await bought(app, buyer, (await listed(app, seller, ID.common(56), 5)).listingId);
+      const refused: unknown = await app.db
         .update(cards)
         .set({ removedByPurchase: null })
         .where(eq(cards.id, card?.id ?? ""))
-        .returning({ id: cards.id });
-      expect(updated).toHaveLength(1);
-      forged.push(seller.account.id, buyer.account.id);
-      const audit = await auditLedger(app.db);
-      const lines = audit.failures.flatMap((failure) => failure.lines).join("\n");
-      expect(lines).toContain(`purchase ${receipt.purchaseId} removed 0 of the seller's cards, not 1`);
+        .then(
+          () => null,
+          (err: unknown) => err,
+        );
+      expect(refused).toMatchObject({ cause: { code: "23000" } });
+      expect((await cardRow(card?.id ?? ""))?.removedByPurchase).not.toBeNull();
+      // The foreign key's set null, once the purchase goes with the buyer's account, still passes.
+      await deleteAccounts(app.db, [buyer.account.id]);
+      const after = await cardRow(card?.id ?? "");
+      expect(after?.removedAt).not.toBeNull();
+      expect(after?.removedByPurchase).toBeNull();
+      await expectLedgerConsistent(app, forged.splice(0));
     });
   });
 
