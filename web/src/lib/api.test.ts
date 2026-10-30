@@ -1,7 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { envelope, makeAccount, mockFetch, noContent, rateLimited, sentBody } from "../test/api";
 import {
+  listingId,
   makeCollection,
+  makeListing,
+  makeListingsPage,
+  makeMarketMine,
+  makePurchaseReceipt,
   makeDemo,
   makeDemoOpened,
   makePackOpened,
@@ -13,7 +18,12 @@ import {
 } from "../test/fixtures";
 import {
   ApiError,
+  buyListing,
   buyShopPack,
+  cancelListing,
+  getListings,
+  getMarketMine,
+  listCard,
   changePassword,
   checkInvite,
   deleteAccount,
@@ -326,4 +336,101 @@ describe("api client", () => {
       expect(err).toBeInstanceOf(NetworkError);
     },
   );
+
+  it("GET /api/market/listings names only the parameters set, in a fixed order, encoded", async () => {
+    const page = makeListingsPage([makeListing(1)]);
+    const fetchMock = mockFetch({
+      "GET /api/market/listings": { status: 200, body: page },
+      "GET /api/market/listings?rarity=epic&franchiseId=100&characterId=7&q=%E9%80%B2%E6%92%83+%26+co&sort=newest&cursor=abc_-1":
+        { status: 200, body: page },
+    });
+    await expect(getListings({})).resolves.toEqual(page);
+    await getListings({
+      cursor: "abc_-1",
+      sort: "newest",
+      q: "進撃 & co",
+      characterId: "7",
+      franchiseId: "100",
+      rarity: "epic",
+    });
+    expect(fetchMock.mock.calls.map(([url]) => url)).toHaveLength(2);
+    for (const [, init] of fetchMock.mock.calls) expect(init?.body).toBeUndefined();
+  });
+
+  it("an aborted browse request is the caller's own abort, not a lost answer", async () => {
+    const controller = new AbortController();
+    const abort = new DOMException("aborted", "AbortError");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => {
+        controller.abort();
+        return Promise.reject(abort);
+      }),
+    );
+    const err = await getListings({}, controller.signal).catch((e: unknown) => e);
+    expect(err).toBe(abort);
+    expect(err).not.toBeInstanceOf(NetworkError);
+  });
+
+  it("a browse request that fails without an abort is a NetworkError", async () => {
+    const controller = new AbortController();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => Promise.reject(new TypeError("offline"))),
+    );
+    await expect(getListings({}, controller.signal)).rejects.toBeInstanceOf(NetworkError);
+  });
+
+  it("GET /api/market/mine returns the answer", async () => {
+    mockFetch({ "GET /api/market/mine": { status: 200, body: makeMarketMine() } });
+    await expect(getMarketMine()).resolves.toEqual(makeMarketMine());
+  });
+
+  it("list, buy and cancel send exactly their bodies: the asking price, the key alone, nothing", async () => {
+    const id = listingId(1);
+    const fetchMock = mockFetch({
+      "POST /api/market/listings": { status: 201, body: makeListing(1, { mine: true }) },
+      [`POST /api/market/listings/${id}/buy`]: { status: 201, body: makePurchaseReceipt() },
+      [`POST /api/market/listings/${id}/cancel`]: {
+        status: 200,
+        body: makeListing(1, { status: "cancelled" }),
+      },
+    });
+    const requestId = "0b8f3c1e-6a3d-4c55-9a47-2f0d8a6b1c11";
+    await listCard({ requestId, characterId: 2001, rarity: "rare", price: 40 });
+    expect(sentBody(fetchMock, 0)).toEqual({ requestId, characterId: 2001, rarity: "rare", price: 40 });
+    await expect(buyListing(id, requestId)).resolves.toEqual(makePurchaseReceipt());
+    expect(sentBody(fetchMock, 1)).toEqual({ requestId });
+    await expect(cancelListing(id)).resolves.toMatchObject({ status: "cancelled" });
+    expect(sentBody(fetchMock, 2)).toEqual({});
+  });
+
+  it("a listing id is one encoded path segment, so no id can reach another route", async () => {
+    const fetchMock = mockFetch({
+      "POST /api/market/listings/..%2Fx%3Fy/cancel": { status: 200, body: makeListing(1) },
+    });
+    await cancelListing("../x?y");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("market_limit carries which limit it hit and its seconds; an unknown limit is not the envelope", async () => {
+    const id = listingId(1);
+    mockFetch({
+      [`POST /api/market/listings/${id}/buy`]: {
+        status: 409,
+        body: { error: { code: "market_limit", message: "m", limit: "pair", retryAfterSeconds: 86_400 } },
+        headers: { "retry-after": "86400" },
+      },
+    });
+    const err = await buyListing(id, "k").catch((e: unknown) => e);
+    expect(err).toMatchObject({ code: "market_limit", limit: "pair", retryAfterSeconds: 86_400 });
+
+    mockFetch({
+      [`POST /api/market/listings/${id}/buy`]: {
+        status: 409,
+        raw: '{"error":{"code":"market_limit","message":"m","limit":"everyone"}}',
+      },
+    });
+    await expect(buyListing(id, "k")).rejects.toBeInstanceOf(NetworkError);
+  });
 });

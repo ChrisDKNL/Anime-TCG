@@ -88,3 +88,23 @@ export function sentBody(fetchMock: ReturnType<typeof mockFetch>, call = 0): unk
   const body = init?.body;
   return typeof body === "string" ? JSON.parse(body) : undefined;
 }
+
+/** Answers in turn; the last one keeps answering. */
+export function sequence(...answers: MockHandler[]): MockHandler {
+  let call = 0;
+  return (init, url) => {
+    const answer = answers[Math.min(call, answers.length - 1)];
+    call += 1;
+    if (answer === undefined) throw new Error("sequence needs at least one answer");
+    return typeof answer === "function" ? answer(init, url) : answer;
+  };
+}
+
+/** A request held in flight until the test lets it answer. */
+export function held(answer: MockAnswer): { handler: MockHandler; release: () => void } {
+  let release: () => void = () => undefined;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { handler: () => gate.then(() => answer), release };
+}

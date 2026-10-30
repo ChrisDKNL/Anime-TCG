@@ -7,6 +7,9 @@ import type {
   DemoResponse,
   FranchiseRef,
   KarmaRules,
+  Listing,
+  ListingsPage,
+  MarketMine,
   OpenedCard,
   PackAllowance,
   PackKind,
@@ -14,6 +17,7 @@ import type {
   PacksResponse,
   PerRarity,
   PublishedOdds,
+  PurchaseReceipt,
   Rarity,
   RecycleReceipt,
   ShopReceipt,
@@ -270,4 +274,74 @@ export function makeDemoOpened(
   cards: DemoCard[] = [0, 1, 2, 3, 4].map((slot) => makeDemoCard(slot)),
 ): DemoOpened {
   return { cards, franchises: FRANCHISES };
+}
+
+/** The `n`th listing's uuid: a fixed shape, so tests can name listings by number. */
+export function listingId(n: number): string {
+  return `7d1e6a40-0b9c-4f2d-8e3a-${String(n).padStart(12, "0")}`;
+}
+
+/** An active listing of another account: character `n`, a Rare at 40 Karma with the 5 % fee, a week to run. */
+export function makeListing(n: number, overrides: Partial<Listing> = {}): Listing {
+  const rarity = overrides.rarity ?? "rare";
+  return {
+    listingId: listingId(n),
+    kind: "card",
+    character: makeCharacter(2_000 + n, { tier: rarity }),
+    rarity,
+    variant: "standard",
+    price: 40,
+    fee: 2,
+    listedAt: "2026-10-30T09:00:00.000Z",
+    expiresAt: "2026-11-06T09:00:00.000Z",
+    closedAt: null,
+    status: "active",
+    mine: false,
+    ...overrides,
+  };
+}
+
+/** A browse page; the first page (`first`) carries `filterFranchiseIds`, every page the fixture series. */
+export function makeListingsPage(
+  listings: Listing[],
+  { nextCursor = null, first = true }: { nextCursor?: string | null; first?: boolean } = {},
+): ListingsPage {
+  return {
+    listings,
+    filterFranchiseIds: first ? FRANCHISES.map((franchise) => franchise.id) : null,
+    franchises: FRANCHISES,
+    nextCursor,
+  };
+}
+
+export function makePurchaseReceipt(overrides: Partial<PurchaseReceipt> = {}): PurchaseReceipt {
+  const listing = makeListing(1);
+  return {
+    purchaseId: "5a2b3c4d-1e2f-4a5b-8c6d-7e8f9a0b1c2d",
+    boughtAt: "2026-10-30T10:00:00.000Z",
+    listingId: listing.listingId,
+    price: listing.price,
+    card: {
+      kind: "card",
+      character: listing.character,
+      rarity: listing.rarity,
+      variant: "standard",
+      isNew: true,
+    },
+    franchises: FRANCHISES,
+    balance: 1_200,
+    ...overrides,
+  };
+}
+
+/** `GET /api/market/mine` with nothing listed, closed or bought, and the full window left. */
+export function makeMarketMine(overrides: Partial<MarketMine> = {}): MarketMine {
+  return {
+    active: [],
+    closed: [],
+    purchases: [],
+    left: { purchases: 100, spend: 55_000, proceeds: 55_000 },
+    franchises: FRANCHISES,
+    ...overrides,
+  };
 }

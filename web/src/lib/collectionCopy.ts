@@ -14,11 +14,10 @@ import type { Rarity } from "@anime-tcg/shared/api";
 import { RARITY_LABEL } from "@anime-tcg/shared/rarity";
 import { isolate } from "./bidi";
 import { cardCount, common, shortDate } from "./copy";
+import { clockTime } from "./dates";
 import type { CardSort, SeriesSort } from "./collectionView";
 import { formatCount, plural } from "./packsCopy";
 
-/** `<HH:MM>` (§8). */
-const CLOCK = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" });
 const GRAPHEMES = new Intl.Segmenter("en", { granularity: "grapheme" });
 
 /** §5.6 rule 5: series option labels are cut at 60 grapheme clusters. */
@@ -69,7 +68,7 @@ export const statsCopy = {
   series: (title: string, owned: number, total: number) => `${title}: ${figure(owned, total)} characters`,
   totals: (cards: number, duplicates: number) => `${cardCount(cards)} · ${statsCopy.duplicates(duplicates)}`,
   duplicates: (n: number) => (n === 0 ? "No duplicates" : plural(n, "duplicate", "duplicates")),
-  stale: (at: Date) => `Showing your collection as of ${CLOCK.format(at)}.`,
+  stale: (at: Date) => `Showing your collection as of ${clockTime(at)}.`,
 } as const;
 
 export const viewCopy = {
@@ -134,15 +133,17 @@ export const resultsCopy = {
 
 export const tileCopy = {
   copies: (n: number) => plural(n, "copy", "copies"),
-  /** The tile button's name: `<name>, <Rarity>, <series>, <copies>`. */
-  label: (name: string, rarity: Rarity, series: string | null, count: number) =>
+  /** The tile button's name: `<name>, <Rarity>, <series>, <copies>`, then `, <L> listed` when listed. */
+  label: (name: string, rarity: Rarity, series: string | null, count: number, listed: number) =>
     [
       isolate(name),
       RARITY_LABEL[rarity],
       ...(series === null ? [] : [isolate(series)]),
       tileCopy.copies(count),
+      ...(listed >= 1 ? [tileCopy.listed(listed)] : []),
     ].join(", "),
   count: (n: number) => `×${formatCount(n)}`,
+  listed: (n: number) => `${formatCount(n)} listed`,
 } as const;
 
 export const dialogCopy = {
@@ -152,6 +153,7 @@ export const dialogCopy = {
   facts: {
     rarity: "Rarity",
     copies: "Copies",
+    onTheMarket: "On the market",
     firstObtained: "First obtained",
     lastObtained: "Last obtained",
   },

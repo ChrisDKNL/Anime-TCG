@@ -11,6 +11,8 @@ import {
   makeDemo,
   makeDemoOpened,
   makeEntry,
+  makeListingsPage,
+  makeMarketMine,
   makePackOpened,
   makePacks,
   makeRecycleReceipt,
@@ -27,12 +29,16 @@ export const SHOP = "GET /api/shop";
 export const BUY = "POST /api/shop/buy";
 export const RECYCLE = "POST /api/collection/recycle";
 export const DEMO = "GET /api/demo";
+/** The browse request for the default controls: the lowest price first, nothing else. */
+export const LISTINGS = "GET /api/market/listings?sort=price_asc";
+export const MINE = "GET /api/market/mine";
+export const LIST = "POST /api/market/listings";
 export const DEMO_OPEN = "POST /api/demo/open";
 
 /**
  * The api of a signed-in account with a full allowance, an empty collection, a balance of 1,240 and one
- * theme; a purchase and a recycle answer with the fixture receipts; the landing page's demo for a
- * signed-out visit.
+ * theme; a purchase and a recycle answer with the fixture receipts; an empty market; the landing page's
+ * demo for a signed-out visit.
  */
 export function signedInRoutes(account = makeAccount()): Record<string, MockHandler> {
   return {
@@ -45,6 +51,8 @@ export function signedInRoutes(account = makeAccount()): Record<string, MockHand
     [BUY]: { status: 201, body: makeShopReceipt() },
     [RECYCLE]: { status: 201, body: makeRecycleReceipt() },
     [DEMO]: { status: 200, body: makeDemo() },
+    [LISTINGS]: { status: 200, body: makeListingsPage([]) },
+    [MINE]: { status: 200, body: makeMarketMine() },
     [DEMO_OPEN]: { status: 200, body: makeDemoOpened() },
   };
 }

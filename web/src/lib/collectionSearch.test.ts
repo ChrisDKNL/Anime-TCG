@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { matchesTerms, normalise, searchTerms } from "./collectionSearch";
+import { normaliseSearchText as normalise, searchTermsOf as searchTerms } from "@anime-tcg/shared/search";
+import { matchesTerms } from "./collectionSearch";
 
 describe("normalise (collection-overview.md §3.3 step 1)", () => {
   it("folds full-width letters, case and Latin accents", () => {
