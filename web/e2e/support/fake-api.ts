@@ -1,6 +1,13 @@
 /// <reference lib="dom" />
 import { expect, test as base, type BrowserContext, type Page, type Route } from "@playwright/test";
-import type { AccountPublic, SessionResponse } from "@anime-tcg/shared/api";
+import type {
+  AccountPublic,
+  CollectionEntry,
+  Rarity,
+  RecycleReceipt,
+  SessionResponse,
+  ShopReceipt,
+} from "@anime-tcg/shared/api";
 import type { ErrorCode } from "@anime-tcg/shared/errors";
 import {
   makeAllowance,
@@ -9,6 +16,9 @@ import {
   makeEntry,
   makePackOpened,
   makePacks,
+  makeRules,
+  makeShop,
+  makeWallet,
 } from "../../src/test/fixtures";
 
 /**
@@ -19,8 +29,8 @@ import {
  * CDN, and the browser never calls AniList's API: the fixture fails any test whose page
  * sends a request to `graphql.anilist.co` (collection-packs.md §8). A request the test did
  * not script is answered with a 500 envelope and fails the test in the fixture teardown,
- * so the UI cannot call something unexpected without the test noticing; the packs and
- * collection routes have a stateful default (`FakeGame`) that a test can override.
+ * so the UI cannot call something unexpected without the test noticing; the packs, collection,
+ * wallet, shop and recycle routes have a stateful default (`FakeGame`) that a test can override.
  */
 
 // 1x1 transparent PNG so card images resolve without hitting AniList's CDN.
@@ -104,6 +114,13 @@ export function deferred(): { promise: Promise<void>; release: () => void } {
  * Like the api (collection-packs.md §5.3), an opening whose `requestId` this account has
  * already used is a replay: answered 200 with the cards that opening dealt and the
  * allowance as it is now, before the allowance is checked, and nothing more is spent.
+ *
+ * The economy (economy.md §8): a `balance`, the shop's one theme at `THEMED_PACK_PRICE`, and
+ * `held` entries a test seeds with duplicates to recycle. A shop purchase debits the price
+ * and deals a pack into the collection without touching the allowance; a recycle takes
+ * duplicates of a held entry, never its last copy, and credits the wallet's recycle value.
+ * Both answer a used `requestId` with 200 and the original receipt at today's balance, and
+ * refuse as the api does: `insufficient_funds` with the balance, `not_enough_copies`.
  */
 export class FakeGame {
   cap = 3;
@@ -112,6 +129,12 @@ export class FakeGame {
   pity = 300;
   /** The opening number each `requestId` dealt, for the replay. */
   readonly openings = new Map<string, number>();
+  balance = 1_240;
+  /** Entries the account holds besides what its openings dealt: the test's duplicates. */
+  held: CollectionEntry[] = [];
+  readonly purchases = new Map<string, ShopReceipt>();
+  readonly recycles = new Map<string, RecycleReceipt>();
+  private readonly rules = makeRules();
 
   private allowance() {
     return makeAllowance({
@@ -162,11 +185,62 @@ export class FakeGame {
           .flat()
           .sort((a, b) => b.slot - a.slot)
           .map((card) => makeEntry(card.character, { rarity: card.rarity }));
-        return { status: 200, json: makeCollection(entries) };
+        return { status: 200, json: makeCollection([...this.held, ...entries]) };
       }
+      case "GET /api/wallet":
+        return { status: 200, json: makeWallet(this.balance) };
+      case "GET /api/shop":
+        return { status: 200, json: makeShop() };
+      case "POST /api/shop/buy":
+        return this.buy(body as { requestId: string; themeId: string });
+      case "POST /api/collection/recycle":
+        return this.recycle(
+          body as { requestId: string; characterId: number; rarity: Rarity; count: number },
+        );
       default:
         return undefined;
     }
+  }
+
+  private buy({ requestId, themeId }: { requestId: string; themeId: string }): Answer {
+    const replayed = this.purchases.get(requestId);
+    if (replayed !== undefined) return { status: 200, json: { ...replayed, balance: this.balance } };
+    const price = this.rules.themedPackPrice;
+    if (this.balance < price) {
+      return {
+        status: 409,
+        json: { error: { code: "insufficient_funds", message: "insufficient_funds", balance: this.balance } },
+      };
+    }
+    this.balance -= price;
+    this.opened += 1;
+    const receipt: ShopReceipt = { pack: this.pack(this.opened), themeId, price, balance: this.balance };
+    this.purchases.set(requestId, receipt);
+    return { status: 201, json: receipt };
+  }
+
+  private recycle(body: { requestId: string; characterId: number; rarity: Rarity; count: number }): Answer {
+    const replayed = this.recycles.get(body.requestId);
+    if (replayed !== undefined) return { status: 200, json: { ...replayed, balance: this.balance } };
+    const index = this.held.findIndex(
+      (entry) => entry.character.id === body.characterId && entry.rarity === body.rarity,
+    );
+    const entry = this.held[index];
+    if (entry === undefined || body.count > entry.recyclable) return envelope(409, "not_enough_copies");
+    const credited = body.count * this.rules.recycleValues[body.rarity];
+    this.balance += credited;
+    const count = entry.count - body.count;
+    const available = count - entry.listed;
+    this.held[index] = { ...entry, count, available, recyclable: Math.min(count - 1, available) };
+    const receipt: RecycleReceipt = {
+      recycleId: `0b8a6c1e-2f3d-4e5f-8a9b-${String(this.recycles.size + 1).padStart(12, "0")}`,
+      recycledAt: "2026-10-30T09:00:00.000Z",
+      recycled: { characterId: body.characterId, rarity: body.rarity, count: body.count },
+      credited,
+      balance: this.balance,
+    };
+    this.recycles.set(body.requestId, receipt);
+    return { status: 201, json: receipt };
   }
 }
 
