@@ -13,6 +13,7 @@ import {
   poolSnapshots,
   series,
 } from "../../db/schema.js";
+import { type RefusedGenre, snapshotGenreThemes } from "../economy/themes.js";
 import type { SnapshotPlan } from "./build.js";
 
 export interface ActivationOptions {
@@ -54,6 +55,8 @@ export interface ActivationSummary {
   added: number;
   franchisesMerged: number;
   franchisesSplit: number;
+  /** The shop's genre themes this snapshot offers, and the genres it does not with why (economy.md §8.6). */
+  themes: { onOffer: { id: string; title: string }[]; refused: RefusedGenre[] };
 }
 
 const CHUNK = 1_000;
@@ -101,7 +104,7 @@ function summarise(
   version: number,
   previous: Previous,
   dryRun: boolean,
-): ActivationSummary {
+): Omit<ActivationSummary, "themes"> {
   const current = new Map(plan.characters.map((character) => [character.id, character.tier]));
   const franchiseOfSeries = new Map(plan.entries.map((entry) => [entry.id, entry.franchiseId]));
   const titleOf = new Map(plan.entries.map((entry) => [entry.id, entry.title]));
@@ -257,7 +260,14 @@ export async function activateSnapshot(
         await tx.update(poolSnapshots).set({ isCurrent: false }).where(eq(poolSnapshots.id, current.id));
       }
       await tx.update(poolSnapshots).set({ isCurrent: true }).where(eq(poolSnapshots.id, snapshotId));
-      summary = summarise(plan, snapshotId, previous, options.dryRun);
+      const genreThemes = await snapshotGenreThemes(tx, snapshotId);
+      summary = {
+        ...summarise(plan, snapshotId, previous, options.dryRun),
+        themes: {
+          onOffer: genreThemes.themes.map((theme) => ({ id: theme.id, title: theme.title })),
+          refused: genreThemes.refused,
+        },
+      };
       if (options.dryRun) tx.rollback();
       if (options.fetchId !== undefined)
         await tx.delete(poolFetches).where(eq(poolFetches.id, options.fetchId));

@@ -6,9 +6,10 @@ import type {
   FranchiseRef,
 } from "@anime-tcg/shared/api";
 import { RARITIES, type Rarity } from "@anime-tcg/shared/rarity";
-import { and, count, countDistinct, eq, max, min, sql } from "drizzle-orm";
+import { and, count, countDistinct, eq, isNull, max, min, sql } from "drizzle-orm";
 import type { Db } from "../../db/client.js";
 import { cards, poolSnapshotCharacters } from "../../db/schema.js";
+import { holdingOf } from "../economy/recycle.js";
 import { type CurrentSnapshot, currentSnapshot, describeCharacters, franchiseRefs } from "../pool/catalog.js";
 import { perRarity } from "../pool/tiers.js";
 
@@ -17,6 +18,7 @@ interface EntryRow {
   rarity: Rarity;
   variant: "standard";
   count: number;
+  escrowed: number;
   firstObtainedAt: Date | null;
   lastObtainedAt: Date | null;
 }
@@ -46,7 +48,8 @@ export function totalsOf(entries: readonly { rarity: Rarity; count: number }[]):
  * The account's collection (collection-packs.md §5.5): entries keyed by
  * character, granted rarity and variant, totals, and completion against
  * the current snapshot, each character counted once in the pool and once
- * per franchise it belongs to.
+ * per franchise it belongs to. Only held cards count (economy.md §7): a
+ * recycled card stays as a row for the audit and is in none of these.
  */
 export class CollectionService {
   constructor(private readonly db: Db) {}
@@ -59,11 +62,12 @@ export class CollectionService {
         rarity: cards.rarity,
         variant: cards.variant,
         count: count(),
+        escrowed: count(cards.escrowId),
         firstObtainedAt: min(cards.pulledAt),
         lastObtainedAt: max(cards.pulledAt),
       })
       .from(cards)
-      .where(eq(cards.accountId, accountId))
+      .where(and(eq(cards.accountId, accountId), isNull(cards.removedAt)))
       .groupBy(cards.characterId, cards.rarity, cards.variant);
 
     const described = await describeCharacters(
@@ -82,6 +86,7 @@ export class CollectionService {
         rarity: row.rarity,
         variant: row.variant,
         count: row.count,
+        ...holdingOf({ held: row.count, listed: 0, escrowed: row.escrowed }),
         firstObtainedAt: row.firstObtainedAt.toISOString(),
         lastObtainedAt: row.lastObtainedAt.toISOString(),
       };
@@ -117,7 +122,7 @@ export class CollectionService {
           eq(poolSnapshotCharacters.snapshotId, snapshot.id),
         ),
       )
-      .where(eq(cards.accountId, accountId));
+      .where(and(eq(cards.accountId, accountId), isNull(cards.removedAt)));
     const total = RARITIES.reduce((sum, tier) => sum + snapshot.tierSizes[tier], 0);
     return { owned: row?.owned ?? 0, total };
   }
@@ -131,7 +136,7 @@ export class CollectionService {
       from pool_snapshot_franchises f
       join pool_snapshot_series s on s.snapshot_id = f.snapshot_id and s.franchise_id = f.franchise_id
       join pool_snapshot_memberships m on m.snapshot_id = s.snapshot_id and m.series_id = s.series_id
-      left join (select distinct character_id from cards where account_id = ${accountId}) o
+      left join (select distinct character_id from cards where account_id = ${accountId} and removed_at is null) o
         on o.character_id = m.character_id
       where f.snapshot_id = ${snapshotId}
       group by f.franchise_id, f.popularity_rank

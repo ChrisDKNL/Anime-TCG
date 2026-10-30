@@ -3,7 +3,8 @@ import type { ErrorCode, ErrorEnvelope } from "@anime-tcg/shared/errors";
 /**
  * The one error type domain code throws; the error plugin maps it to the
  * envelope. `retryAfterSeconds` rides along for `too_many_failures` so the
- * plugin can set `Retry-After` and the body from the same number.
+ * plugin can set `Retry-After` and the body from the same number; `balance`
+ * rides along for `insufficient_funds` (economy.md §11.1).
  */
 export class ApiError extends Error {
   constructor(
@@ -11,6 +12,7 @@ export class ApiError extends Error {
     readonly code: ErrorCode,
     message: string,
     readonly retryAfterSeconds?: number,
+    readonly balance?: number,
   ) {
     super(message);
     this.name = "ApiError";
@@ -49,14 +51,11 @@ const FIXED_MESSAGES: Partial<Record<number, { code: ErrorCode; message: string 
  */
 export function errorEnvelopeFor(err: unknown): EnvelopeResponse {
   if (err instanceof ApiError) {
-    if (err.retryAfterSeconds === undefined) {
-      return { statusCode: err.statusCode, body: envelope(err.code, err.message) };
-    }
-    return {
-      statusCode: err.statusCode,
-      body: { error: { code: err.code, message: err.message, retryAfterSeconds: err.retryAfterSeconds } },
-      retryAfterSeconds: err.retryAfterSeconds,
-    };
+    const body = envelope(err.code, err.message);
+    if (err.balance !== undefined) body.error.balance = err.balance;
+    if (err.retryAfterSeconds === undefined) return { statusCode: err.statusCode, body };
+    body.error.retryAfterSeconds = err.retryAfterSeconds;
+    return { statusCode: err.statusCode, body, retryAfterSeconds: err.retryAfterSeconds };
   }
   if (!isThrownError(err)) return internal();
 

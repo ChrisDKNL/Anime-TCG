@@ -1,6 +1,6 @@
 import type { OpenedCard, PackAllowance, PackKind, PackOpened, PacksResponse } from "@anime-tcg/shared/api";
 import type { Rarity } from "@anime-tcg/shared/rarity";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import type { Logger } from "pino";
 import type { Db, Queryable } from "../../db/client.js";
 import { accounts, cards, packOpenings } from "../../db/schema.js";
@@ -41,6 +41,13 @@ export interface OpeningRequest {
   openedAt: Date;
 }
 
+/** How the shop paid for a pack (economy.md §8.6): the theme it was dealt from, the price charged and its ledger row. */
+export interface ShopPayment {
+  themeId: string;
+  ledgerEntryId: string;
+  price: number;
+}
+
 /** An opening as stored: what a replay of its `requestId` answers with. */
 export interface StoredOpening {
   openingId: string;
@@ -48,6 +55,8 @@ export interface StoredOpening {
   snapshotId: number;
   kind: PackKind;
   pity: boolean;
+  /** Null for a timer pack. */
+  shop: Omit<ShopPayment, "ledgerEntryId"> | null;
   cards: { slot: number; characterId: number; rarity: Rarity; isNew: boolean }[];
 }
 
@@ -62,8 +71,9 @@ export interface DealtOpening {
  * and under its account lock: plan the pack from the counters, roll and pick
  * the cards from `pool`, mark each new to the account or not, write the
  * opening and its cards, and move the allowance clock and the counters. A
- * free pack spends the allowance; a shop pack (economy.md) does not, and
- * moves only what §5.4.7 says it moves.
+ * free pack spends the allowance; a shop pack (economy.md §8.6) does not,
+ * moves only what §5.4.7 says it moves, and carries the `shop` payment the
+ * caller already wrote to the ledger.
  */
 export async function dealPack(
   tx: Queryable,
@@ -71,7 +81,10 @@ export async function dealPack(
   rng: Rng,
   pool: PackPool,
   source: PackSource,
+  shop?: ShopPayment,
 ): Promise<DealtOpening> {
+  if ((source === "shop") !== (shop !== undefined))
+    throw new Error("a shop pack, and only a shop pack, is paid for");
   const { account } = request;
   const plan = planPack(account, source, rng);
   const dealt = drawPack(pool.tiers, plan, rng);
@@ -79,7 +92,9 @@ export async function dealPack(
   const owned = await tx
     .selectDistinct({ characterId: cards.characterId })
     .from(cards)
-    .where(and(eq(cards.accountId, account.id), inArray(cards.characterId, dealtIds)));
+    .where(
+      and(eq(cards.accountId, account.id), inArray(cards.characterId, dealtIds), isNull(cards.removedAt)),
+    );
   const ownedIds = new Set(owned.map((row) => row.characterId));
 
   const [opening] = await tx
@@ -91,6 +106,14 @@ export async function dealPack(
       kind: plan.kind,
       pity: plan.pity,
       openedAt: request.openedAt,
+      ...(shop === undefined
+        ? {}
+        : {
+            source: "shop" as const,
+            themeId: shop.themeId,
+            ledgerEntryId: shop.ledgerEntryId,
+            price: shop.price,
+          }),
     })
     .returning({ id: packOpenings.id });
   if (opening === undefined) throw new Error("opening insert returned no row");
@@ -130,6 +153,7 @@ export async function dealPack(
       snapshotId: pool.snapshotId,
       kind: plan.kind,
       pity: plan.pity,
+      shop: shop === undefined ? null : { themeId: shop.themeId, price: shop.price },
       cards: written,
     },
     account: { ...account, ...counters, packsAnchorAt },
@@ -140,7 +164,11 @@ function signedOut(): ApiError {
   return new ApiError(401, "unauthenticated", "Sign in first");
 }
 
-const LOCKED_ACCOUNT = {
+export function requestIdReused(): ApiError {
+  return new ApiError(409, "request_id_reused", "That request id was already used for another request");
+}
+
+export const LOCKED_ACCOUNT = {
   id: accounts.id,
   packsAnchorAt: accounts.packsAnchorAt,
   packsSinceMythic: accounts.packsSinceMythic,
@@ -176,23 +204,32 @@ export class PackService {
     };
   }
 
-  /** `replayed` is true when `requestId` named an opening this account already has (answered 200, not 201). */
+  /**
+   * `replayed` is true when `requestId` named an opening this account
+   * already has (answered 200, not 201). The time is read from `clock` once
+   * the account row is locked, as the reset reads its own, so an opening
+   * that waited for a reset is never dated before it (economy.md §8.9,
+   * manager decision, 2026-10-30).
+   */
   async open(
     log: PackLog,
     accountId: string,
     requestId: string,
-    now: Date,
+    clock: () => Date,
   ): Promise<{ replayed: boolean; opened: PackOpened }> {
-    const { replayed, opening, account } = await this.db.transaction(async (tx) => {
+    const { replayed, opening, account, now } = await this.db.transaction(async (tx) => {
       const [locked] = await tx
         .select(LOCKED_ACCOUNT)
         .from(accounts)
         .where(eq(accounts.id, accountId))
         .for("update");
       if (locked === undefined) throw signedOut();
+      const now = clock();
 
       const stored = await storedOpening(tx, accountId, requestId);
-      if (stored !== null) return { replayed: true, opening: stored, account: locked };
+      if (stored?.shop === null) return { replayed: true, opening: stored, account: locked, now };
+      // A shop purchase shares the openings' keys, and a timer opening never matches one (economy.md §8.8).
+      if (stored !== null) throw requestIdReused();
 
       const before = allowanceAt(locked.packsAnchorAt, now);
       if (before.available === 0) {
@@ -208,7 +245,7 @@ export class PackService {
 
       const pool = await this.poolFor(tx, snapshot.id);
       const dealt = await dealPack(tx, { account: locked, requestId, openedAt: now }, this.rng, pool, "free");
-      return { replayed: false, ...dealt };
+      return { replayed: false, ...dealt, now };
     });
 
     log.info(
@@ -224,7 +261,7 @@ export class PackService {
       },
       "pack opened",
     );
-    return { replayed, opened: await this.describe(opening, account, now) };
+    return { replayed, opened: await describeOpening(this.db, opening, account, now) };
   }
 
   private async poolFor(tx: Queryable, snapshotId: number): Promise<PackPool> {
@@ -233,41 +270,47 @@ export class PackService {
     }
     return this.cachedPool;
   }
-
-  private async describe(opening: StoredOpening, account: LockedAccount, now: Date): Promise<PackOpened> {
-    const current = await currentSnapshot(this.db);
-    const described = await describeCharacters(
-      this.db,
-      opening.cards.map((card) => card.characterId),
-      current?.id ?? null,
-    );
-    const openedCards: OpenedCard[] = opening.cards.map((card) => {
-      const character = described.characters.get(card.characterId);
-      if (character === undefined) throw new Error(`card character ${card.characterId} is missing`);
-      return {
-        kind: "card",
-        slot: card.slot,
-        character,
-        rarity: card.rarity,
-        variant: "standard",
-        isNew: card.isNew,
-      };
-    });
-    const allowance: PackAllowance = allowanceAt(account.packsAnchorAt, now);
-    return {
-      openingId: opening.openingId,
-      openedAt: opening.openedAt.toISOString(),
-      packKind: opening.kind,
-      pityMythic: opening.pity,
-      cards: openedCards,
-      franchises: await franchiseRefs(this.db, described.franchiseIds),
-      allowance,
-      packsUntilGuarantee: current === null ? null : packsUntilGuarantee(account),
-    };
-  }
 }
 
-async function storedOpening(
+/** An opening as the api answers it: the cards as the game shows them now, the allowance and the pity count at `now`. */
+export async function describeOpening(
+  db: Queryable,
+  opening: StoredOpening,
+  account: LockedAccount,
+  now: Date,
+): Promise<PackOpened> {
+  const current = await currentSnapshot(db);
+  const described = await describeCharacters(
+    db,
+    opening.cards.map((card) => card.characterId),
+    current?.id ?? null,
+  );
+  const openedCards: OpenedCard[] = opening.cards.map((card) => {
+    const character = described.characters.get(card.characterId);
+    if (character === undefined) throw new Error(`card character ${card.characterId} is missing`);
+    return {
+      kind: "card",
+      slot: card.slot,
+      character,
+      rarity: card.rarity,
+      variant: "standard",
+      isNew: card.isNew,
+    };
+  });
+  const allowance: PackAllowance = allowanceAt(account.packsAnchorAt, now);
+  return {
+    openingId: opening.openingId,
+    openedAt: opening.openedAt.toISOString(),
+    packKind: opening.kind,
+    pityMythic: opening.pity,
+    cards: openedCards,
+    franchises: await franchiseRefs(db, described.franchiseIds),
+    allowance,
+    packsUntilGuarantee: current === null ? null : packsUntilGuarantee(account),
+  };
+}
+
+export async function storedOpening(
   tx: Queryable,
   accountId: string,
   requestId: string,
@@ -279,6 +322,8 @@ async function storedOpening(
       snapshotId: packOpenings.snapshotId,
       kind: packOpenings.kind,
       pity: packOpenings.pity,
+      themeId: packOpenings.themeId,
+      price: packOpenings.price,
     })
     .from(packOpenings)
     .where(and(eq(packOpenings.accountId, accountId), eq(packOpenings.requestId, requestId)))
@@ -295,6 +340,10 @@ async function storedOpening(
     snapshotId: opening.snapshotId,
     kind: opening.kind,
     pity: opening.pity,
+    shop:
+      opening.themeId === null || opening.price === null
+        ? null
+        : { themeId: opening.themeId, price: opening.price },
     cards: rows,
   };
 }

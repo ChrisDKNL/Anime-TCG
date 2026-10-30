@@ -21,6 +21,23 @@ describe("errorEnvelopeFor", () => {
     expect(Object.keys(plain.body.error)).toEqual(["code", "message"]);
   });
 
+  it("carries balance into the body of insufficient_funds, with no Retry-After, only when set (economy.md §11.1)", () => {
+    const short = new ApiError(
+      409,
+      "insufficient_funds",
+      "The balance does not cover the price",
+      undefined,
+      0,
+    );
+    expect(errorEnvelopeFor(short)).toEqual({
+      statusCode: 409,
+      body: {
+        error: { code: "insufficient_funds", message: "The balance does not cover the price", balance: 0 },
+      },
+    });
+    expect(Object.keys(errorEnvelopeFor(short).body.error)).toEqual(["code", "message", "balance"]);
+  });
+
   it("turns a validation failure into 400 with the first failing path", () => {
     const err = {
       statusCode: 400,
