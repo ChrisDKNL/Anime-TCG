@@ -15,9 +15,12 @@ import {
   RecycleBody,
   ShopBuyBody,
   SnapshotInfo,
+  ListBody,
+  ListingsQuery,
+  PurchaseReceipt,
 } from "../src/api.js";
-import { PACK_CAP, PACK_INTERVAL_MINUTES, PACK_SIZE } from "../src/economy.js";
-import { ERROR_CODES, ErrorEnvelope } from "../src/errors.js";
+import { MAX_ENTRY_AMOUNT, PACK_CAP, PACK_INTERVAL_MINUTES, PACK_SIZE } from "../src/economy.js";
+import { ERROR_CODES, ErrorEnvelope, MARKET_LIMITS } from "../src/errors.js";
 import {
   ENCHANTED_INTERVAL,
   ENCHANTED_SLOT_ODDS,
@@ -228,6 +231,79 @@ describe("economy contract (economy.md §11)", () => {
       false,
       false,
       false,
+    ]);
+  });
+});
+
+describe("market contract (economy.md §11, PR 3)", () => {
+  const requestId = "6f1c0b8e-3c1a-4d2e-9f00-0123456789ab";
+  if (!FormatRegistry.Has("uuid")) FormatRegistry.Set("uuid", (value) => /^[0-9a-f-]{36}$/i.test(value));
+
+  it("names the market's error codes and its four limits, in the order a purchase checks them", () => {
+    expect(ERROR_CODES).toEqual(
+      expect.arrayContaining([
+        "price_out_of_bounds",
+        "listing_limit",
+        "listing_not_found",
+        "listing_unavailable",
+        "own_listing",
+        "market_limit",
+      ]),
+    );
+    expect(MARKET_LIMITS).toEqual(["buyer_purchases", "buyer_spend", "seller_proceeds", "pair"]);
+    const envelope = (extra: object) =>
+      Value.Check(ErrorEnvelope, { error: { code: "market_limit", message: "m", ...extra } });
+    expect([envelope({ limit: "pair", retryAfterSeconds: 60 }), envelope({ limit: "everything" })]).toEqual([
+      true,
+      false,
+    ]);
+  });
+
+  it("bounds a listing to an entry and a price of 1 to MAX_ENTRY_AMOUNT, and takes no card, fee or kind", () => {
+    const list = (change: object) =>
+      Value.Check(ListBody, { requestId, characterId: 1, rarity: "mythic", price: 27_500, ...change });
+    expect([list({}), list({ price: 1 }), list({ price: MAX_ENTRY_AMOUNT })]).toEqual([true, true, true]);
+    expect(
+      [
+        { price: 0 },
+        { price: MAX_ENTRY_AMOUNT + 1 },
+        { price: 1.5 },
+        { price: "5" },
+        { cardId: requestId },
+        { fee: 1 },
+        { kind: "card" },
+        { variant: "standard" },
+      ].map(list),
+    ).toEqual([false, false, false, false, false, false, false, false]);
+  });
+
+  it("takes query ids as plain digits, a sort of three and a cursor of base64url, and nothing else", () => {
+    const query = (value: object) => Value.Check(ListingsQuery, value);
+    expect(
+      [{}, { characterId: "1" }, { franchiseId: "2147483647" }, { sort: "newest" }, { cursor: "a-b_C" }].map(
+        query,
+      ),
+    ).toEqual([true, true, true, true, true]);
+    expect(
+      [
+        { characterId: "0" },
+        { characterId: "01" },
+        { characterId: "1e3" },
+        { characterId: " 1" },
+        { characterId: 1 },
+        { sort: "cheapest" },
+        { cursor: "a+b" },
+        { q: "" },
+        { q: "x".repeat(101) },
+        { seller: "x" },
+      ].map(query),
+    ).toEqual([false, false, false, false, false, false, false, false, false, false]);
+  });
+
+  it("lets a receipt name no listing once the seller's account is gone", () => {
+    expect(PurchaseReceipt.properties.listingId.anyOf.map((member) => member.type)).toEqual([
+      "string",
+      "null",
     ]);
   });
 });
