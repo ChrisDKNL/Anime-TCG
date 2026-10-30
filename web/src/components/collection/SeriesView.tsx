@@ -25,11 +25,22 @@ function isSeriesSort(value: string): value is SeriesSort {
  * The Series view (collection-overview.md §3.2 step 5, §5.3): every series
  * of the current snapshot with the server's figure and a bar, `0 of N` rows
  * included and shown like any other. No paging: there are fewer than 100.
+ * With no snapshot there is no series to complete: one line says so (§4.1).
  */
 export function SeriesView({ rows, snapshot, sort, onSort, onShowCards }: Props) {
   const id = useId();
   const headingId = `${id}-heading`;
   const sortId = `${id}-sort`;
+  if (snapshot === null) {
+    return (
+      <section aria-labelledby={headingId}>
+        <h2 id={headingId} className="sr-only">
+          {seriesViewCopy.heading}
+        </h2>
+        <p className="mt-4 text-sm text-zinc-400">{seriesViewCopy.noSnapshot}</p>
+      </section>
+    );
+  }
   return (
     <section aria-labelledby={headingId}>
       <h2 id={headingId} className="sr-only">
@@ -94,9 +105,7 @@ export function SeriesView({ rows, snapshot, sort, onSort, onShowCards }: Props)
           );
         })}
       </ul>
-      {snapshot !== null && (
-        <p className="mt-4 text-xs text-zinc-400">{seriesViewCopy.source(rows.length, snapshot.takenAt)}</p>
-      )}
+      <p className="mt-4 text-xs text-zinc-400">{seriesViewCopy.source(rows.length, snapshot.takenAt)}</p>
     </section>
   );
 }

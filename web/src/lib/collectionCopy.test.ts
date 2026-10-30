@@ -97,6 +97,7 @@ describe("Series view copy", () => {
     expect(seriesViewCopy.source(87, "2026-10-29T08:00:00.000Z")).toBe(
       "87 series from the 100 most popular anime on AniList, as of 29 Oct 2026.",
     );
+    expect(seriesViewCopy.noSnapshot).toBe("Series totals appear when the card pool is available.");
     expect(seriesTitle("Hunter x Hunter", 2011)).toBe("Hunter x Hunter, 2011");
     expect(seriesTitle("Bleach", null)).toBe("Bleach");
   });

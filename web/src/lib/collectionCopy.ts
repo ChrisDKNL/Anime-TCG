@@ -87,6 +87,8 @@ export const seriesViewCopy = {
   showCardsName: (title: string) => `Show cards from ${isolate(title)}`,
   source: (rows: number, takenAt: string) =>
     `${formatCount(rows)} series from the 100 most popular anime on AniList, as of ${shortDate(takenAt)}.`,
+  /** In place of the sort, the rows and the source line while no snapshot is held (§4.1). */
+  noSnapshot: "Series totals appear when the card pool is available.",
 } as const;
 
 export const toolbarCopy = {

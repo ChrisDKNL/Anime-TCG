@@ -76,7 +76,7 @@ import {
  * no history entry has a query string or a hash.
  *
  * States (§4.1): no snapshot (no completion figure, percentage or bar; the totals, the grid and
- * the dialog's rank-less card stay; the Series view has no rows and no source line); the empty
+ * the dialog's rank-less card stay; the Series view is one line, with no rows and no source line); the empty
  * collection (`No cards yet`, `Open a pack` to the
  * Packs heading, no toolbar).
  */
@@ -1284,9 +1284,12 @@ test.describe("states", () => {
     await expect(dialog.getByText(/^#/)).toHaveCount(0);
     await page.keyboard.press("Escape");
 
-    // The Series view has nothing to complete: no rows and no source line.
+    // The Series view has nothing to complete: one line says so, with no sort, rows or source line
+    // (§4.1, manager decision 2026-10-30).
     await page.getByRole("button", { name: "Series", exact: true }).click();
     const section = page.getByRole("region", { name: "Series completion" });
+    await expect(section.getByText("Series totals appear when the card pool is available.")).toBeVisible();
+    await expect(section.getByRole("combobox")).toHaveCount(0);
     await expect(section.getByRole("listitem")).toHaveCount(0);
     await expect(section.getByText(/most popular anime on AniList/)).toHaveCount(0);
   });

@@ -95,6 +95,20 @@ describe("stats (§3.2)", () => {
     expect(totals).toHaveTextContent("Common 1Uncommon 1Rare 2Epic 3Legendary 1Mythic 0");
   });
 
+  it("without a snapshot the Series view is one line: no sort, no rows, no source line (§4.1)", async () => {
+    const data = makeOverviewCollection();
+    data.snapshot = null;
+    data.completion = { pool: { owned: 0, total: 0 }, franchises: [] };
+    const { user } = await openCollection({ status: 200, body: data });
+    await user.click(screen.getByRole("button", { name: "Series" }));
+    const section = screen.getByRole("region", { name: "Series completion" });
+    expect(section).toHaveTextContent(
+      /^Series completionSeries totals appear when the card pool is available\.$/,
+    );
+    expect(within(section).queryByRole("combobox")).toBeNull();
+    expect(within(section).queryByRole("list")).toBeNull();
+  });
+
   it("no search, filter or view changes a stat", async () => {
     const { user } = await openCollection();
     await user.type(screen.getByRole("searchbox", { name: "Search" }), "spike");
