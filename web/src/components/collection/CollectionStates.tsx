@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
 import type { RefObject } from "react";
-import { pageCopy } from "../../lib/collectionCopy";
-import { DEFAULT_CONTROLS } from "../../lib/collectionView";
+import { pageCopy, viewCopy } from "../../lib/collectionCopy";
+import { COLLECTION_TABS, DEFAULT_CONTROLS } from "../../lib/collectionView";
 import { BUTTON } from "../account/styles";
 import { LINK_BUTTON } from "../layout/styles";
 import { StatsSkeleton } from "./CollectionStats";
@@ -50,7 +50,7 @@ export function CollectionSkeleton() {
   return (
     <>
       <StatsSkeleton />
-      <ViewSwitch tab="cards" disabled onChange={ignore} />
+      <ViewSwitch views={COLLECTION_TABS} labels={viewCopy} tab="cards" disabled onChange={ignore} />
       <Toolbar controls={DEFAULT_CONTROLS} options={[]} disabled onChange={ignore} onCleared={ignore} />
       <div className={`mt-10 ${GRID}`}>
         {SKELETON_TILES.map((tile) => (

@@ -1,29 +1,22 @@
-import type { FranchiseRef } from "@anime-tcg/shared/api";
-import { RARITY_LABEL } from "@anime-tcg/shared/rarity";
-import {
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type ReactNode,
-  type RefObject,
-  type SyntheticEvent,
-} from "react";
+import type { CollectionEntry } from "@anime-tcg/shared/api";
+import { useId, useLayoutEffect, useRef, type ReactNode, type RefObject, type SyntheticEvent } from "react";
 import { useGame } from "../../hooks/useGame";
+import { useListOnMarket } from "../../hooks/useListOnMarket";
 import { useRecycle } from "../../hooks/useRecycle";
-import { isolate } from "../../lib/bidi";
-import { dialogCopy, seriesTitle } from "../../lib/collectionCopy";
+import { dialogCopy } from "../../lib/collectionCopy";
 import type { SeriesName } from "../../lib/collectionSeries";
 import type { IndexedEntry } from "../../lib/collectionView";
-import { cardCopy, formatCount } from "../../lib/packsCopy";
+import { formatCount } from "../../lib/packsCopy";
 import { LoginText } from "../account/LoginText";
 import { BUTTON, PANEL_HEADING, WIDE_DIALOG } from "../account/styles";
 import { Card } from "../card/Card";
-import { TEXT_BUTTON_SM, TIER_TEXT } from "../packs/styles";
+import { TEXT_BUTTON_SM } from "../packs/styles";
+import { ListConfirmation, ListSection } from "./ListSection";
 import { RecycleConfirmation, RecycleSection } from "./RecycleSection";
+import { RarityWord } from "./RarityWord";
+import { AlsoIn, PrimarySeries } from "./SeriesLines";
 
-/** §5.4: `Also in` shows five titles, then `and <N> more`. */
-const ALSO_IN_SHOWN = 5;
+const NO_ENTRIES: readonly CollectionEntry[] = [];
 
 interface Props {
   /** The entry as the newest answer has it, or null once a refetch no longer has it (§4.5 "entry gone"). */
@@ -35,17 +28,18 @@ interface Props {
 }
 
 /** Where focus goes once the body the last action left has rendered (§7 "Dialog"). */
-type FocusTarget = "confirmation" | "heading" | "recycleButton";
+type FocusTarget = "confirmation" | "heading" | "recycleButton" | "listButton";
 
 /**
  * The card dialog (collection-overview.md §3.4, §5.4, §7) as a native modal
  * `<dialog>`: `showModal()` gives the focus trap, Escape and the inert page,
  * and focus starts on the dialog itself, as in Manage account. Under the
- * details sits Recycle for Karma (§3.6), whose confirmation replaces the body
- * below the close button and names the dialog while it shows; `List on the
- * market` joins with the market UI. While a recycle is in flight nothing
- * closes the dialog, so it cannot close on an unknown outcome. It mounts per
- * opening, so it opens on mount and closes by unmounting.
+ * details sit List on the market (§3.5) and Recycle for Karma (§3.6), each
+ * with a confirmation that replaces the body below the close button and names
+ * the dialog while it shows; one confirmation at a time. While a listing or a
+ * recycle is in flight nothing closes the dialog, so it cannot close on an
+ * unknown outcome. It mounts per opening, so it opens on mount and closes by
+ * unmounting.
  */
 export function CardDialog({ indexed, names, poolSize, onClose }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
@@ -54,21 +48,32 @@ export function CardDialog({ indexed, names, poolSize, onClose }: Props) {
   const confirmationRef = useRef<HTMLHeadingElement>(null);
   const recycleButtonRef = useRef<HTMLButtonElement>(null);
   const fieldRef = useRef<HTMLInputElement>(null);
+  const listButtonRef = useRef<HTMLButtonElement>(null);
+  const priceRef = useRef<HTMLInputElement>(null);
   const focusAfter = useRef<FocusTarget | null>(null);
   const headingId = useId();
   const gone = indexed === null;
 
   const game = useGame();
-  const rules = game.wallet.data?.wallet.rules ?? null;
+  const wallet = game.wallet.data?.wallet ?? null;
+  const rules = wallet?.rules ?? null;
   const stale = game.collection.isError || game.wallet.isError || rules === null;
   const recycle = useRecycle(indexed?.entry ?? null, rules);
-  const confirming = recycle.asking !== null && !gone;
+  const list = useListOnMarket(indexed?.entry ?? null, wallet, game.collection.data?.entries ?? NO_ENTRIES);
+  let confirming: "list" | "recycle" | null = null;
+  if (!gone && list.asking !== null) confirming = "list";
+  else if (!gone && recycle.asking !== null) confirming = "recycle";
+  const sending = list.action.sending || recycle.action.sending;
 
-  // A confirmation's answer that returns to the details puts focus on the name heading (§3.6 step 7).
+  // A confirmation's answer that returns to the details puts focus on the name heading (§3.5 step 9, §3.6 step 7).
   const { result } = recycle;
+  const { result: listResult } = list;
   useLayoutEffect(() => {
     if (result !== null) headingRef.current?.focus();
   }, [result]);
+  useLayoutEffect(() => {
+    if (listResult !== null) headingRef.current?.focus();
+  }, [listResult]);
 
   // After every render: the target the last action asked for, once its element is there.
   useLayoutEffect(() => {
@@ -77,6 +82,7 @@ export function CardDialog({ indexed, names, poolSize, onClose }: Props) {
     if (target === "confirmation") confirmationRef.current?.focus();
     if (target === "heading") headingRef.current?.focus();
     if (target === "recycleButton") recycleButtonRef.current?.focus();
+    if (target === "listButton") listButtonRef.current?.focus();
   });
 
   useLayoutEffect(() => {
@@ -95,15 +101,20 @@ export function CardDialog({ indexed, names, poolSize, onClose }: Props) {
     goneRef.current?.focus();
   }, [gone]);
 
-  /** `Cancel` or Escape on the confirmation: the details, focus back on `Recycle…`. */
+  /** `Cancel` or Escape on a confirmation: the details, focus back on the button that opened it. */
   const back = () => {
-    recycle.back();
-    focusAfter.current = "recycleButton";
+    if (confirming === "list") {
+      list.back();
+      focusAfter.current = "listButton";
+    } else {
+      recycle.back();
+      focusAfter.current = "recycleButton";
+    }
   };
 
   /** Close: never in flight; the `close` event does the rest. */
   const close = () => {
-    if (!recycle.action.sending) ref.current?.close();
+    if (!sending) ref.current?.close();
   };
 
   /**
@@ -113,20 +124,21 @@ export function CardDialog({ indexed, names, poolSize, onClose }: Props) {
    * discards the key and reads the server again), then the dialog goes.
    */
   const onCloseEvent = () => {
-    if (recycle.action.sending) {
+    if (sending) {
       ref.current?.showModal();
       confirmationRef.current?.focus();
       return;
     }
-    if (confirming) recycle.back();
+    if (confirming === "list") list.back();
+    if (confirming === "recycle") recycle.back();
     onClose();
   };
 
   /** Escape: ignored in flight; on a confirmation it returns to the details first (§3.7 step 1). */
   const onCancel = (event: SyntheticEvent) => {
-    if (!recycle.action.sending && !confirming) return;
+    if (!sending && confirming === null) return;
     event.preventDefault();
-    if (!recycle.action.sending) back();
+    if (!sending) back();
   };
 
   return (
@@ -139,7 +151,7 @@ export function CardDialog({ indexed, names, poolSize, onClose }: Props) {
       className={WIDE_DIALOG}
     >
       <div className="flex justify-end">
-        <button type="button" onClick={close} disabled={recycle.action.sending} className={TEXT_BUTTON_SM}>
+        <button type="button" onClick={close} disabled={sending} className={TEXT_BUTTON_SM}>
           {dialogCopy.close}
         </button>
       </div>
@@ -152,7 +164,15 @@ export function CardDialog({ indexed, names, poolSize, onClose }: Props) {
             {dialogCopy.goneClose}
           </button>
         </div>
-      ) : confirming ? (
+      ) : confirming === "list" ? (
+        <ListConfirmation
+          entry={indexed.entry}
+          list={list}
+          onBack={back}
+          headingId={headingId}
+          headingRef={confirmationRef}
+        />
+      ) : confirming === "recycle" ? (
         <RecycleConfirmation
           entry={indexed.entry}
           recycle={recycle}
@@ -168,17 +188,30 @@ export function CardDialog({ indexed, names, poolSize, onClose }: Props) {
           headingId={headingId}
           headingRef={headingRef}
           section={
-            <RecycleSection
-              entry={indexed.entry}
-              rules={rules}
-              stale={stale}
-              recycle={recycle}
-              buttonRef={recycleButtonRef}
-              fieldRef={fieldRef}
-              onAsk={() => {
-                focusAfter.current = "confirmation";
-              }}
-            />
+            <>
+              <ListSection
+                entry={indexed.entry}
+                rules={rules}
+                stale={stale}
+                list={list}
+                buttonRef={listButtonRef}
+                fieldRef={priceRef}
+                onAsk={() => {
+                  focusAfter.current = "confirmation";
+                }}
+              />
+              <RecycleSection
+                entry={indexed.entry}
+                rules={rules}
+                stale={stale}
+                recycle={recycle}
+                buttonRef={recycleButtonRef}
+                fieldRef={fieldRef}
+                onAsk={() => {
+                  focusAfter.current = "confirmation";
+                }}
+              />
+            </>
           }
         />
       )}
@@ -244,75 +277,22 @@ function Details({
   );
 }
 
-function PrimarySeries({ franchise, name }: { franchise: FranchiseRef; name: SeriesName | undefined }) {
-  const year = name?.year ?? null;
-  return (
-    <>
-      <p className="text-sm break-words text-zinc-400">
-        <bdi>{franchise.title}</bdi>
-        {year !== null && `, ${year}`}
-      </p>
-      {franchise.titleNative !== null && franchise.titleNative !== franchise.title && (
-        <p dir="auto" lang="ja" className="text-xs break-words text-zinc-400">
-          {franchise.titleNative}
-        </p>
-      )}
-    </>
-  );
-}
-
-/** §5.4: a comma-separated run of titles; more than five show five and `and <N> more`, which reveals the rest. */
-function AlsoIn({
-  franchises,
-  names,
-}: {
-  franchises: FranchiseRef[];
-  names: ReadonlyMap<number, SeriesName>;
-}) {
-  const [expanded, setExpanded] = useState(false);
-  const shown = expanded ? franchises : franchises.slice(0, ALSO_IN_SHOWN);
-  const hidden = franchises.length - shown.length;
-  return (
-    <p className="mt-1 text-xs break-words text-zinc-300">
-      <span className="text-zinc-400">{dialogCopy.alsoIn}</span>{" "}
-      {shown.map((franchise, i) => {
-        const year = names.get(franchise.id)?.year ?? null;
-        return (
-          <span key={franchise.id}>
-            {i > 0 && ", "}
-            <bdi title={isolate(seriesTitle(franchise.title, year))}>{franchise.title}</bdi>
-            {year !== null && `, ${year}`}
-          </span>
-        );
-      })}
-      {hidden > 0 && (
-        <>
-          {" "}
-          <button type="button" onClick={() => setExpanded(true)} className={TEXT_BUTTON_SM}>
-            {dialogCopy.more(hidden)}
-          </button>
-        </>
-      )}
-    </p>
-  );
-}
-
 function Facts({ indexed }: { indexed: IndexedEntry }) {
   const { entry } = indexed;
   return (
     <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
       <dt className="text-zinc-400">{dialogCopy.facts.rarity}</dt>
       <dd className="text-zinc-200">
-        <span
-          aria-hidden="true"
-          className={`mr-1.5 tracking-[2px] [font-variant-emoji:text] ${TIER_TEXT[entry.rarity]}`}
-        >
-          {cardCopy.starGlyphs(entry.rarity)}
-        </span>
-        <span className={TIER_TEXT[entry.rarity]}>{RARITY_LABEL[entry.rarity]}</span>
+        <RarityWord rarity={entry.rarity} />
       </dd>
       <dt className="text-zinc-400">{dialogCopy.facts.copies}</dt>
       <dd className="text-zinc-200 tabular-nums">{formatCount(entry.count)}</dd>
+      {entry.listed >= 1 && (
+        <>
+          <dt className="text-zinc-400">{dialogCopy.facts.onTheMarket}</dt>
+          <dd className="text-zinc-200 tabular-nums">{formatCount(entry.listed)}</dd>
+        </>
+      )}
       <dt className="text-zinc-400">{dialogCopy.facts.firstObtained}</dt>
       <dd className="text-zinc-200 tabular-nums">{dialogCopy.date(entry.firstObtainedAt)}</dd>
       {entry.count >= 2 && (

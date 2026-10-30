@@ -1,24 +1,24 @@
 import { viewCopy } from "../../lib/collectionCopy";
-import type { CollectionTab } from "../../lib/collectionView";
 import { VIEW_BUTTON, VIEW_SWITCH } from "./styles";
 
-const TABS: readonly CollectionTab[] = ["cards", "series"];
-
-interface Props {
-  tab: CollectionTab;
+interface Props<T extends string> {
+  views: readonly T[];
+  labels: Readonly<Record<T, string>>;
+  tab: T;
   disabled: boolean;
-  onChange: (tab: CollectionTab) => void;
+  onChange: (tab: T) => void;
 }
 
 /**
- * `Cards` and `Series` (collection-overview.md §3.2 step 5, §7): a group of
- * toggle buttons, so focus stays on the one pressed; the group can take a
- * further view later without changing the row (§2).
+ * A view switch (collection-overview.md §3.2 step 5, §7): a group of toggle
+ * buttons named `View`, so focus stays on the one pressed. The collection's
+ * `Cards` and `Series`, and the market's `Browse` and `My listings`
+ * (market-and-shop.md §3.4 step 1).
  */
-export function ViewSwitch({ tab, disabled, onChange }: Props) {
+export function ViewSwitch<T extends string>({ views, labels, tab, disabled, onChange }: Props<T>) {
   return (
     <div role="group" aria-label={viewCopy.group} className={`mt-6 ${VIEW_SWITCH}`}>
-      {TABS.map((option) => (
+      {views.map((option) => (
         <button
           key={option}
           type="button"
@@ -27,7 +27,7 @@ export function ViewSwitch({ tab, disabled, onChange }: Props) {
           onClick={() => onChange(option)}
           className={VIEW_BUTTON[option === tab ? "pressed" : "other"]}
         >
-          {viewCopy[option]}
+          {labels[option]}
         </button>
       ))}
     </div>

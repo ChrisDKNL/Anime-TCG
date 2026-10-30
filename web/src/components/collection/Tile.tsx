@@ -12,7 +12,7 @@ interface Props {
 /**
  * One entry in the grid (collection-overview.md §6.2, §7): the card at tile
  * size by its granted rarity inside a button that opens the card dialog,
- * with the copies under it. The button's name is the whole sentence, so the
+ * with the copies and the listed copies under it. The button's name is the whole sentence, so the
  * card inside is part of it rather than an article of its own. The caption
  * is always one line high so rows align.
  */
@@ -23,7 +23,7 @@ export function Tile({ indexed, poolSize, onOpen }: Props) {
       <button
         type="button"
         aria-haspopup="dialog"
-        aria-label={tileCopy.label(entry.character.name, entry.rarity, series, entry.count)}
+        aria-label={tileCopy.label(entry.character.name, entry.rarity, series, entry.count, entry.listed)}
         data-entry={key}
         onClick={onOpen}
         className={TILE}
@@ -38,7 +38,11 @@ export function Tile({ indexed, poolSize, onOpen }: Props) {
             standalone={false}
           />
         </span>
-        <span className={TILE_CAPTION}>{entry.count >= 2 && <span>{tileCopy.count(entry.count)}</span>}</span>
+        {/* §6.2: `×<N>` on the left, `<L> listed` on the right; one line high even when empty. */}
+        <span className={TILE_CAPTION}>
+          <span>{entry.count >= 2 && tileCopy.count(entry.count)}</span>
+          {entry.listed >= 1 && <span className="text-zinc-400">{tileCopy.listed(entry.listed)}</span>}
+        </span>
       </button>
     </li>
   );

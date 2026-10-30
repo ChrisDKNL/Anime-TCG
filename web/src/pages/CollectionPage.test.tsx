@@ -440,9 +440,12 @@ describe("the card dialog (§3.4, §3.7, §4.5)", () => {
       "20 Oct 2026",
     ]);
     expect(within(dialog).queryByText(/Packs now give|No longer in packs/)).toBeNull();
-    // Recycle for Karma is the dialog's one section until the market's PR adds its own (§3.4 step 4).
-    expect(within(dialog).getByRole("heading", { level: 3, name: "Recycle for Karma" })).toBeInTheDocument();
-    expect(within(dialog).queryByText(/List on the market/)).toBeNull();
+    // §3.4 step 4: List on the market, then Recycle for Karma.
+    expect(
+      within(dialog)
+        .getAllByRole("heading", { level: 3 })
+        .map((h) => h.textContent),
+    ).toEqual(["List on the market", "Recycle for Karma"]);
   });
 
   it("one copy: no last obtained; another series: Also in, with the year where titles are shared", async () => {
@@ -466,7 +469,9 @@ describe("the card dialog (§3.4, §3.7, §4.5)", () => {
     await user.click(within(grid()).getByRole("button", { name: /Moved Star/ }));
     const moved = screen.getByRole("dialog", { name: "Moved Star" });
     expect(within(moved).getByText(/Packs now give/)).toHaveTextContent("Packs now give Moved Star as Rare.");
-    expect(within(moved).getByText("Moved Star", { selector: "bdi" })).toBeInTheDocument();
+    expect(
+      within(within(moved).getByText(/Packs now give/)).getByText("Moved Star", { selector: "bdi" }),
+    ).toBeInTheDocument();
     // The card keeps its granted rarity.
     expect(within(moved).getByRole("article")).toHaveClass("card-frame-legendary");
     await user.click(within(moved).getByRole("button", { name: "Close" }));
