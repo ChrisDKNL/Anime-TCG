@@ -50,6 +50,8 @@ import {
  *   focus on the `Log in` heading, and logging in returns to `/account`.
  * - Log-in wait: retryAfterSeconds 3 → `Try again in 3 s`, 2, 1, then `Log in`; button disabled, fields
  *   editable; the breather and `You can try again now.` each announced exactly once.
+ * - Log-in rate limited (429 `rate_limited`, seconds only in `Retry-After`): the same wait with its own
+ *   status line, never the unreachable banner; fields keep their values (manager decision, 2026-10-30).
  * - Register: cap reached on step 1 and on step 2 (form replaced, no Back, the cross-link stays); the code
  *   rejected at submit (back to step 1, code field focused and invalid, login kept); duplicate login.
  * - Manage: duplicate login on rename, a 500 on rename (in-form copy, nothing changes), wrong current
@@ -78,6 +80,7 @@ const CHRIS = makeAccount();
 const LONG_LOGIN = "W".repeat(24);
 const BREATHER =
   "Five misses in a row. Take ten seconds, check the spelling of your login and whether caps lock is on, then try again.";
+const RATE_LIMITED = "That was a lot of tries in a short time. Give it a moment, then try again.";
 const UNREACHABLE = "Couldn't reach the game server. Check your connection and try again.";
 const UNREACHABLE_FORM = "Couldn't reach the game server. Nothing was changed. Try again.";
 const SESSION_ENDED = "You were logged out. Log in again to continue.";
@@ -491,6 +494,47 @@ test.describe("log in (§3.4, §4.4-B)", () => {
     expect(texts.filter((text) => text === BREATHER)).toHaveLength(1);
     // Accepted engineer decision: the breather stays visible after the countdown until the next submit.
     await expect(status(page, BREATHER)).toBeVisible();
+    expect(api.count("POST /api/session/login")).toBe(1);
+  });
+
+  test("rate limited: Retry-After's seconds count down on Log in, never the unreachable banner, fields kept", async ({
+    page,
+    api,
+  }) => {
+    api.on("GET /api/session", signedOut);
+    api.on("POST /api/session/login", { ...envelope(429, "rate_limited"), headers: { "retry-after": "3" } });
+    await recordStatusTexts(page);
+    await openLogIn(page);
+    await loginField(page).fill("Chris");
+    await passwordField(page).fill("a password");
+    const submit = page.getByRole("button", { name: /^(Log in|Logging in…|Try again in \d+ s)$/ });
+    await recordLabels(submit);
+    await submit.click();
+
+    await expect(submit).toHaveText(/^Try again in \d s$/);
+    await expect(submit).toBeDisabled();
+    await expect(status(page, RATE_LIMITED)).toBeVisible();
+    await expect(page.getByText(UNREACHABLE_FORM)).toHaveCount(0);
+    await expect(page.getByRole("alert")).toHaveCount(0);
+    await expect(loginField(page)).toHaveValue("Chris");
+    await expect(passwordField(page)).toHaveValue("a password");
+    await expect(passwordField(page)).toBeEditable();
+
+    await expect(submit).toHaveText("Log in", { timeout: 6_000 });
+    await expect(submit).toBeEnabled();
+    await expect(status(page, "You can try again now.")).toHaveCount(1);
+
+    const labels = await page.evaluate(() => window.__labels ?? []);
+    expect(labels.filter((label) => label !== "Logging in…")).toEqual([
+      "Log in",
+      "Try again in 3 s",
+      "Try again in 2 s",
+      "Try again in 1 s",
+      "Log in",
+    ]);
+    const texts = await statusTexts(page);
+    expect(texts.filter((text) => text === RATE_LIMITED)).toHaveLength(1);
+    expect(texts.filter((text) => text === "You can try again now.")).toHaveLength(1);
     expect(api.count("POST /api/session/login")).toBe(1);
   });
 });
