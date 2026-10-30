@@ -46,3 +46,5 @@ Assumptions: <what you took on trust>
 ```
 
 A FAIL blocks the PR. You do not edit files; `senior-engineer` fixes, you re-review.
+
+Register text goes in the PR's own log file, `docs/security-log/YYYY-MM-DD-<branch-slug>.md` (format in `docs/security-log/README.md`), which the manager commits. Give the manager that file's full text, with a _Register edits_ section listing the exact edits to the controls, threat model and open items of `docs/05-security.md`. A feature PR never edits those shared tables itself; the manager applies them in the register-sync PR after the merge.
