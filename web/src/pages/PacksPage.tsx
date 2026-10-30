@@ -21,9 +21,12 @@ function specialLines(pack: PackOpened, odds: PublishedOdds | null): string[] {
 }
 
 function toReveal(pack: PackOpened, odds: PublishedOdds | null): RevealPack {
+  const heading = revealCopy.heading(pack.packKind);
   return {
     id: pack.openingId,
-    heading: revealCopy.heading(pack.packKind),
+    heading,
+    label: heading,
+    summaryLead: "",
     cards: pack.cards,
     franchises: pack.franchises,
     lines: specialLines(pack, odds),

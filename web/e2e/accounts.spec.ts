@@ -894,6 +894,7 @@ test.describe("keyboard (§7)", () => {
       page.getByRole("link", { name: "Anime TCG" }),
       mainNav(page).getByRole("link", { name: "Log in" }),
       mainNav(page).getByRole("link", { name: "Register" }),
+      main.getByRole("button", { name: "Open a demo pack" }),
       main.getByRole("link", { name: "Register" }),
       main.getByRole("link", { name: "Log in" }),
       page.getByRole("link", { name: "AniList" }),

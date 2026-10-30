@@ -5,19 +5,31 @@ import App from "../App";
 import { createQueryClient } from "../lib/queryClient";
 import { createAppRouter } from "../router";
 import { envelope, makeAccount, mockFetch, urlOf, type MockHandler } from "./api";
-import { makeAllowance, makeCollection, makeEntry, makePackOpened, makePacks } from "./fixtures";
+import {
+  makeAllowance,
+  makeCollection,
+  makeDemo,
+  makeDemoOpened,
+  makeEntry,
+  makePackOpened,
+  makePacks,
+} from "./fixtures";
 
 export const PACKS = "GET /api/packs";
 export const OPEN = "POST /api/packs/open";
 export const COLLECTION = "GET /api/collection";
+export const DEMO = "GET /api/demo";
+export const DEMO_OPEN = "POST /api/demo/open";
 
-/** The api of a signed-in account with a full allowance and an empty collection. */
+/** The api of a signed-in account with a full allowance and an empty collection; the landing page's demo for a signed-out visit. */
 export function signedInRoutes(account = makeAccount()): Record<string, MockHandler> {
   return {
     "GET /api/session": { status: 200, body: { signedIn: true, account } },
     [PACKS]: { status: 200, body: makePacks() },
     [COLLECTION]: { status: 200, body: makeCollection() },
     [OPEN]: { status: 201, body: makePackOpened() },
+    [DEMO]: { status: 200, body: makeDemo() },
+    [DEMO_OPEN]: { status: 200, body: makeDemoOpened() },
   };
 }
 
