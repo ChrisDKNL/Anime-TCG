@@ -148,6 +148,19 @@ All six mismatches of this spec's first version (S1 to S6: `closedAt`, the `limi
 - **Wallet ordering**: a balance from a receipt (or from `insufficient_funds`) is newer than every `GET /api/wallet` sent before that answer arrived, so a read in flight when the receipt lands cannot overwrite it; a read sent after it replaces it.
 - **Nothing closes the confirmation while a purchase is in flight**, whatever closes it (Chromium lets a second Escape close a `<dialog>` without a cancelable `cancel` event): it opens again at once. `Cancel` and Escape close the dialog first and then return focus to `Buy…`, since a modal dialog's page is inert.
 
+**Settled for `feat/market-ui`** (manager decision, 2026-10-30), where this spec was silent; where it was silent on Karma or idempotency, the shop's rules above apply:
+
+- **Keys**: a market purchase follows the shop's key rule (`useKeyedAction`): kept on no answer and on a 429, discarded on every other answer, on `Cancel`, on close and on unmount. The 429 wait lives on the Market page, shared by buying and cancelling, and survives `Cancel` and reopening. `Cancel` after no answer reads the wallet, the first page and the collection again. Cancelling a listing carries no key (the server's cancel is idempotent); after no answer the row's button reads `Try again` and resends it, after a 429 it counts down, and any other failure shows the server failure banner.
+- **`market_limit`** is held on the Market page: the buyer's own limits (`buyer_purchases`, `buyer_spend`) keep every listing's confirm button disabled, a seller's or a pair's limit only that listing's, so reopening a confirmation does not ask again. The button is disabled for `retryAfterSeconds`, at most `MAX_WAIT_SECONDS` (after that the next press asks the server again); the line names the date from the full `retryAfterSeconds`, and nothing counts down. A `market_limit` without `limit` is shown as the server failure; one without seconds waits 60 s.
+- **A non-envelope answer** (a proxy's 503 page) is no answer: the key is kept and `Try again` replays it. A 503 envelope is the server failure.
+- **Before the wallet's first answer**, and while it fails, `Buy…` is disabled with the shop's stale reason `Buying waits until the game server answers.`; My listings' headings read `On the market, <n>` and `Market limits` without the numbers the wallet carries, and the buyer's limit line reads `Your market limit is used up. It frees up on <D Mon> at <HH:MM>.`
+- **The player's own listing in the listing dialog**: `Cancel listing`'s answer shows in place of the button, with the strings of §3.6 step 3.
+- **Focus and announcements**: the results line goes to the live region 500 ms after the player's last change, as the collection's does. Focus moves to the results line only when the control that was used goes away: `Clear filters`, `Show all`, and `Show more` when the last page has arrived; a select or the search keeps focus. After a purchase's result or `This card is no longer on the market.` is closed, focus goes to the listing's tile, or to the results line once the listing has left the list.
+- **Search**: control characters (a pasted tab) become spaces, and the request carries at most 100 characters; Escape in a non-empty search clears it and applies at once.
+- **A sale without `proceeds`** (never expected) reads `Sold for <price> Karma`.
+- **E9 meanwhile**: the tiles' rank chip takes its pool size from the held collection answer's `snapshot`.
+- **A bought card opens nowhere**: the purchase confirms in place in the listing dialog (§3.5 step 4); there is no market opening route.
+
 ## 4. States
 
 | View              | State                      | User sees                                                                                  | User can do                 |
