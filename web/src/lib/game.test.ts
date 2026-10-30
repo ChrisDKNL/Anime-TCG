@@ -90,10 +90,22 @@ describe("gameReducer", () => {
     );
   });
 
-  it("a reset starts the next session empty, the rarity filter included", () => {
+  it("keeps the collection overview's controls, for this session only", () => {
+    const state = run(initialGame(CHRIS), {
+      type: "overview",
+      ...owner,
+      action: { type: "query", query: "spike" },
+    });
+    expect(state.overview).toMatchObject({ query: "spike", page: 1 });
+    expect(
+      run(state, { type: "overview", accountId: CHRIS, session: 1, action: { type: "query", query: "x" } }),
+    ).toBe(state);
+  });
+
+  it("a reset starts the next session empty, the overview's controls included", () => {
     const state = run(
       initialGame(CHRIS),
-      { type: "rarityFilter", ...owner, filter: "epic" },
+      { type: "overview", ...owner, action: { type: "toggleRarity", rarity: "epic" } },
       { type: "openStarted", ...owner, key: REQUEST_ID },
       { type: "reset", accountId: CHRIS },
     );

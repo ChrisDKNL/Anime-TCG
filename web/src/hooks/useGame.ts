@@ -24,9 +24,9 @@ import {
   type GameOwner,
   type GameState,
   type PacksAnswer,
-  type RarityFilter,
   type Row,
 } from "../lib/game";
+import type { ControlsAction } from "../lib/collectionView";
 import { revealCopy } from "../lib/packsCopy";
 import type { ShellActions } from "./useShell";
 import { useSingleFlight } from "./useSingleFlight";
@@ -90,7 +90,8 @@ export interface Game {
   collection: UseQueryResult<CollectionResponse>;
   /** Opens a pack; `row` is the control's row now, which a generic failure's line stays tied to. */
   openPack: (row: Row) => void;
-  setRarityFilter: (filter: RarityFilter) => void;
+  /** Changes the collection overview's controls (`state.overview`). */
+  changeOverview: (action: ControlsAction) => void;
 }
 
 interface Options {
@@ -241,9 +242,9 @@ export function useGameState({ account, shell, packsShowing }: Options): Game | 
     ],
   );
 
-  const setRarityFilter = useCallback(
-    (filter: RarityFilter) => {
-      if (owner !== null) dispatch({ type: "rarityFilter", ...owner, filter });
+  const changeOverview = useCallback(
+    (action: ControlsAction) => {
+      if (owner !== null) dispatch({ type: "overview", ...owner, action });
     },
     [owner],
   );
@@ -261,9 +262,9 @@ export function useGameState({ account, shell, packsShowing }: Options): Game | 
             collectionQuery,
             collection,
             openPack: open,
-            setRarityFilter,
+            changeOverview,
           },
-    [account, state, cardCount, packsQuery, collectionQuery, collection, open, setRarityFilter],
+    [account, state, cardCount, packsQuery, collectionQuery, collection, open, changeOverview],
   );
 }
 

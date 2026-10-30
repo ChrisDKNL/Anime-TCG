@@ -1,6 +1,6 @@
 /**
- * Every string of the packs page, the reveal, the odds dialog, the card and the
- * interim collection, verbatim from docs/design/packs-page.md §8 and
+ * Every string of the packs page, the reveal, the odds dialog and the card,
+ * verbatim from docs/design/packs-page.md §8 and
  * card-and-rarity.md §6–§8. Every number in them is the server's: the
  * functions take the answer's figures and only format them. The copy test
  * renders every string and scans it for the words navigation-and-landing.md §8
@@ -28,8 +28,6 @@ const PERCENT = new Intl.NumberFormat("en-GB", {
   maximumSignificantDigits: 3,
   roundingMode: "trunc",
 });
-/** collection-overview.md §8 `<HH:MM>`. */
-const CLOCK = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" });
 
 const SLOT_WORDS = ["first", "second", "third", "fourth", "fifth"] as const;
 const SIZE_WORDS = ["one", "two", "three", "four", "five"] as const;
@@ -64,7 +62,8 @@ function joinList(items: readonly string[]): string {
   return items.map((item, i) => `${listSeparator(i, items.length)}${item}`).join("");
 }
 
-const plural = (n: number, one: string, many: string) => `${NUMBER.format(n)} ${n === 1 ? one : many}`;
+/** `1 copy`, `2 copies`: a formatted count and the word that agrees with it. */
+export const plural = (n: number, one: string, many: string) => `${NUMBER.format(n)} ${n === 1 ? one : many}`;
 
 /** `free ` follows `odds.pity.freePacksOnly` (card-and-rarity.md §7.1, §7.4). */
 const free = (odds: PublishedOdds) => (odds.pity.freePacksOnly ? "free " : "");
@@ -248,21 +247,4 @@ export const cardCopy = {
     series === null
       ? `${isolate(name)}, ${RARITY_LABEL[rarity]}`
       : `${isolate(name)}, ${RARITY_LABEL[rarity]}, ${isolate(series)}`,
-} as const;
-
-export const collectionCopy = {
-  loading: "Loading your collection…",
-  empty: "No cards yet",
-  openAPack: "Open a pack",
-  error: "Couldn't load your collection.",
-  tryAgain: "Try again",
-  stale: (at: Date) => `Showing your collection as of ${CLOCK.format(at)}.`,
-  duplicates: (n: number) => (n === 0 ? "No duplicates" : plural(n, "duplicate", "duplicates")),
-  perTier: (rarity: Rarity, n: number) => `${RARITY_LABEL[rarity]} ${NUMBER.format(n)}`,
-  filterLabel: "Rarity",
-  filterAll: "All rarities",
-  noMatch: (rarity: Rarity) => `No ${RARITY_LABEL[rarity]} cards in your collection.`,
-  copies: (n: number) => `×${NUMBER.format(n)}`,
-  copiesSpoken: (n: number) => plural(n, "copy", "copies"),
-  gridLabel: "Your cards",
 } as const;

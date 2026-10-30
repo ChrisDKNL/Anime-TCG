@@ -1,4 +1,10 @@
-import type { PackAllowance, PackOpened, PacksResponse, PublishedOdds, Rarity } from "@anime-tcg/shared/api";
+import type { PackAllowance, PackOpened, PacksResponse, PublishedOdds } from "@anime-tcg/shared/api";
+import {
+  controlsReducer,
+  DEFAULT_CONTROLS,
+  type ControlsAction,
+  type OverviewControls,
+} from "./collectionView";
 
 /**
  * The signed-in account's game state, held by the root layout so it survives
@@ -47,8 +53,6 @@ export type OpeningLine =
   /** 429: shown while the wait runs. */
   | { kind: "wait" };
 
-export type RarityFilter = Rarity | "all";
-
 export interface GameState {
   accountId: string | null;
   /** Counts the resets: each sign-in, sign-out and account change starts a new session of the game. */
@@ -69,8 +73,8 @@ export interface GameState {
   line: OpeningLine | null;
   /** `performance.now()` at which the last 429's wait ends. */
   waitUntil: number | null;
-  /** The interim collection's rarity filter, kept across pages (packs-page.md §3.6 step 4). */
-  rarityFilter: RarityFilter;
+  /** The collection overview's search, filters, sort, view and page, kept across pages (collection-overview.md §2). */
+  overview: OverviewControls;
 }
 
 /** Whose game an action is for: the account and the session it was started in. */
@@ -88,7 +92,7 @@ export type GameAction =
   | ({ type: "rateLimited"; until: number } & GameOwner)
   | ({ type: "failed"; row: Row } & GameOwner)
   | ({ type: "noAnswer" } & GameOwner)
-  | ({ type: "rarityFilter"; filter: RarityFilter } & GameOwner);
+  | ({ type: "overview"; action: ControlsAction } & GameOwner);
 
 export function initialGame(accountId: string | null, session = 0): GameState {
   return {
@@ -103,7 +107,7 @@ export function initialGame(accountId: string | null, session = 0): GameState {
     unavailableSince: null,
     line: null,
     waitUntil: null,
-    rarityFilter: "all",
+    overview: DEFAULT_CONTROLS,
   };
 }
 
@@ -149,8 +153,8 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return { ...state, opening: false, key: null, line: { kind: "failed", row: action.row } };
     case "noAnswer":
       return { ...state, opening: false, line: { kind: "noAnswer" } };
-    case "rarityFilter":
-      return { ...state, rarityFilter: action.filter };
+    case "overview":
+      return { ...state, overview: controlsReducer(state.overview, action.action) };
   }
 }
 

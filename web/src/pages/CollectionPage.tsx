@@ -1,39 +1,55 @@
 import { useQuery } from "@tanstack/react-query";
-import { InterimCollection, type CollectionView } from "../components/collection/InterimCollection";
+import type { ReactNode } from "react";
+import { CollectionOverview } from "../components/collection/CollectionOverview";
+import {
+  CollectionError,
+  CollectionSkeleton,
+  EmptyCollection,
+} from "../components/collection/CollectionStates";
 import { PageHeading } from "../components/layout/PageHeading";
 import { useDelayedFlag } from "../hooks/useDelayedFlag";
 import { useGame } from "../hooks/useGame";
+import { PAGE_HEADING_ID } from "../lib/pageFocus";
 import { pageHeading } from "../lib/routes";
 
-/** Nothing but the `h1` shows for this long before the skeleton does (packs-page.md §4.3). */
+/** Nothing but the `h1` shows for this long before the skeleton does (collection-overview.md §3.1 step 2). */
 const LOADING_DELAY_MS = 300;
 
 /**
- * `/collection`, the interim view over `GET /api/collection` (packs-page.md
- * §3.6). The layout holds the answer, so a held one shows at once; this
- * page's own observer refetches it silently each time the page is shown.
+ * `/collection`, the collection overview (collection-overview.md). The
+ * signed-in layout holds the answer and the controls, so a held answer shows
+ * at once with the search, filters, sort, view and page as they were; this
+ * page's own observer refetches the answer silently each time it is shown.
+ * The `h1` is there in every state (§3.1).
  */
 export function CollectionPage() {
   const game = useGame();
   const collection = useQuery(game.collectionQuery);
   const showLoading = useDelayedFlag(collection.data === undefined && !collection.isError, LOADING_DELAY_MS);
 
-  let view: CollectionView;
+  let content: ReactNode = null;
   if (collection.data !== undefined) {
-    const staleSince = collection.isError ? new Date(collection.dataUpdatedAt) : null;
-    view = { kind: "loaded", data: collection.data, staleSince };
-  } else if (collection.isError) view = { kind: "error" };
-  else view = showLoading ? { kind: "loading" } : { kind: "blank" };
+    content =
+      collection.data.entries.length === 0 ? (
+        <EmptyCollection />
+      ) : (
+        <CollectionOverview
+          data={collection.data}
+          staleSince={collection.isError ? new Date(collection.dataUpdatedAt) : null}
+          controls={game.state.overview}
+          onChange={game.changeOverview}
+        />
+      );
+  } else if (collection.isError) {
+    content = <CollectionError onRetry={() => void collection.refetch()} />;
+  } else if (showLoading) {
+    content = <CollectionSkeleton />;
+  }
 
   return (
     <>
       <PageHeading text={pageHeading("/collection")} />
-      <InterimCollection
-        view={view}
-        filter={game.state.rarityFilter}
-        onFilter={game.setRarityFilter}
-        onRetry={() => void collection.refetch()}
-      />
+      <section aria-labelledby={PAGE_HEADING_ID}>{content}</section>
     </>
   );
 }
