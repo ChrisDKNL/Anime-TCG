@@ -385,6 +385,8 @@ describe("economy, adversarial (economy.md §14)", () => {
           "│   └── /open (POST)",
           "├── /api/collection (GET, HEAD)",
           "│   └── /recycle (POST)",
+          "├── /api/demo (GET, HEAD)",
+          "│   └── /open (POST)",
           "└── /api/wallet (GET, HEAD)",
           "",
         ].join("\n"),
