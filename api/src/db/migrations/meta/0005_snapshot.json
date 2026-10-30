@@ -276,6 +276,22 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "cards_removed_by_recycle_idx": {
+          "name": "cards_removed_by_recycle_idx",
+          "columns": [
+            {
+              "expression": "removed_by_recycle",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "where": "\"cards\".\"removed_by_recycle\" is not null",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {

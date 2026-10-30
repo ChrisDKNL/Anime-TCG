@@ -374,7 +374,7 @@ describe("migrations", () => {
     ]);
   });
 
-  it("cascades an account's ledger and recycles, and indexes held cards and the ledger's windows (0005)", async () => {
+  it("cascades an account's ledger and recycles, and indexes held cards, recycled cards and the ledger's windows (0005)", async () => {
     const rules = await db.execute<{ constraint_name: string; delete_rule: string }>(sql`
       select tc.constraint_name, rc.delete_rule from information_schema.referential_constraints rc
       join information_schema.table_constraints tc on tc.constraint_name = rc.constraint_name
@@ -390,17 +390,21 @@ describe("migrations", () => {
     const indexes = await db.execute<{ indexname: string; indexdef: string }>(sql`
       select indexname, indexdef from pg_indexes
       where schemaname = 'public' and indexname in ('cards_held_entry_idx', 'cards_account_entry_idx',
-        'ledger_entries_account_kind_created_idx')
+        'cards_removed_by_recycle_idx', 'ledger_entries_account_kind_created_idx')
       order by indexname
     `);
     expect(indexes.rows.map((row) => row.indexname)).toEqual([
       "cards_held_entry_idx",
+      "cards_removed_by_recycle_idx",
       "ledger_entries_account_kind_created_idx",
     ]);
     expect(indexes.rows[0]?.indexdef).toMatch(
       /\(account_id, character_id, rarity, variant\) WHERE \(removed_at IS NULL\)$/,
     );
-    expect(indexes.rows[1]?.indexdef).toMatch(/\(account_id, kind, created_at\)$/);
+    expect(indexes.rows[1]?.indexdef).toMatch(
+      /\(removed_by_recycle\) WHERE \(removed_by_recycle IS NOT NULL\)$/,
+    );
+    expect(indexes.rows[2]?.indexdef).toMatch(/\(account_id, kind, created_at\)$/);
   });
 
   it("records each account's last reset and keeps a removed card removed by trigger (0005, manager decision, 2026-10-30)", async () => {

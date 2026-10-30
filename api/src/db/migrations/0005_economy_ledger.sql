@@ -71,6 +71,7 @@ CREATE INDEX "ledger_entries_account_kind_created_idx" ON "ledger_entries" USING
 ALTER TABLE "cards" ADD CONSTRAINT "cards_removed_by_recycle_recycles_id_fk" FOREIGN KEY ("removed_by_recycle") REFERENCES "public"."recycles"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "pack_openings" ADD CONSTRAINT "pack_openings_ledger_entry_id_ledger_entries_id_fk" FOREIGN KEY ("ledger_entry_id") REFERENCES "public"."ledger_entries"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 CREATE INDEX "cards_held_entry_idx" ON "cards" USING btree ("account_id","character_id","rarity","variant") WHERE "cards"."removed_at" is null;--> statement-breakpoint
+CREATE INDEX "cards_removed_by_recycle_idx" ON "cards" USING btree ("removed_by_recycle") WHERE "cards"."removed_by_recycle" is not null;--> statement-breakpoint
 ALTER TABLE "pack_openings" ADD CONSTRAINT "pack_openings_ledger_entry_unique" UNIQUE("ledger_entry_id");--> statement-breakpoint
 ALTER TABLE "accounts" ADD CONSTRAINT "accounts_balance_check" CHECK ("accounts"."balance" between 0 and 1000000000);--> statement-breakpoint
 ALTER TABLE "cards" ADD CONSTRAINT "cards_removed_check" CHECK ("cards"."removed_at" is not null or "cards"."removed_by_recycle" is null);--> statement-breakpoint

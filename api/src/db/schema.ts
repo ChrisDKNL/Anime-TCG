@@ -475,5 +475,9 @@ export const cards = pgTable(
     index("cards_held_entry_idx")
       .on(table.accountId, table.characterId, table.rarity, table.variant)
       .where(sql`${table.removedAt} is null`),
+    // audit-ledger counts each recycle's cards by this column (economy.md §13.1).
+    index("cards_removed_by_recycle_idx")
+      .on(table.removedByRecycle)
+      .where(sql`${table.removedByRecycle} is not null`),
   ],
 );
