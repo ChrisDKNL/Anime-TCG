@@ -81,6 +81,7 @@ describe("page, stats and view copy", () => {
     expect(statsCopy.totals(214, 153)).toBe("214 cards · 153 duplicates");
     expect(statsCopy.totals(1, 1)).toBe("1 card · 1 duplicate");
     expect(statsCopy.totals(5, 0)).toBe("5 cards · No duplicates");
+    expect(statsCopy.totals(1_240, 1_003)).toBe("1,240 cards · 1,003 duplicates");
     expect(statsCopy.duplicates(1_204)).toBe("1,204 duplicates");
     expect(statsCopy.stale(new Date(2026, 9, 29, 9, 5))).toBe("Showing your collection as of 09:05.");
   });

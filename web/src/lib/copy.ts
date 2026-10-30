@@ -116,10 +116,17 @@ export const banners = {
   loading: "Loading…",
 } as const;
 
-/** `No cards yet` / `1 card` / `<N> cards`, used wherever a card count is shown. */
+const NUMBER = new Intl.NumberFormat("en-GB");
+
+/** A count as `Intl.NumberFormat("en-GB")` writes it: `2,983`. */
+export function formatCount(n: number): string {
+  return NUMBER.format(n);
+}
+
+/** `No cards yet` / `1 card` / `<N> cards` (`1,240 cards`), used wherever a card count is shown. */
 export function cardCount(n: number): string {
   if (n === 0) return "No cards yet";
-  return n === 1 ? "1 card" : `${n} cards`;
+  return n === 1 ? "1 card" : `${formatCount(n)} cards`;
 }
 
 /**

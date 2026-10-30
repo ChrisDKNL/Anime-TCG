@@ -305,6 +305,8 @@ describe("pages (§3.3, §5.3, §5.5)", () => {
   it("3,000 entries: at most 60 tiles in the DOM (§5.5)", async () => {
     await openCollection({ status: 200, body: makeLargeCollection(3_000) });
     expect(results()).toHaveTextContent("3,000 results · page 1 of 50");
+    // §8: numbers use Intl.NumberFormat("en-GB"), the card count too.
+    expect(screen.getByText("3,000 cards · No duplicates")).toBeInTheDocument();
     expect(document.querySelectorAll("button[data-entry]")).toHaveLength(60);
     expect(document.querySelectorAll("img")).toHaveLength(60);
   });
