@@ -14,6 +14,7 @@ export const headerCopy = {
   wordmark: "Anime TCG",
   navLabel: "Main",
   packs: "Packs",
+  shop: "Shop",
   collection: "Collection",
   logIn: "Log in",
   register: "Register",

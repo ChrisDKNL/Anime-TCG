@@ -10,10 +10,16 @@ import type {
   OpenPackBody,
   PackOpened,
   PacksResponse,
+  RecycleBody,
+  RecycleReceipt,
   RegisterBody,
   RenameBody,
   SessionResponse,
+  ShopBuyBody,
+  ShopReceipt,
+  ShopResponse,
   SignedIn,
+  Wallet,
 } from "@anime-tcg/shared/api";
 import { ERROR_CODES, type ErrorCode, type ErrorEnvelope } from "@anime-tcg/shared/errors";
 
@@ -28,6 +34,8 @@ export class ApiError extends Error {
    * route rate limiter carries (accounts.md §4.4-D, packs-page.md §9, question 3).
    */
   readonly retryAfterSeconds: number | undefined;
+  /** The acting account's balance under the lock, on `insufficient_funds` only (economy.md §11.1). */
+  readonly balance: number | undefined;
 
   constructor(status: number, error: ErrorEnvelope["error"], retryAfterHeader?: number) {
     super(error.message);
@@ -35,6 +43,7 @@ export class ApiError extends Error {
     this.status = status;
     this.code = error.code;
     this.retryAfterSeconds = error.retryAfterSeconds ?? retryAfterHeader;
+    this.balance = error.balance;
   }
 }
 
@@ -69,11 +78,17 @@ function isWholeSeconds(value: unknown): value is number {
   return Number.isSafeInteger(value) && Number(value) >= 1;
 }
 
+/** A balance that counts exactly: a whole number of at least 0. */
+function isBalance(value: unknown): value is number {
+  return Number.isSafeInteger(value) && Number(value) >= 0;
+}
+
 function isErrorEnvelope(value: unknown): value is ErrorEnvelope {
   if (!isRecord(value) || !isRecord(value.error)) return false;
-  const { code, message, retryAfterSeconds } = value.error;
+  const { code, message, retryAfterSeconds, balance } = value.error;
   const retryOk = retryAfterSeconds === undefined || isWholeSeconds(retryAfterSeconds);
-  return isErrorCode(code) && typeof message === "string" && retryOk;
+  const balanceOk = balance === undefined || isBalance(balance);
+  return isErrorCode(code) && typeof message === "string" && retryOk && balanceOk;
 }
 
 async function send(method: Method, path: string, body?: object): Promise<Response> {
@@ -176,6 +191,24 @@ export function openPack(body: OpenPackBody): Promise<PackOpened> {
 
 export function getCollection(): Promise<CollectionResponse> {
   return expectJson<CollectionResponse>("GET", "/api/collection");
+}
+
+export function getWallet(): Promise<Wallet> {
+  return expectJson<Wallet>("GET", "/api/wallet");
+}
+
+export function getShop(): Promise<ShopResponse> {
+  return expectJson<ShopResponse>("GET", "/api/shop");
+}
+
+/** 201 for a purchase and 200 for a replay of `requestId` carry the same pack and price. */
+export function buyShopPack(body: ShopBuyBody): Promise<ShopReceipt> {
+  return expectJson<ShopReceipt>("POST", "/api/shop/buy", body);
+}
+
+/** 201 for a recycle and 200 for a replay of `requestId` carry the same receipt. */
+export function recycleDuplicates(body: RecycleBody): Promise<RecycleReceipt> {
+  return expectJson<RecycleReceipt>("POST", "/api/collection/recycle", body);
 }
 
 /** The landing page's facts: public, no session. */

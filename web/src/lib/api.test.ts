@@ -1,8 +1,19 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { envelope, makeAccount, mockFetch, noContent, rateLimited, sentBody } from "../test/api";
-import { makeCollection, makeDemo, makeDemoOpened, makePackOpened, makePacks } from "../test/fixtures";
+import {
+  makeCollection,
+  makeDemo,
+  makeDemoOpened,
+  makePackOpened,
+  makePacks,
+  makeRecycleReceipt,
+  makeShop,
+  makeShopReceipt,
+  makeWallet,
+} from "../test/fixtures";
 import {
   ApiError,
+  buyShopPack,
   changePassword,
   checkInvite,
   deleteAccount,
@@ -10,6 +21,8 @@ import {
   getDemo,
   getPacks,
   getSession,
+  getShop,
+  getWallet,
   isApiError,
   login,
   logout,
@@ -18,6 +31,7 @@ import {
   openPack,
   register,
   readRetryAfter,
+  recycleDuplicates,
   renameLogin,
 } from "./api";
 
@@ -258,4 +272,58 @@ describe("api client", () => {
     expect(read("")).toBeUndefined();
     expect(readRetryAfter(new Headers())).toBeUndefined();
   });
+
+  it("GET /api/wallet and GET /api/shop send no body and return the answer", async () => {
+    const fetchMock = mockFetch({
+      "GET /api/wallet": { status: 200, body: makeWallet() },
+      "GET /api/shop": { status: 200, body: makeShop() },
+    });
+    await expect(getWallet()).resolves.toEqual(makeWallet());
+    await expect(getShop()).resolves.toEqual(makeShop());
+    for (const [, init] of fetchMock.mock.calls) expect(init?.body).toBeUndefined();
+  });
+
+  it("POST /api/shop/buy and POST /api/collection/recycle send exactly the body given; a replay is the same answer", async () => {
+    const fetchMock = mockFetch({
+      "POST /api/shop/buy": { status: 200, body: makeShopReceipt() },
+      "POST /api/collection/recycle": { status: 201, body: makeRecycleReceipt() },
+    });
+    const requestId = "0b8f3c1e-6a3d-4c55-9a47-2f0d8a6b1c11";
+    await expect(buyShopPack({ requestId, themeId: "genre-action" })).resolves.toEqual(makeShopReceipt());
+    expect(sentBody(fetchMock, 0)).toEqual({ requestId, themeId: "genre-action" });
+    await expect(recycleDuplicates({ requestId, characterId: 1, rarity: "epic", count: 2 })).resolves.toEqual(
+      makeRecycleReceipt(),
+    );
+    expect(sentBody(fetchMock, 1)).toEqual({ requestId, characterId: 1, rarity: "epic", count: 2 });
+  });
+
+  it("insufficient_funds carries the balance the server read; other envelopes carry none", async () => {
+    mockFetch({
+      "POST /api/shop/buy": {
+        status: 409,
+        body: { error: { code: "insufficient_funds", message: "insufficient_funds", balance: 120 } },
+      },
+    });
+    const err = await buyShopPack({ requestId: "x", themeId: "genre-action" }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err).toMatchObject({ status: 409, code: "insufficient_funds", balance: 120 });
+
+    mockFetch({ "POST /api/shop/buy": envelope(404, "theme_unavailable") });
+    const gone = await buyShopPack({ requestId: "x", themeId: "genre-action" }).catch((e: unknown) => e);
+    expect(gone).toMatchObject({ code: "theme_unavailable", balance: undefined });
+  });
+
+  it.each(["-1", "1.5", "1e400", '"120"', "null"])(
+    "an envelope whose balance does not count exactly (%s) is not the envelope",
+    async (balance) => {
+      mockFetch({
+        "POST /api/shop/buy": {
+          status: 409,
+          raw: `{"error":{"code":"insufficient_funds","message":"m","balance":${balance}}}`,
+        },
+      });
+      const err = await buyShopPack({ requestId: "x", themeId: "genre-action" }).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(NetworkError);
+    },
+  );
 });

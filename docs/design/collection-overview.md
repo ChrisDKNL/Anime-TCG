@@ -162,10 +162,11 @@ The rule (owner, 2026-10-29): a player recycles **duplicates** of an entry, neve
 7. Branch on the answer:
    - **201, or 200 on a replay**: the dialog returns to the details with the refetched counts, the inline status line `Recycled <Q> <copy|copies> of <name> for <credited> Karma. You have <B> Karma.` (count, credit and balance from the receipt), and focus on the dialog heading. The header balance takes the receipt's `balance`. If the receipt's credit differs from the total the confirmation showed (the value changed between the wallet read and the request), the line states the server's amount and adds ` Each duplicate now recycles for <recycle T> Karma.` (§9.2 question 1).
    - **`not_enough_copies`** (fewer recyclable copies than asked) or **`request_id_reused`**: nothing was recycled. Refetch, return to the details, neutral `Something changed…` notice.
-   - **`balance_limit`** (the credit would take the balance past its ceiling, `economy.md` §12): nothing was recycled. The confirmation stays with the red line `Your Karma is at its ceiling, so nothing was recycled.`, and the confirm button is disabled.
+   - **`balance_limit`** (the credit would take the balance past its ceiling, `economy.md` §12): nothing was recycled. The confirmation stays with the red line `That would take you past <max> Karma, so nothing was recycled.` (`<max>` the wallet's published `MAX_BALANCE` through `formatCount`; without it, `That would take you past the most Karma you can hold, so nothing was recycled.`; manager decision, 2026-10-30), and the confirm button is disabled.
    - **Rate limited, any other answer, no answer, `unauthenticated`**: exactly as §3.5 step 9. `Try again` after no answer resends the same `requestId`, so a lost answer never recycles twice.
 8. `Cancel`, or Escape on the confirmation, returns to the details with the number kept.
 9. There is no fee, no balance check, no draw and no reveal: a recycle for Karma cannot fail for lack of Karma, and its outcome is known before it is sent.
+10. **Settled for `feat/economy-ui`** (manager decision, 2026-10-30): `Cancel` and Escape return focus to `Recycle…`; any answer that returns to the details (recycled, something changed) puts focus on the dialog's name heading; `Cancel` discards the `requestId` after a 429 as after no answer, so a changed number is never sent under an old key. Before the wallet's first answer, `Recycle…` is disabled with the stale reason. Closing the dialog, or leaving the page, from a confirmation is that confirmation's `Cancel`. The `On the market` fact and the tile's listed line read `listed`, which is 0 until `feat/market`, and land with `feat/market-ui`; the recycle confirmation already names listed copies kept. Further (manager decisions, 2026-10-30, after the hunt on #51): the ceiling line reads `That would take you past <max> Karma, so nothing was recycled.`, with `<max>` the server's `MAX_BALANCE` from the wallet's `rules`, displayed and never computed, and `That would take you past the most Karma you can hold, so nothing was recycled.` while no such number is held; "balance" stays banned everywhere (§8). `Wallet.rules` (`KarmaRules`) does not publish `MAX_BALANCE` yet, so until a server PR adds it the line is the second form. A 429's wait belongs to the dialog, not the confirmation: it survives `Cancel` and a new confirmation, while `Cancel` still discards the key. Nothing closes the dialog while a recycle is in flight, whatever closes it (a second Escape included): it opens again at once.
 
 ### 3.7 Closing the dialog and where focus goes
 
@@ -712,26 +713,26 @@ Here `<max>` is `rules.maxListings`.
 
 **Recycle for Karma**
 
-| Element                          | Copy                                                                                        |
-| -------------------------------- | ------------------------------------------------------------------------------------------- |
-| Section heading                  | `Recycle for Karma`                                                                         |
-| Value line                       | `Each duplicate recycles for <V> Karma.`                                                    |
-| Field label                      | `Duplicates`                                                                                |
-| Hint                             | `1 to <max>`                                                                                |
-| Credit line                      | `You get <total> Karma.`                                                                    |
-| Field error                      | `Choose a whole number from 1 to <max>.`                                                    |
-| Button                           | `Recycle…`                                                                                  |
-| Reason, one copy                 | `No duplicates. The last copy can't be recycled.`                                           |
-| Reason, duplicates on the market | `Copies on the market can't be recycled.`                                                   |
-| Confirmation heading             | `Recycle <Q> duplicates of <name>?`; for one, `Recycle 1 duplicate of <name>?`              |
-| Body, first sentence             | `<Q> <Rarity> <copy\|copies> become <total> Karma.`                                         |
-| Body, copies kept                | ` You keep <K>.`; when some of them are listed, ` You keep <K>, <L> of them on the market.` |
-| Body, last sentence              | ` There is no undo.`                                                                        |
-| Confirm button                   | `Recycle for <total> Karma` / in flight `Recycling…`                                        |
-| Cancel                           | `Cancel`                                                                                    |
-| Success (inline status)          | `Recycled <Q> <copy\|copies> of <name> for <credited> Karma. You have <B> Karma.`           |
-| Success, value changed (added)   | ` Each duplicate now recycles for <V> Karma.`                                               |
-| Karma at its ceiling (red)       | `Your Karma is at its ceiling, so nothing was recycled.`                                    |
+| Element                          | Copy                                                                                                                                                                                               |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Section heading                  | `Recycle for Karma`                                                                                                                                                                                |
+| Value line                       | `Each duplicate recycles for <V> Karma.`                                                                                                                                                           |
+| Field label                      | `Duplicates`                                                                                                                                                                                       |
+| Hint                             | `1 to <max>`                                                                                                                                                                                       |
+| Credit line                      | `You get <total> Karma.`                                                                                                                                                                           |
+| Field error                      | `Choose a whole number from 1 to <max>.`                                                                                                                                                           |
+| Button                           | `Recycle…`                                                                                                                                                                                         |
+| Reason, one copy                 | `No duplicates. The last copy can't be recycled.`                                                                                                                                                  |
+| Reason, duplicates on the market | `Copies on the market can't be recycled.`                                                                                                                                                          |
+| Confirmation heading             | `Recycle <Q> duplicates of <name>?`; for one, `Recycle 1 duplicate of <name>?`                                                                                                                     |
+| Body, first sentence             | `<Q> <Rarity> <copy\|copies> become <total> Karma.`                                                                                                                                                |
+| Body, copies kept                | ` You keep <K>.`; when some of them are listed, ` You keep <K>, <L> of them on the market.`                                                                                                        |
+| Body, last sentence              | ` There is no undo.`                                                                                                                                                                               |
+| Confirm button                   | `Recycle for <total> Karma` / in flight `Recycling…`                                                                                                                                               |
+| Cancel                           | `Cancel`                                                                                                                                                                                           |
+| Success (inline status)          | `Recycled <Q> <copy\|copies> of <name> for <credited> Karma. You have <B> Karma.`                                                                                                                  |
+| Success, value changed (added)   | ` Each duplicate now recycles for <V> Karma.`                                                                                                                                                      |
+| Karma at its ceiling (red)       | `That would take you past <max> Karma, so nothing was recycled.`; without `<max>`, `That would take you past the most Karma you can hold, so nothing was recycled.` (manager decision, 2026-10-30) |
 
 **Failures, for listing and recycling**
 

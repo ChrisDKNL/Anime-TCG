@@ -125,6 +125,18 @@ export function formatCount(n: number): string {
   return NUMBER.format(n);
 }
 
+/**
+ * The currency's name, the one place it is written (economy.md §12): every
+ * amount reads `<n> Karma`, with no icon and no symbol. Code says balance and
+ * amount; only copy says the name, and the api never sends it.
+ */
+export const CURRENCY_NAME = "Karma";
+
+/** An amount as every economy string writes it: `1,240 Karma`. */
+export function amount(n: number): string {
+  return `${formatCount(n)} ${CURRENCY_NAME}`;
+}
+
 /** `No cards yet` / `1 card` / `<N> cards` (`1,240 cards`), used wherever a card count is shown. */
 export function cardCount(n: number): string {
   if (n === 0) return "No cards yet";

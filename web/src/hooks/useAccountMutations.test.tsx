@@ -21,6 +21,7 @@ function harness() {
     announce: vi.fn(),
     sessionEnded: vi.fn(() => queryClient.setQueryData(SESSION_QUERY_KEY, { signedIn: false })),
     unreachable: vi.fn(),
+    serverAnswered: vi.fn(),
     clearNotice: vi.fn(),
     notice: "none",
   };

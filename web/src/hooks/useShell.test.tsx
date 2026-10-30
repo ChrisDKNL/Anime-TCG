@@ -15,6 +15,12 @@ function Controls() {
       <button type="button" onClick={() => shell.sessionEnded()}>
         end session
       </button>
+      <button type="button" onClick={() => shell.unreachable()}>
+        unreachable
+      </button>
+      <button type="button" onClick={() => shell.serverAnswered()}>
+        answered
+      </button>
       <p>notice: {shell.notice}</p>
     </>
   );
@@ -70,5 +76,16 @@ describe("useShell", () => {
     expect(sessionWhenNavigating).toEqual({ signedIn: false });
     expect(onSessionEnded).toHaveBeenCalledTimes(1);
     expect(screen.getAllByText("notice: sessionEnded")).toHaveLength(1);
+  });
+
+  it("serverAnswered clears the unreachable banner and leaves a session-ended one", () => {
+    renderWithProviders(<Shell onSessionEnded={() => undefined} />);
+    act(() => screen.getByRole("button", { name: "unreachable" }).click());
+    expect(screen.getByText("notice: unreachable")).toBeInTheDocument();
+    act(() => screen.getByRole("button", { name: "answered" }).click());
+    expect(screen.getByText("notice: none")).toBeInTheDocument();
+    act(() => screen.getByRole("button", { name: "end session" }).click());
+    act(() => screen.getByRole("button", { name: "answered" }).click());
+    expect(screen.getByText("notice: sessionEnded")).toBeInTheDocument();
   });
 });

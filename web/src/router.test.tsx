@@ -119,7 +119,7 @@ describe("the return path from history state (§3.3 step 3)", () => {
     "/packs#x",
     "/PACKS",
     "/packs/",
-    "/shop",
+    "/market",
     "/login",
     42,
     { toString: () => "/collection" },
@@ -213,7 +213,7 @@ describe("paths (§3.1 rule 2)", () => {
     expect(history.location.state).toMatchObject({ returnTo: "/collection" });
   });
 
-  it.each(["/Packs", "/PACKS", "/packs/1", "/packs/1/", "/index.html", "/shop", "/market", "/no-such-page"])(
+  it.each(["/Packs", "/PACKS", "/packs/1", "/packs/1/", "/index.html", "/Shop", "/market", "/no-such-page"])(
     "%s is the not-found page, signed in with the signed-in header",
     async (path) => {
       const { history } = renderApp({}, account, path);
@@ -346,13 +346,13 @@ describe("titles and focus on page changes (§3.6)", () => {
 });
 
 describe("the header (§3.5, §7)", () => {
-  it("signed in: Packs and Collection in order, the current one marked, the wordmark to /packs and never marked", async () => {
+  it("signed in: Packs, Shop and Collection in order, the current one marked, the wordmark to /packs and never marked", async () => {
     const { history } = renderApp({}, account, "/packs");
     await pageHeading("Packs");
     const links = within(mainNav()).getAllByRole("link");
-    expect(links.map((link) => link.textContent)).toEqual(["Packs", "Collection (0)"]);
-    expect(links.map((link) => link.getAttribute("href"))).toEqual(["/packs", "/collection"]);
-    expect(links.map((link) => link.getAttribute("aria-current"))).toEqual(["page", null]);
+    expect(links.map((link) => link.textContent)).toEqual(["Packs", "Shop", "Collection (0)"]);
+    expect(links.map((link) => link.getAttribute("href"))).toEqual(["/packs", "/shop", "/collection"]);
+    expect(links.map((link) => link.getAttribute("aria-current"))).toEqual(["page", null, null]);
     const wordmark = screen.getByRole("link", { name: "Anime TCG" });
     expect(wordmark).toHaveAttribute("href", "/packs");
     expect(wordmark).not.toHaveAttribute("aria-current");
@@ -363,7 +363,15 @@ describe("the header (§3.5, §7)", () => {
       within(mainNav())
         .getAllByRole("link")
         .map((link) => link.getAttribute("aria-current")),
-    ).toEqual([null, "page"]);
+    ).toEqual([null, null, "page"]);
+
+    act(() => history.push("/shop"));
+    await pageHeading("Shop");
+    expect(
+      within(mainNav())
+        .getAllByRole("link")
+        .map((link) => link.getAttribute("aria-current")),
+    ).toEqual([null, "page", null]);
 
     act(() => history.push("/account"));
     await pageHeading("Manage account");

@@ -15,12 +15,14 @@ const LOADING_DELAY_MS = 300;
  * `/collection`, the collection overview (collection-overview.md). The
  * signed-in layout holds the answer and the controls, so a held answer shows
  * at once with the search, filters, sort, view and page as they were; this
- * page's own observer refetches the answer silently each time it is shown.
- * The `h1` is there in every state (§3.1).
+ * page's own observers refetch the answer and the wallet (whose rules the card
+ * dialog's Recycle for Karma shows, market-and-shop.md §3.1 step 2) silently
+ * each time it is shown. The `h1` is there in every state (§3.1).
  */
 export function CollectionPage() {
   const game = useGame();
   const collection = useQuery(game.collectionQuery);
+  useQuery(game.walletQuery);
   const showLoading = useDelayedFlag(collection.data === undefined && !collection.isError, LOADING_DELAY_MS);
 
   let content: ReactNode = null;

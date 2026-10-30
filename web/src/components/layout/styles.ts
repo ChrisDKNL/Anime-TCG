@@ -12,12 +12,12 @@ import { BUTTON, FOCUS_RING } from "../account/styles";
  */
 export const WORDMARK = `inline-flex min-h-10 items-center rounded text-xl font-black tracking-tight text-zinc-100 sm:min-h-0 ${FOCUS_RING}`;
 
-/** Today's tab group, unchanged in look; on phone the links share the row (`flex-auto`). */
+/** Today's tab group, unchanged in look; on phone the links share the row (`flex-auto`, `px-2`, market-and-shop.md §5.1). */
 export const NAV_GROUP = "flex w-full gap-1 rounded-xl bg-zinc-900 p-1 sm:w-auto";
 
 export type LinkState = "current" | "other";
 
-const NAV_LINK_BASE = `inline-flex min-h-10 flex-auto items-center justify-center rounded-lg px-4 py-1.5 text-sm font-medium sm:min-h-0 sm:flex-none ${FOCUS_RING}`;
+const NAV_LINK_BASE = `inline-flex min-h-10 flex-auto items-center justify-center rounded-lg px-2 py-1.5 text-sm font-medium sm:min-h-0 sm:flex-none sm:px-4 ${FOCUS_RING}`;
 
 export const NAV_LINK: Record<LinkState, string> = {
   current: `${NAV_LINK_BASE} bg-zinc-700 text-white`,

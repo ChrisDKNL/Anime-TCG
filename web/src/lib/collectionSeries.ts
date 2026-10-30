@@ -33,8 +33,8 @@ function sharedTitles(franchises: readonly FranchiseRef[]): Set<string> {
   return shared;
 }
 
-/** Names every franchise of the answer, keyed by id, with the year where its title is shared. */
-export function seriesNames(data: CollectionResponse): ReadonlyMap<number, SeriesName> {
+/** Names every franchise of an answer (the collection's, the shop's), keyed by id, with the year where its title is shared. */
+export function seriesNames(data: Pick<CollectionResponse, "franchises">): ReadonlyMap<number, SeriesName> {
   const shared = sharedTitles(data.franchises);
   return new Map(
     data.franchises.map((franchise) => [
