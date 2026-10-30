@@ -27,6 +27,7 @@ import {
   type RarityFilter,
   type Row,
 } from "../lib/game";
+import { rethrowUnlessKnown } from "../lib/failures";
 import { revealCopy } from "../lib/packsCopy";
 import type { ShellActions } from "./useShell";
 import { useSingleFlight } from "./useSingleFlight";
@@ -88,8 +89,11 @@ export interface Game {
   packsQuery: PacksQueryOptions;
   collectionQuery: CollectionQueryOptions;
   collection: UseQueryResult<CollectionResponse>;
-  /** Opens a pack; `row` is the control's row now, which a generic failure's line stays tied to. */
-  openPack: (row: Row) => void;
+  /**
+   * Opens a pack; `row` is the control's row now, which a generic failure's line stays tied to.
+   * Settles once the answer is applied, and rejects only on a bug in this client (not an api answer).
+   */
+  openPack: (row: Row) => Promise<void>;
   setRarityFilter: (filter: RarityFilter) => void;
 }
 
@@ -165,7 +169,12 @@ export function useGameState({ account, shell, packsShowing }: Options): Game | 
         unreachable();
         return;
       }
-      if (!(err instanceof ApiError)) throw err;
+      if (!(err instanceof ApiError)) {
+        // A bug in this client, not an answer: the generic failure, so the button never stays on
+        // `Opening…`, and the error is rethrown so a test or the console sees it.
+        dispatch({ type: "failed", ...of, row });
+        throw err;
+      }
       switch (err.code) {
         case "unauthenticated":
           sessionEnded();
@@ -198,9 +207,9 @@ export function useGameState({ account, shell, packsShowing }: Options): Game | 
   );
 
   const open = useCallback(
-    (row: Row) => {
+    async (row: Row) => {
       if (owner === null) return;
-      void singleFlight(async () => {
+      await singleFlight(async () => {
         // A key held from an opening that got no answer is sent again, so the retry shows that pack.
         const requestId = key ?? crypto.randomUUID();
         dispatch({ type: "openStarted", ...owner, key: requestId });
@@ -223,6 +232,7 @@ export function useGameState({ account, shell, packsShowing }: Options): Game | 
           void queryClient.refetchQueries({ queryKey: collectionKey(owner) });
         } catch (err) {
           if (isCurrent(owner)) settleFailure(err, owner, seq, row);
+          else rethrowUnlessKnown(err);
         }
       });
     },

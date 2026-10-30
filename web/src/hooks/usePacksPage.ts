@@ -80,7 +80,7 @@ export function usePacksPage() {
 
   const { openPack } = game;
   const open = useCallback(() => {
-    if (view.kind === "control" && view.button.enabled) openPack(view.row);
+    if (view.kind === "control" && view.button.enabled) void openPack(view.row);
   }, [view, openPack]);
 
   // A reveal that lands while the page shows runs its entrance; the one already there when it mounted does not.
