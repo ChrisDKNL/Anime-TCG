@@ -34,7 +34,7 @@ function renderGame() {
   return { result, rerender, shell, queryClient };
 }
 
-/** The keys of the cached queries that name `accountId`: its packs and collection answers. */
+/** The keys of the cached queries that name `accountId`: its packs, collection and wallet answers. */
 function cachedFor(queryClient: QueryClient, accountId: string) {
   return queryClient
     .getQueryCache()
@@ -98,9 +98,10 @@ describe("useGameState: a reset drops the previous session's answers from the ca
       expect.arrayContaining([
         ["packs", account.id, next],
         ["collection", account.id, next],
+        ["wallet", account.id, next],
       ]),
     );
-    expect(cachedFor(queryClient, account.id)).toHaveLength(2);
+    expect(cachedFor(queryClient, account.id)).toHaveLength(3);
   });
 
   it("an account switch removes the previous account's answers", async () => {

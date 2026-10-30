@@ -1,4 +1,4 @@
-import type { PackAllowance, PackOpened, PacksResponse, PublishedOdds } from "@anime-tcg/shared/api";
+import type { PackAllowance, PackOpened, PacksResponse, PublishedOdds, Wallet } from "@anime-tcg/shared/api";
 import {
   controlsReducer,
   DEFAULT_CONTROLS,
@@ -35,6 +35,18 @@ export interface Stamped {
 /** A `GET /api/packs` answer as the packs query holds it. */
 export interface PacksAnswer extends Stamped {
   answer: PacksResponse;
+}
+
+/** A `GET /api/wallet` answer as the wallet query holds it, numbered like every answer that carries a balance. */
+export interface WalletAnswer {
+  seq: number;
+  wallet: Wallet;
+}
+
+/** A balance some other answer carried: a receipt, or `insufficient_funds` (market-and-shop.md §3.1 step 2). */
+export interface HeldBalance {
+  seq: number;
+  value: number;
 }
 
 /** The allowance and pity count the page shows: the newest answer that carried them. */
@@ -76,6 +88,8 @@ export interface GameState {
   waitUntil: number | null;
   /** The collection overview's search, filters, sort, view and page, kept across pages (collection-overview.md §2). */
   overview: OverviewControls;
+  /** The newest balance a receipt or a refusal carried; the header shows it when it is newer than the wallet's. */
+  balance: HeldBalance | null;
 }
 
 /** Whose game an action is for: the account and the session it was started in. */
@@ -93,7 +107,8 @@ export type GameAction =
   | ({ type: "rateLimited"; until: number } & GameOwner)
   | ({ type: "failed"; row: Row } & GameOwner)
   | ({ type: "noAnswer" } & GameOwner)
-  | ({ type: "overview"; action: ControlsAction } & GameOwner);
+  | ({ type: "overview"; action: ControlsAction } & GameOwner)
+  | ({ type: "balance"; balance: HeldBalance } & GameOwner);
 
 export function initialGame(accountId: string | null, session = 0): GameState {
   return {
@@ -109,6 +124,7 @@ export function initialGame(accountId: string | null, session = 0): GameState {
     line: null,
     waitUntil: null,
     overview: DEFAULT_CONTROLS,
+    balance: null,
   };
 }
 
@@ -156,7 +172,24 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return { ...state, opening: false, line: { kind: "noAnswer" } };
     case "overview":
       return { ...state, overview: controlsReducer(state.overview, action.action) };
+    case "balance":
+      return state.balance !== null && state.balance.seq >= action.balance.seq
+        ? state
+        : { ...state, balance: action.balance };
   }
+}
+
+/**
+ * The balance the header shows (market-and-shop.md §3.1): the newest of the
+ * last `GET /api/wallet` answer and the last balance another answer carried,
+ * by when each request was sent, so a wallet read that overtakes a purchase
+ * never steps the balance back. Null before the first of them.
+ */
+export function heldBalance(wallet: WalletAnswer | undefined, state: GameState): number | null {
+  const { balance } = state;
+  if (wallet === undefined) return balance?.value ?? null;
+  if (balance === null || wallet.seq > balance.seq) return wallet.wallet.balance;
+  return balance.value;
 }
 
 function newest<T extends Stamped>(candidates: ReadonlyArray<T | null | undefined>): T | null {

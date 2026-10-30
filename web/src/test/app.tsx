@@ -5,19 +5,40 @@ import App from "../App";
 import { createQueryClient } from "../lib/queryClient";
 import { createAppRouter } from "../router";
 import { envelope, makeAccount, mockFetch, urlOf, type MockHandler } from "./api";
-import { makeAllowance, makeCollection, makeEntry, makePackOpened, makePacks } from "./fixtures";
+import {
+  makeAllowance,
+  makeCollection,
+  makeEntry,
+  makePackOpened,
+  makePacks,
+  makeRecycleReceipt,
+  makeShop,
+  makeShopReceipt,
+  makeWallet,
+} from "./fixtures";
 
 export const PACKS = "GET /api/packs";
 export const OPEN = "POST /api/packs/open";
 export const COLLECTION = "GET /api/collection";
+export const WALLET = "GET /api/wallet";
+export const SHOP = "GET /api/shop";
+export const BUY = "POST /api/shop/buy";
+export const RECYCLE = "POST /api/collection/recycle";
 
-/** The api of a signed-in account with a full allowance and an empty collection. */
+/**
+ * The api of a signed-in account with a full allowance, an empty collection, a balance of 1,240 and one
+ * theme; a purchase and a recycle answer with the fixture receipts.
+ */
 export function signedInRoutes(account = makeAccount()): Record<string, MockHandler> {
   return {
     "GET /api/session": { status: 200, body: { signedIn: true, account } },
     [PACKS]: { status: 200, body: makePacks() },
     [COLLECTION]: { status: 200, body: makeCollection() },
     [OPEN]: { status: 201, body: makePackOpened() },
+    [WALLET]: { status: 200, body: makeWallet() },
+    [SHOP]: { status: 200, body: makeShop() },
+    [BUY]: { status: 201, body: makeShopReceipt() },
+    [RECYCLE]: { status: 201, body: makeRecycleReceipt() },
   };
 }
 
