@@ -28,7 +28,11 @@ export const VIEW_BUTTON: Record<"pressed" | "other", string> = {
   other: `${VIEW_BUTTON_BASE} text-zinc-400 hover:text-zinc-200`,
 };
 
-const CHIP_BASE = `rounded-md border px-2.5 py-2.5 text-[11px] font-semibold tracking-wider uppercase disabled:cursor-not-allowed disabled:opacity-50 sm:py-1.5 ${FOCUS_RING}`;
+/**
+ * §7 touch targets: on a phone 10 px of padding each side, an 18 px line box and the 1 px borders
+ * make 40 px; the 11 px text's inherited 1.5 line height alone made 38.5.
+ */
+const CHIP_BASE = `rounded-md border px-2.5 py-2.5 text-[11px] leading-[18px] font-semibold tracking-wider uppercase disabled:cursor-not-allowed disabled:opacity-50 sm:py-1.5 ${FOCUS_RING}`;
 
 /** §6.3 rarity chips: the fill is the pressed cue, so pressed does not rest on hue alone. */
 export const TIER_CHIP: Record<Rarity, Record<"pressed" | "other", string>> = {

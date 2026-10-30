@@ -397,11 +397,11 @@ Top to bottom inside `<main>`: stats, view switch, then the Cards view (toolbar,
 
 **Toolbar** (Cards view, `mt-4`), a visible label above each control; the rarity chips have their own row because six tiers do not fit a select's width:
 
-| Width          | Arrangement                                                                                                                                                         |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| below 640 px   | Row 1: Search, full width. Row 2: Series and Sort, half each. Row 3: the rarity chips, wrapping (three lines at 320 px). Row 4: Duplicates only, then Clear filters |
-| 640–1023 px    | Row 1: Search, full width. Row 2: Series and Sort, half each. Row 3: the rarity chips, then Duplicates only and Clear filters, wrapping as one row                  |
-| 1024 px and up | Row 1, bottom-aligned: Search (grows, at least 14rem), Series (14rem), Sort (12rem). Row 2: the rarity chips, Duplicates only, Clear filters                        |
+| Width          | Arrangement                                                                                                                                                                                     |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| below 640 px   | Row 1: Search, full width. Row 2: Series and Sort, half each. Row 3: the rarity chips, wrapping (two lines at 320 px, manager decision, 2026-10-30). Row 4: Duplicates only, then Clear filters |
+| 640–1023 px    | Row 1: Search, full width. Row 2: Series and Sort, half each. Row 3: the rarity chips, then Duplicates only and Clear filters, wrapping as one row                                              |
+| 1024 px and up | Row 1, bottom-aligned: Search (grows, at least 14rem), Series (14rem), Sort (12rem). Row 2: the rarity chips, Duplicates only, Clear filters                                                    |
 
 Select widths are fixed so the row does not shift when a long series title is chosen; the chosen title truncates inside the select. The chips keep their order (`All`, then lowest tier first) at every width; `gap-2`.
 
@@ -486,7 +486,7 @@ The tile is the card (`card-and-rarity.md` §3) at tile size, inside a button, w
 - Totals line: `text-xs text-zinc-400`, `flex flex-wrap gap-x-4 gap-y-1`; each tier word in `text-rarity-<tier>-text`, its number in `text-zinc-200 tabular-nums`.
 - Stale note: `text-xs text-zinc-400`.
 - View switch: `inline-flex gap-1 rounded-lg bg-zinc-900 p-1`; each button `rounded-md px-3 py-1.5 text-sm font-medium`, pressed `bg-zinc-700 text-white`, not pressed `text-zinc-400 hover:text-zinc-200`, the violet focus ring. The header links' look at a smaller radius.
-- **Rarity chips**: `rounded-md border px-2.5 py-2.5 sm:py-1.5 text-[11px] font-semibold tracking-wider uppercase`, the violet focus ring. A tier chip not pressed: `border-zinc-800 bg-transparent`, the word in `text-rarity-<tier>-text`, hover `border-rarity-<tier>/40`. Pressed: `border-rarity-<tier>/80 bg-rarity-<tier>/15`, the word in `text-rarity-<tier>-text`. Chips sit on `zinc-950` only (`card-and-rarity.md` §4.2). `All`: not pressed `border-zinc-800 text-zinc-300`, pressed `border-zinc-600 bg-zinc-800 text-zinc-100`. The fill is the pressed cue, so it does not rest on hue alone. No glow, no shadow; nothing moves when pressed.
+- **Rarity chips**: `rounded-md border px-2.5 py-2.5 sm:py-1.5 text-[11px] leading-[18px] font-semibold tracking-wider uppercase`, the violet focus ring. A tier chip not pressed: `border-zinc-800 bg-transparent`, the word in `text-rarity-<tier>-text`, hover `border-rarity-<tier>/40`. Pressed: `border-rarity-<tier>/80 bg-rarity-<tier>/15`, the word in `text-rarity-<tier>-text`. Chips sit on `zinc-950` only (`card-and-rarity.md` §4.2). `All`: not pressed `border-zinc-800 text-zinc-300`, pressed `border-zinc-600 bg-zinc-800 text-zinc-100`. The fill is the pressed cue, so it does not rest on hue alone. No glow, no shadow; nothing moves when pressed.
 - Toolbar labels: `text-xs text-zinc-400`, above the control. Not the accounts hint colour (`zinc-500`): these labels are the controls' names and must reach 4.5:1 on `zinc-950`.
 - Search, selects and the price field: the accounts `INPUT` classes (`rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100`, violet focus ring).
 - Duplicates only: a native checkbox `size-4 accent-violet-600` inside its label, `text-sm text-zinc-200`; the whole label is clickable.
@@ -571,7 +571,7 @@ No gradients, glows, glass (backdrop blur), drop shadows, hover lift or zoom, em
 - **Keyboard path, end to end**: Tab to the `Collection (<N>)` link in the header, Enter; focus moves to the `Collection` heading. Tab through the view switch, Search, Series, Sort, the rarity chips, Duplicates only and Clear filters (when shown), then into the tiles. Enter opens the dialog. Tab to `Price`, type, Tab to `List…`, Enter. The confirmation heading has focus; Tab to `List for …`, Enter. The status line is read. Tab to `Duplicates`, then `Recycle…`, Enter, Tab to `Recycle for …`, Enter; the status line is read. Escape closes; focus returns per §3.7. In the Series view, Tab moves through the sort and the `Show cards` buttons only. No step needs a pointer.
 - **No arrow-key grid**: a page holds at most 60 tiles, one Tab stop each. A roving-tabindex grid would need the column count measured from the layout and adds a pattern screen-reader users must learn, for little gain at this size.
 - **Contrast**: everything that must be read is `zinc-400` or lighter, or a tier text colour (`--color-rarity-<tier>-text`), on `zinc-900` or `zinc-950` (and on a pressed chip's `/15` fill over `zinc-950`): all at least 4.5:1, as `card-and-rarity.md` §4.2 computes; the card's own text pairs are checked there too. This view uses no `zinc-500` text. Frames are decorative; rarity is always also the stars or the word (WCAG 1.4.1).
-- **Touch targets**: every control is at least 40 px tall on a phone, the chips and the `BUTTON.text` links included (`py-2.5` and `py-2` on a phone); tiles are far larger.
+- **Touch targets**: every control is at least 40 px tall on a phone, the chips and the `BUTTON.text` links included (`py-2.5` and `py-2` on a phone; the chips' 11 px text sits in an 18 px line box, since its inherited 1.5 line height made them 38.5 px); tiles are far larger.
 - **Reduced motion**: §6.5.
 
 ## 8. Copy

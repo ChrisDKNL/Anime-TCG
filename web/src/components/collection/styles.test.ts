@@ -21,10 +21,12 @@ describe("collection overview styles (collection-overview.md §6)", () => {
   it("chips and view buttons are 40 px touch targets on a phone (§7)", () => {
     for (const rarity of RARITIES) {
       for (const state of ["pressed", "other"] as const) {
-        expect(tokens(TIER_CHIP[rarity][state])).toEqual(expect.arrayContaining(["py-2.5", "sm:py-1.5"]));
+        expect(tokens(TIER_CHIP[rarity][state])).toEqual(
+          expect.arrayContaining(["py-2.5", "leading-[18px]", "sm:py-1.5"]),
+        );
       }
     }
-    expect(tokens(ALL_CHIP.other)).toEqual(expect.arrayContaining(["py-2.5", "sm:py-1.5"]));
+    expect(tokens(ALL_CHIP.other)).toEqual(expect.arrayContaining(["py-2.5", "leading-[18px]", "sm:py-1.5"]));
     expect(tokens(VIEW_BUTTON.other)).toEqual(expect.arrayContaining(["min-h-10", "sm:min-h-0"]));
   });
 

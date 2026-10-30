@@ -159,4 +159,9 @@ test("BUG: the rarity chips are 38.5 px tall on a phone, under §7's 40 px touch
     buttons.map((b) => `${b.textContent} ${b.getBoundingClientRect().height}`),
   );
   expect(heights.filter((entry) => Number(entry.split(" ").at(-1)) < 40)).toEqual([]);
+  // §5.2 (manager decision, 2026-10-30): the seven chips wrap onto two lines at 320 px.
+  const lines = await chips.evaluateAll(
+    (buttons) => new Set(buttons.map((b) => Math.round(b.getBoundingClientRect().top))).size,
+  );
+  expect(lines).toBe(2);
 });

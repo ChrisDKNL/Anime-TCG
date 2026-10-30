@@ -51,7 +51,7 @@ import {
  * - No sideways scroll with every filter on and the longest series chosen; every control fits
  *   the viewport; the rows of §5.2 (search; series and sort side by side; the chips wrapping;
  *   duplicates then Clear filters); Tab reaches every control in visual order; every
- *   control but the chips is at least 40 px tall (the chips are in the bugs file).
+ *   control, the chips included, is at least 40 px tall.
  *
  * Live region (§4.2 "typing", §7 "Results line"), under page.clock
  * - Real keystrokes 200 ms apart announce nothing while typing and the results line once, 500 ms
@@ -444,9 +444,8 @@ test("the toolbar at 320 px: no sideways scroll with every filter on, §5.2's ro
   const chipTops = await rarityGroup(page)
     .getByRole("button")
     .evaluateAll((chips) => [...new Set(chips.map((c) => Math.round(c.getBoundingClientRect().top)))]);
-  // §5.2 says "three lines at 320 px"; the chips as built fit on two, which is within the rule
-  // (they wrap and keep their order). The test holds the rule, not the count.
-  expect(chipTops.length, "the chips wrap at 320 px").toBeGreaterThan(1);
+  // §5.2 (manager decision, 2026-10-30): two lines at 320 px.
+  expect(chipTops.length, "the chips wrap onto two lines at 320 px").toBe(2);
   const duplicatesBox = await box(page.locator("label", { has: duplicatesOnly(page) }));
   const clearBox = await box(clearFilters(page));
   expect(duplicatesBox.y).toBeGreaterThan(Math.max(...chipTops));
@@ -466,16 +465,13 @@ test("the toolbar at 320 px: no sideways scroll with every filter on, §5.2's ro
   await page.keyboard.press("Tab");
   await expect(tiles(page).first()).toBeFocused();
 
-  // §7 "Touch targets": every control at least 40 px tall on a phone (the checkbox by its label).
-  // The rarity chips are 38.5 px: that is collection-overview.bugs.spec.ts, so they are left out
-  // here and asserted there.
-  const targets: Array<[string, Locator]> = controls
-    .filter(([name]) => !["All", "Common", "Uncommon", "Rare", "Epic", "Legendary", "Mythic"].includes(name))
-    .map(([name, control]) =>
-      name === "Duplicates only"
-        ? [name, page.locator("label", { has: duplicatesOnly(page) })]
-        : [name, control],
-    );
+  // §7 "Touch targets": every control at least 40 px tall on a phone (the checkbox by its label),
+  // the rarity chips included.
+  const targets: Array<[string, Locator]> = controls.map(([name, control]) =>
+    name === "Duplicates only"
+      ? [name, page.locator("label", { has: duplicatesOnly(page) })]
+      : [name, control],
+  );
   const short: string[] = [];
   for (const [name, target] of targets) {
     const { height } = await box(target);
