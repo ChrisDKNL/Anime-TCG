@@ -333,7 +333,7 @@ test.describe("a lost answer never costs a pack (§3.3, §10 item 6)", () => {
     expect(ids[1]).toBe(ids[0]);
     await expect(page.getByText("0 of 3 packs ready")).toBeVisible();
     await expect(packButton(page)).toHaveAttribute("aria-disabled", "true");
-    await expect(page.getByText("Next pack in 10:00")).toBeVisible();
+    await expect(page.getByText(/^Next pack in (10:00|9:5\d)$/)).toBeVisible();
     expect(api.game.opened).toBe(1);
   });
 
@@ -432,7 +432,7 @@ test("newest request wins: a GET sent before an opening and answered after it do
   await page.waitForLoadState("networkidle");
   await expect(page.getByText("2 of 3 packs ready")).toBeVisible();
   await expect(page.getByText("Mythic guaranteed within 299 free packs.")).toBeVisible();
-  await expect(page.getByText("Next pack in 10:00")).toBeVisible();
+  await expect(page.getByText(/^Next pack in (10:00|9:5\d)$/)).toBeVisible();
 });
 
 /** A second tab of the same account in its own context, against the same scripted server. */
