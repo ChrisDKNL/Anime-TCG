@@ -139,7 +139,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       # Must match the Caddyfile byte for byte; the smoke test asserts it.
-      EXPECTED_CSP: "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https://s4.anilist.co; connect-src 'self' https://graphql.anilist.co; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
+      EXPECTED_CSP: "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https://s4.anilist.co; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'"
       # Read by compose.yml: the job builds and runs anime-tcg-web:ci and anime-tcg-api:ci.
       TAG: ci
     steps:

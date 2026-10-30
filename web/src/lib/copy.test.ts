@@ -27,7 +27,7 @@ describe("copy", () => {
   it("contains none of the words §8 forbids", () => {
     const rendered: Array<[string, string]> = [];
     renderAll(copy, "copy", rendered);
-    expect(rendered.length).toBeGreaterThan(60);
+    expect(rendered.length).toBeGreaterThan(55);
     const offenders = rendered.filter(([, text]) => FORBIDDEN.test(text));
     expect(offenders).toEqual([]);
   });
@@ -42,6 +42,8 @@ describe("copy", () => {
     expect(copy.cardCount(0)).toBe("No cards yet");
     expect(copy.cardCount(1)).toBe("1 card");
     expect(copy.cardCount(12)).toBe("12 cards");
+    expect(copy.cardCount(1_240)).toBe("1,240 cards");
+    expect(copy.formatCount(2_983)).toBe("2,983");
   });
 
   // The date is the viewer's local calendar day, so the instants are built from local parts. A fixed
@@ -52,6 +54,9 @@ describe("copy", () => {
       "No cards yet · Created 28 Oct 2026",
     );
     expect(copy.metaLine(3, new Date(2025, 0, 2, 0, 0).toISOString())).toBe("3 cards · Created 2 Jan 2025");
+    expect(copy.metaLine(1_240, new Date(2025, 0, 2, 0, 0).toISOString())).toBe(
+      "1,240 cards · Created 2 Jan 2025",
+    );
   });
 
   it("writes every month in three letters, September as Sep (§8 `D Mon YYYY`)", () => {
@@ -87,12 +92,9 @@ describe("copy", () => {
     expect(copy.common.rateLimited).not.toMatch(/\d|five|ten|second|miss/i);
   });
 
-  it("isolates the login with FSI/PDI in the plain strings that cannot hold <bdi>", () => {
+  it("isolates the login with FSI/PDI in the plain string that cannot hold <bdi>", () => {
     const rtl = "\u202Egnp.exe";
     expect(copy.header.accountMenuLabel(rtl)).toBe("Account menu. Signed in as \u2068\u202Egnp.exe\u2069");
-    expect(copy.inventoryCopy.resetConfirm(rtl)).toBe(
-      "Delete every card in \u2068\u202Egnp.exe\u2069? This cannot be undone.",
-    );
   });
 
   it("interpolates the login verbatim", () => {
@@ -103,9 +105,6 @@ describe("copy", () => {
     );
     expect(copy.manageCopy.deleteBodyNoCards("Chris")).toBe(
       "This permanently deletes Chris. There is no undo.",
-    );
-    expect(copy.inventoryCopy.resetConfirm("Chris")).toBe(
-      "Delete every card in \u2068Chris\u2069? This cannot be undone.",
     );
   });
 });

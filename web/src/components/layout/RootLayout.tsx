@@ -1,7 +1,6 @@
 import { Outlet, useRouter } from "@tanstack/react-router";
 import { useCallback } from "react";
 import { useAccountSession } from "../../hooks/useAccountSession";
-import { usePool } from "../../hooks/useCharacterPool";
 import { FrameContext, type Frame } from "../../hooks/useFrame";
 import { GameContext, useGameState } from "../../hooks/useGame";
 import { useSignedInNavigation } from "../../hooks/useSignedInNavigation";
@@ -29,7 +28,8 @@ export function RootLayout() {
   const shell = useShell({ onSessionEnded: toLogin });
 
   const account = session.status === "signedIn" ? session.account : null;
-  const game = useGameState(account, usePool());
+  const packsShowing = useCallback(() => router.state.location.pathname === "/packs", [router]);
+  const game = useGameState({ account, shell: shell.context, packsShowing });
 
   /** `Try again` repeats the session check; an answer that names a session leaves `/login` (§3.2 step 4). */
   const retryCheck = async () => {

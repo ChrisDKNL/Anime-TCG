@@ -1,17 +1,26 @@
 /// <reference lib="dom" />
-import { expect, test as base, type Page, type Route } from "@playwright/test";
+import { expect, test as base, type BrowserContext, type Page, type Route } from "@playwright/test";
 import type { AccountPublic, SessionResponse } from "@anime-tcg/shared/api";
 import type { ErrorCode } from "@anime-tcg/shared/errors";
-import { makeAniListResponse } from "../../src/test/fixtures";
+import {
+  makeAllowance,
+  makeCharacter,
+  makeCollection,
+  makeEntry,
+  makePackOpened,
+  makePacks,
+} from "../../src/test/fixtures";
 
 /**
- * e2e support for the accounts UI against a scripted api (docs/design/accounts.md).
+ * e2e support for the UI against a scripted api (docs/design/accounts.md, packs-page.md).
  *
  * `page.route` answers every `/api/*` request before it reaches the Vite proxy, so these
- * tests never need the real api, and AniList is always served from fixtures (the tester
- * rule: never hit the real AniList API). A request the test did not script is answered
- * with a 500 envelope and fails the test in the fixture teardown, so the UI cannot call
- * something unexpected without the test noticing.
+ * tests never need the real api. Card art comes from a 1x1 PNG in place of AniList's image
+ * CDN, and the browser never calls AniList's API: the fixture fails any test whose page
+ * sends a request to `graphql.anilist.co` (collection-packs.md §8). A request the test did
+ * not script is answered with a 500 envelope and fails the test in the fixture teardown,
+ * so the UI cannot call something unexpected without the test noticing; the packs and
+ * collection routes have a stateful default (`FakeGame`) that a test can override.
  */
 
 // 1x1 transparent PNG so card images resolve without hitting AniList's CDN.
@@ -20,12 +29,9 @@ export const PNG = Buffer.from(
   "base64",
 );
 
-/** Deterministic AniList: a 20-character pool and a 1x1 image for every portrait. */
-export async function mockAniList(page: Page): Promise<void> {
-  await page.route("https://graphql.anilist.co/**", (route) =>
-    route.fulfill({ json: makeAniListResponse(20) }),
-  );
-  await page.route("https://s4.anilist.co/**", (route) =>
+/** A 1x1 image for every portrait, so no test reaches AniList's image CDN. */
+export async function mockCardImages(target: Page | BrowserContext): Promise<void> {
+  await target.route("https://s4.anilist.co/**", (route) =>
     route.fulfill({ body: PNG, contentType: "image/png" }),
   );
 }
@@ -52,6 +58,7 @@ export interface Answer {
   status: number;
   json?: unknown;
   raw?: string;
+  /** Extra response headers, e.g. `Retry-After` on a 429 (the api's rate limiter sends no number in the body). */
   headers?: Record<string, string>;
 }
 
@@ -88,9 +95,85 @@ export function deferred(): { promise: Promise<void>; release: () => void } {
   return { promise, release };
 }
 
+/**
+ * The packs and collection routes of one account, with state: `available` packs of a cap
+ * of `cap`, each opening deals five characters no earlier opening dealt into the
+ * collection, and `pity` free packs to the guarantee. A test scripts these routes itself
+ * to override them.
+ *
+ * Like the api (collection-packs.md §5.3), an opening whose `requestId` this account has
+ * already used is a replay: answered 200 with the cards that opening dealt and the
+ * allowance as it is now, before the allowance is checked, and nothing more is spent.
+ */
+export class FakeGame {
+  cap = 3;
+  available = 3;
+  opened = 0;
+  pity = 300;
+  /** The opening number each `requestId` dealt, for the replay. */
+  readonly openings = new Map<string, number>();
+
+  private allowance() {
+    return makeAllowance({
+      available: this.available,
+      cap: this.cap,
+      nextPackInSeconds: this.available >= this.cap ? null : 600,
+    });
+  }
+
+  /** The `n`th opening's cards (from 1): the fixture pack's tiers, its own characters. */
+  private cards(n: number) {
+    return makePackOpened().cards.map((card) => ({
+      ...card,
+      character: makeCharacter(1_000 + n * 10 + card.slot, { tier: card.rarity }),
+    }));
+  }
+
+  /** The `n`th opening as the api answers it now: its cards, the allowance and pity count of this moment. */
+  private pack(n: number) {
+    return makePackOpened({
+      openingId: `6f9c1a52-4c1e-4b8e-9d3a-${String(n).padStart(12, "0")}`,
+      cards: this.cards(n),
+      allowance: this.allowance(),
+      packsUntilGuarantee: this.pity,
+    });
+  }
+
+  reply(key: string, body?: unknown): Answer | undefined {
+    switch (key) {
+      case "GET /api/packs":
+        return {
+          status: 200,
+          json: makePacks({ allowance: this.allowance(), packsUntilGuarantee: this.pity }),
+        };
+      case "POST /api/packs/open": {
+        const requestId = (body as { requestId?: unknown } | undefined)?.requestId;
+        const replayed = typeof requestId === "string" ? this.openings.get(requestId) : undefined;
+        if (replayed !== undefined) return { status: 200, json: this.pack(replayed) };
+        if (this.available === 0) return envelope(409, "no_pack_available", 600);
+        this.available -= 1;
+        this.opened += 1;
+        this.pity -= 1;
+        if (typeof requestId === "string") this.openings.set(requestId, this.opened);
+        return { status: 201, json: this.pack(this.opened) };
+      }
+      case "GET /api/collection": {
+        const entries = Array.from({ length: this.opened }, (_, i) => this.cards(i + 1))
+          .flat()
+          .sort((a, b) => b.slot - a.slot)
+          .map((card) => makeEntry(card.character, { rarity: card.rarity }));
+        return { status: 200, json: makeCollection(entries) };
+      }
+      default:
+        return undefined;
+    }
+  }
+}
+
 export class FakeApi {
   readonly calls: ApiCall[] = [];
   readonly unexpected: string[] = [];
+  readonly game = new FakeGame();
   private readonly replies = new Map<string, Reply[]>();
 
   /** Scripts `"METHOD /path"`: each call takes the next reply; the last one keeps answering. */
@@ -107,41 +190,57 @@ export class FakeApi {
     return this.calls.filter((call) => call.key === key).map((call) => call.body);
   }
 
+  /** The test's script for `key`, else the game's default for it, else nothing (an unexpected call). */
+  private nextReply(key: string, body: unknown): Reply | undefined {
+    const queue = this.replies.get(key);
+    if (queue === undefined || queue.length === 0) return this.game.reply(key, body);
+    return queue.length > 1 ? queue.shift() : queue[0];
+  }
+
   async handle(route: Route): Promise<void> {
     const request = route.request();
     const key = `${request.method()} ${new URL(request.url()).pathname}`;
     const raw = request.postData();
     const call: ApiCall = { key, body: raw === null ? undefined : (JSON.parse(raw) as unknown) };
     this.calls.push(call);
-    const queue = this.replies.get(key);
-    if (queue === undefined || queue.length === 0) {
+    const reply = this.nextReply(key, call.body);
+    if (reply === undefined) {
       this.unexpected.push(key);
       await route.fulfill(envelope(500, "internal"));
       return;
     }
-    const reply = queue.length > 1 ? queue.shift()! : queue[0];
     const answer = typeof reply === "function" ? await reply(call) : reply;
     if (answer === "abort") {
       await route.abort("connectionrefused");
     } else if (answer.raw !== undefined) {
       await route.fulfill({
         status: answer.status,
-        headers: answer.headers,
         body: answer.raw,
         contentType: "text/html",
+        headers: answer.headers,
       });
     } else if (answer.json === undefined) {
       await route.fulfill({ status: answer.status, headers: answer.headers });
     } else {
-      await route.fulfill({ status: answer.status, headers: answer.headers, json: answer.json });
+      await route.fulfill({ status: answer.status, json: answer.json, headers: answer.headers });
     }
   }
 }
 
-/** `test` with AniList mocked and a scripted api on every page; unscripted api calls fail the test. */
+/** Collects every request a page sends to AniList's API; the browser must send none. */
+export function recordAniListApiCalls(target: Page | BrowserContext): string[] {
+  const seen: string[] = [];
+  target.on("request", (request) => {
+    if (new URL(request.url()).hostname === "graphql.anilist.co") seen.push(request.url());
+  });
+  return seen;
+}
+
+/** `test` with card images mocked and a scripted api on every page; unscripted api calls fail the test. */
 export const test = base.extend<{ api: FakeApi }>({
   api: async ({ page }, provide) => {
-    await mockAniList(page);
+    await mockCardImages(page);
+    const aniListApi = recordAniListApiCalls(page);
     const api = new FakeApi();
     await page.route(
       (url) => url.pathname.startsWith("/api/"),
@@ -149,6 +248,7 @@ export const test = base.extend<{ api: FakeApi }>({
     );
     await provide(api);
     expect(api.unexpected, "api calls the test did not script").toEqual([]);
+    expect(aniListApi, "requests to AniList's API from the browser").toEqual([]);
   },
 });
 

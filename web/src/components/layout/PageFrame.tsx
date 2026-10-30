@@ -9,15 +9,13 @@ import { SKIP_LINK } from "./styles";
 interface Props {
   /** The header's contents: the wordmark, the `Main` navigation and, signed in, the Account control. */
   header: ReactNode;
-  /** Between the banners and `<main>`: the signed-in AniList failure. */
-  beforeMain?: ReactNode;
   children?: ReactNode;
   /** Booting there is no page yet, so no skip link (§3.2 step 1). */
   skipLink?: boolean;
 }
 
 /** The frame every page shares: skip link, header, the app-level banners, `<main>` and the footer. */
-export function PageFrame({ header, beforeMain, children, skipLink = true }: Props) {
+export function PageFrame({ header, children, skipLink = true }: Props) {
   const frame = useFrame();
   return (
     <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_rgb(76_29_149_/_0.25),_transparent_60%)]">
@@ -56,7 +54,6 @@ export function PageFrame({ header, beforeMain, children, skipLink = true }: Pro
           </p>
         )}
 
-        {beforeMain}
         <main>{children}</main>
 
         <footer className="mt-8 text-center text-xs text-zinc-600">

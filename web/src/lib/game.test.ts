@@ -1,160 +1,242 @@
 import { describe, expect, it } from "vitest";
-import { makeCard } from "../test/fixtures";
-import { collectionStats, gameReducer, initialGame, ownedBefore, type GameState } from "./game";
+import { makeAllowance, makeOdds, makePackOpened, makePacks, makeUnavailablePacks } from "../test/fixtures";
+import {
+  controlRow,
+  gameReducer,
+  heldAllowance,
+  heldOdds,
+  initialGame,
+  RATE_LIMIT_FALLBACK_SECONDS,
+  rateLimitWaitSeconds,
+  visibleLine,
+  type GameAction,
+  type GameState,
+  type PacksAnswer,
+} from "./game";
+import { MAX_WAIT_SECONDS } from "./failures";
 
 const CHRIS = "3f2504e0-4f89-11d3-9a0c-0305e82c3301";
-const KRIS = "9b2d7c1e-0000-4000-8000-000000000002";
+const owner = { accountId: CHRIS, session: 0 };
+const REQUEST_ID = "0b8f3c1e-6a3d-4c55-9a47-2f0d8a6b1c11";
 
-function opened(state: GameState, cards: ReturnType<typeof makeCard>[], accountId = CHRIS): GameState {
-  const started = gameReducer(state, {
-    type: "openStarted",
-    accountId,
-    session: state.session,
-    at: cards[0]?.pulledAt ?? 0,
-  });
-  return gameReducer(started, { type: "packLanded", accountId, session: started.session, cards });
+function run(state: GameState, ...actions: GameAction[]): GameState {
+  return actions.reduce(gameReducer, state);
 }
 
+const packsAnswer = (seq: number, overrides = {}): PacksAnswer => ({
+  seq,
+  receivedAt: 1_000 * seq,
+  answer: makePacks(overrides),
+});
+
 describe("gameReducer", () => {
-  it("starts empty for the account", () => {
-    expect(initialGame(CHRIS)).toEqual({
-      accountId: CHRIS,
-      session: 0,
-      cards: [],
-      lastPack: [],
-      ownedBeforePack: new Set(),
+  it("an opening holds its key until an answer settles it", () => {
+    const started = run(initialGame(CHRIS), { type: "openStarted", ...owner, key: REQUEST_ID });
+    expect(started).toMatchObject({ opening: true, key: REQUEST_ID });
+
+    const pack = makePackOpened();
+    const landed = run(started, { type: "opened", ...owner, seq: 2, receivedAt: 50, pack });
+    expect(landed).toMatchObject({ opening: false, key: null, reveal: pack, reveals: 1, line: null });
+    expect(landed.opened).toEqual({
+      seq: 2,
+      receivedAt: 50,
+      allowance: pack.allowance,
+      packsUntilGuarantee: pack.packsUntilGuarantee,
+    });
+  });
+
+  it("keeps the key after no answer and after a 429, and discards it on every other answer", () => {
+    const started = run(initialGame(CHRIS), { type: "openStarted", ...owner, key: REQUEST_ID });
+    expect(run(started, { type: "noAnswer", ...owner })).toMatchObject({
+      key: REQUEST_ID,
       opening: false,
-      reveals: 0,
+      line: { kind: "noAnswer" },
     });
-  });
-
-  it("opening clears the reveal and marks the opening; landing appends without replacing earlier cards", () => {
-    let state = opened(initialGame(CHRIS), [makeCard({ uid: "a", pulledAt: 100 })]);
-    state = gameReducer(state, { type: "openStarted", accountId: CHRIS, session: 0, at: 200 });
-    expect(state.opening).toBe(true);
-    expect(state.lastPack).toEqual([]);
-
-    state = gameReducer(state, {
-      type: "packLanded",
-      accountId: CHRIS,
-      session: 0,
-      cards: [makeCard({ uid: "b", rarity: "rare", pulledAt: 200 })],
+    expect(run(started, { type: "rateLimited", ...owner, until: 9_000 })).toMatchObject({
+      key: REQUEST_ID,
+      waitUntil: 9_000,
+      line: { kind: "wait" },
     });
-    expect(state.opening).toBe(false);
-    expect(state.cards.map((c) => c.uid)).toEqual(["a", "b"]);
-    expect(state.lastPack.map((c) => c.uid)).toEqual(["b"]);
-    expect(state.reveals).toBe(2);
-  });
-
-  it("takes the owned set before the new cards land, so New is right for back-to-back packs", () => {
-    let state = opened(initialGame(CHRIS), [makeCard({ uid: "a", characterId: 1, pulledAt: 100 })]);
-    state = gameReducer(state, { type: "openStarted", accountId: CHRIS, session: 0, at: 200 });
-    expect([...state.ownedBeforePack]).toEqual([1]);
-  });
-
-  it("ignores a pack that lands for another account (an account switch mid-opening)", () => {
-    const started = gameReducer(initialGame(CHRIS), {
-      type: "openStarted",
-      accountId: CHRIS,
-      session: 0,
-      at: 100,
-    });
-    const switched = gameReducer(started, { type: "reset", accountId: KRIS });
-    const late = gameReducer(switched, {
-      type: "packLanded",
-      accountId: CHRIS,
-      session: 0,
-      cards: [makeCard()],
-    });
-    expect(late).toBe(switched);
-    expect(late.cards).toEqual([]);
-    expect(gameReducer(late, { type: "cleared", accountId: CHRIS, session: 0 })).toBe(late);
-  });
-
-  it("a reset drops everything, and signed out there is no account to act for", () => {
-    const state = opened(initialGame(CHRIS), [makeCard()]);
-    const signedOut = gameReducer(state, { type: "reset", accountId: null });
-    expect(signedOut).toEqual(initialGame(null, 1));
-    expect(gameReducer(signedOut, { type: "openStarted", accountId: CHRIS, session: 0, at: 1 })).toBe(
-      signedOut,
-    );
-  });
-
-  it("every reset starts a new session, even for the same account", () => {
-    const first = initialGame(CHRIS);
-    const again = gameReducer(first, { type: "reset", accountId: CHRIS });
-    expect(first.session).toBe(0);
-    expect(again.session).toBe(1);
-    expect(gameReducer(again, { type: "reset", accountId: null }).session).toBe(2);
-  });
-
-  it("drops a pack from an ended session after the same account signed in again", () => {
-    const started = gameReducer(initialGame(CHRIS), {
-      type: "openStarted",
-      accountId: CHRIS,
-      session: 0,
-      at: 100,
-    });
-    const ended = gameReducer(started, { type: "reset", accountId: null });
-    const back = gameReducer(ended, { type: "reset", accountId: CHRIS });
-    expect(back).toMatchObject({ accountId: CHRIS, session: 2, opening: false, cards: [] });
-
-    const late = gameReducer(back, { type: "packLanded", accountId: CHRIS, session: 0, cards: [makeCard()] });
-    expect(late).toBe(back);
-    expect(gameReducer(back, { type: "cleared", accountId: CHRIS, session: 0 })).toBe(back);
-    // The new session's own actions still apply.
-    const own = gameReducer(back, { type: "openStarted", accountId: CHRIS, session: 2, at: 200 });
-    expect(own.opening).toBe(true);
-  });
-
-  it("cleared empties the collection and keeps the last reveal", () => {
-    const state = gameReducer(opened(initialGame(CHRIS), [makeCard()]), {
-      type: "cleared",
-      accountId: CHRIS,
-      session: 0,
-    });
-    expect(state.cards).toEqual([]);
-    expect(state.lastPack).toHaveLength(1);
-  });
-
-  it("neither reads nor writes the pre-accounts localStorage key", () => {
-    localStorage.setItem("anime-tcg:inventory:v1", JSON.stringify([makeCard({ uid: "old" })]));
-    const state = opened(initialGame(CHRIS), [makeCard({ uid: "fresh" })]);
-    expect(state.cards.map((c) => c.uid)).toEqual(["fresh"]);
-    expect(JSON.parse(localStorage.getItem("anime-tcg:inventory:v1") ?? "[]")).toMatchObject([
-      { uid: "old" },
-    ]);
-    expect(localStorage.length).toBe(1);
-  });
-});
-
-describe("collectionStats", () => {
-  it("derives total, unique and per-rarity counts", () => {
     expect(
-      collectionStats([
-        makeCard({ uid: "a", characterId: 1 }),
-        makeCard({ uid: "b", characterId: 1, rarity: "legendary" }),
-        makeCard({ uid: "c", characterId: 2, rarity: "rare" }),
-      ]),
-    ).toEqual({ total: 3, unique: 2, byRarity: { common: 1, rare: 1, legendary: 1 } });
-    expect(collectionStats([])).toEqual({
-      total: 0,
-      unique: 0,
-      byRarity: { common: 0, rare: 0, legendary: 0 },
+      run(started, { type: "noneLeft", ...owner, seq: 3, receivedAt: 10, retryAfterSeconds: 60 }),
+    ).toMatchObject({ key: null, line: { kind: "noneLeft" } });
+    expect(run(started, { type: "unavailable", ...owner, seq: 3 })).toMatchObject({
+      key: null,
+      unavailableSince: 3,
+      line: null,
     });
+    expect(run(started, { type: "failed", ...owner, row: "ready" })).toMatchObject({
+      key: null,
+      line: { kind: "failed", row: "ready" },
+    });
+  });
+
+  it("a retry with a held key keeps it, and the reveal stays until the answer replaces it", () => {
+    const pack = makePackOpened();
+    const state = run(
+      initialGame(CHRIS),
+      { type: "openStarted", ...owner, key: "a" },
+      { type: "opened", ...owner, seq: 1, receivedAt: 0, pack },
+      { type: "openStarted", ...owner, key: REQUEST_ID },
+    );
+    expect(state).toMatchObject({ opening: true, key: REQUEST_ID, reveal: pack });
+  });
+
+  it("drops an action of another account or an earlier session", () => {
+    const state = initialGame(CHRIS, 2);
+    const pack = makePackOpened();
+    expect(run(state, { type: "opened", accountId: CHRIS, session: 1, seq: 1, receivedAt: 0, pack })).toBe(
+      state,
+    );
+    expect(run(state, { type: "openStarted", accountId: "someone-else", session: 2, key: REQUEST_ID })).toBe(
+      state,
+    );
+  });
+
+  it("keeps the collection overview's controls, for this session only", () => {
+    const state = run(initialGame(CHRIS), {
+      type: "overview",
+      ...owner,
+      action: { type: "query", query: "spike" },
+    });
+    expect(state.overview).toMatchObject({ query: "spike", page: 1 });
+    expect(
+      run(state, { type: "overview", accountId: CHRIS, session: 1, action: { type: "query", query: "x" } }),
+    ).toBe(state);
+  });
+
+  it("a reset starts the next session empty, the overview's controls included", () => {
+    const state = run(
+      initialGame(CHRIS),
+      { type: "overview", ...owner, action: { type: "toggleRarity", rarity: "epic" } },
+      { type: "openStarted", ...owner, key: REQUEST_ID },
+      { type: "reset", accountId: CHRIS },
+    );
+    expect(state).toEqual(initialGame(CHRIS, 1));
+  });
+
+  it("never touches browser storage", () => {
+    localStorage.setItem("anime-tcg:inventory:v1", "[]");
+    run(initialGame(CHRIS), { type: "opened", ...owner, seq: 1, receivedAt: 0, pack: makePackOpened() });
+    expect(localStorage.length).toBe(1);
+    expect(localStorage.getItem("anime-tcg:inventory:v1")).toBe("[]");
   });
 });
 
-describe("ownedBefore", () => {
-  it("only reports characters pulled strictly before the timestamp", () => {
-    const owned = ownedBefore(
-      [
-        makeCard({ uid: "old", characterId: 1, pulledAt: 100 }),
-        makeCard({ uid: "new", characterId: 2, pulledAt: 200 }),
-      ],
-      200,
+describe("heldAllowance: the newest request wins (packs-page.md §3.1 step 5)", () => {
+  it("is null before any answer", () => {
+    expect(heldAllowance(undefined, initialGame(CHRIS))).toBeNull();
+  });
+
+  it("an opening's answer beats an older GET, and a newer GET beats the opening", () => {
+    const pack = makePackOpened({ allowance: { available: 1 }, packsUntilGuarantee: 298 });
+    const state = run(initialGame(CHRIS), { type: "opened", ...owner, seq: 5, receivedAt: 70, pack });
+
+    // A GET sent before the opening (seq 4) that answers after it is ignored.
+    const overtaken = heldAllowance(packsAnswer(4, { allowance: makeAllowance({ available: 3 }) }), state);
+    expect(overtaken).toMatchObject({ seq: 5, receivedAt: 70, packsUntilGuarantee: 298 });
+    expect(overtaken?.allowance.available).toBe(1);
+
+    const newer = heldAllowance(packsAnswer(6, { allowance: makeAllowance({ available: 2 }) }), state);
+    expect(newer).toMatchObject({ seq: 6, packsUntilGuarantee: 300 });
+    expect(newer?.allowance.available).toBe(2);
+  });
+
+  it("a 409 shows no pack ready and counts down from its retryAfterSeconds over what was held", () => {
+    const state = run(initialGame(CHRIS), {
+      type: "noneLeft",
+      ...owner,
+      seq: 7,
+      receivedAt: 800,
+      retryAfterSeconds: 420,
+    });
+    const held = heldAllowance(
+      packsAnswer(6, {
+        allowance: makeAllowance({ available: 2, nextPackInSeconds: 30 }),
+        packsUntilGuarantee: 250,
+      }),
+      state,
     );
-    expect(owned.has(1)).toBe(true);
-    expect(owned.has(2)).toBe(false);
+    expect(held).toEqual({
+      seq: 7,
+      receivedAt: 800,
+      allowance: { available: 0, cap: 3, intervalSeconds: 600, nextPackInSeconds: 420 },
+      packsUntilGuarantee: 250,
+    });
+    // The one GET after the 409 replaces it.
+    expect(heldAllowance(packsAnswer(8), state)?.seq).toBe(8);
+  });
+});
+
+describe("heldOdds", () => {
+  it("is the last GET's odds, null without a snapshot", () => {
+    const state = initialGame(CHRIS);
+    expect(heldOdds(undefined, state)).toBeNull();
+    expect(heldOdds(packsAnswer(1), state)).toEqual(makeOdds());
+    expect(heldOdds({ seq: 1, receivedAt: 0, answer: makeUnavailablePacks() }, state)).toBeNull();
+  });
+
+  it("a 503 makes cards unavailable until a newer GET answers with odds", () => {
+    const state = run(initialGame(CHRIS), { type: "unavailable", ...owner, seq: 4 });
+    expect(heldOdds(packsAnswer(3), state)).toBeNull();
+    expect(heldOdds(packsAnswer(5), state)).toEqual(makeOdds());
+  });
+});
+
+describe("rateLimitWaitSeconds", () => {
+  it("waits as long as Retry-After says, up to the cap", () => {
+    expect(rateLimitWaitSeconds(1)).toBe(1);
+    expect(rateLimitWaitSeconds(42)).toBe(42);
+    expect(rateLimitWaitSeconds(3599)).toBe(3599);
+    expect(rateLimitWaitSeconds(3600)).toBe(3600);
+  });
+
+  it("caps a longer Retry-After at 3600 s, however large", () => {
+    expect(MAX_WAIT_SECONDS).toBe(3600);
+    expect(rateLimitWaitSeconds(3601)).toBe(3600);
+    expect(rateLimitWaitSeconds(86_400)).toBe(3600);
+    expect(rateLimitWaitSeconds(Infinity)).toBe(3600);
+  });
+
+  it("without Retry-After waits the rate limit's 60 s window", () => {
+    expect(RATE_LIMIT_FALLBACK_SECONDS).toBe(60);
+    expect(rateLimitWaitSeconds(undefined)).toBe(60);
+  });
+});
+
+describe("controlRow and visibleLine (§4.1)", () => {
+  const held = (available: number) => ({
+    seq: 1,
+    receivedAt: 0,
+    allowance: makeAllowance({ available, nextPackInSeconds: available === 3 ? null : 60 }),
+    packsUntilGuarantee: 300,
+  });
+
+  it("reads the row from the count and the odds", () => {
+    const odds = makeOdds();
+    expect(controlRow(held(3), odds)).toBe("atCap");
+    expect(controlRow(held(1), odds)).toBe("ready");
+    expect(controlRow(held(0), odds)).toBe("waiting");
+    expect(controlRow(held(2), null)).toBe("unavailable");
+  });
+
+  it("clears each line by its own rule", () => {
+    const base = initialGame(CHRIS);
+    const noneLeft: GameState = { ...base, line: { kind: "noneLeft" } };
+    expect(visibleLine(noneLeft, "waiting", false)).toBe("noneLeft");
+    expect(visibleLine(noneLeft, "ready", false)).toBeNull();
+
+    const failed: GameState = { ...base, line: { kind: "failed", row: "ready" } };
+    expect(visibleLine(failed, "ready", false)).toBe("failed");
+    expect(visibleLine(failed, "waiting", false)).toBeNull();
+
+    const noAnswer: GameState = { ...base, key: REQUEST_ID, line: { kind: "noAnswer" } };
+    expect(visibleLine(noAnswer, "waiting", false)).toBe("noAnswer");
+    expect(visibleLine({ ...noAnswer, key: null }, "ready", false)).toBeNull();
+
+    const wait: GameState = { ...base, line: { kind: "wait" } };
+    expect(visibleLine(wait, "ready", true)).toBe("wait");
+    expect(visibleLine(wait, "ready", false)).toBeNull();
+    expect(visibleLine(base, "ready", true)).toBeNull();
   });
 });

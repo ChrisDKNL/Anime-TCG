@@ -6,7 +6,8 @@ import { useOptionalGame, type Game } from "../../hooks/useGame";
 import { useShellContext } from "../../hooks/useShell";
 import { menuCopy } from "../../lib/copy";
 import { rethrowUnlessKnown } from "../../lib/failures";
-import { headerCopy, poolCopy } from "../../lib/navigationCopy";
+import { headerCopy } from "../../lib/navigationCopy";
+import { formatCount } from "../../lib/packsCopy";
 import { AccountControl } from "../account/AccountControl";
 import { PageFrame } from "./PageFrame";
 import { PageLink } from "./PageLink";
@@ -50,7 +51,7 @@ function SignedInFrame({ game, children }: { game: Game; children: ReactNode }) 
     await navigate({ to: "/", replace: true });
   };
 
-  const { account, pool } = game;
+  const { account } = game;
   return (
     <PageFrame
       header={
@@ -64,7 +65,7 @@ function SignedInFrame({ game, children }: { game: Game; children: ReactNode }) 
             <PageLink to="/collection" className={NAV_LINK}>
               {headerCopy.collection}{" "}
               {/* The count leaves the screen below 400 px and stays in the accessible name. */}
-              <span className="sr-only min-[400px]:not-sr-only">({game.stats.total})</span>
+              <span className="sr-only min-[400px]:not-sr-only">({formatCount(game.cardCount)})</span>
             </PageLink>
           </nav>
           <div className="flex min-w-0 justify-end">
@@ -75,25 +76,6 @@ function SignedInFrame({ game, children }: { game: Game; children: ReactNode }) 
             />
           </div>
         </>
-      }
-      beforeMain={
-        pool.status === "error" && (
-          <div
-            role="alert"
-            className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-900/60 bg-red-950/40 p-4 text-sm text-red-200"
-          >
-            <span>
-              {poolCopy.failed} {pool.error}
-            </span>
-            <button
-              type="button"
-              onClick={() => pool.reload(true)}
-              className="rounded-lg bg-red-800/60 px-3 py-1 font-medium hover:bg-red-700/60"
-            >
-              {poolCopy.retry}
-            </button>
-          </div>
-        )
       }
     >
       {children}

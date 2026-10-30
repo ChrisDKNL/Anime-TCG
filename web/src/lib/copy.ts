@@ -2,17 +2,17 @@
  * Every user-facing string of the accounts feature, verbatim from
  * docs/design/accounts.md §8. Functions take the login, a count phrase or the
  * seconds they interpolate; the copy test renders all of them and scans for the
- * words §8 forbids. The plain strings that embed a login (an aria-label, a
- * confirm dialog) wrap it in directional isolates, since <bdi> cannot go there.
+ * words §8 forbids. The plain strings that embed a login (an aria-label)
+ * wrap it in directional isolates, since <bdi> cannot go there.
  * Page headings and titles live in the route list (routes.ts): the navigation
  * spec moved them there and took the login out of the title bar.
  */
 
-import { isolateLogin } from "./loginText";
+import { isolate } from "./bidi";
 
 /** `Manage account` has no ellipsis: it goes to a page (navigation-and-landing.md §3.4). */
 export const header = {
-  accountMenuLabel: (login: string) => `Account menu. Signed in as ${isolateLogin(login)}`,
+  accountMenuLabel: (login: string) => `Account menu. Signed in as ${isolate(login)}`,
   manage: "Manage account",
   logOut: "Log out",
 } as const;
@@ -118,14 +118,17 @@ export const banners = {
   loading: "Loading…",
 } as const;
 
-export const inventoryCopy = {
-  resetConfirm: (login: string) => `Delete every card in ${isolateLogin(login)}? This cannot be undone.`,
-} as const;
+const NUMBER = new Intl.NumberFormat("en-GB");
 
-/** `No cards yet` / `1 card` / `<N> cards`, used wherever a card count is shown. */
+/** A count as `Intl.NumberFormat("en-GB")` writes it: `2,983`. */
+export function formatCount(n: number): string {
+  return NUMBER.format(n);
+}
+
+/** `No cards yet` / `1 card` / `<N> cards` (`1,240 cards`), used wherever a card count is shown. */
 export function cardCount(n: number): string {
   if (n === 0) return "No cards yet";
-  return n === 1 ? "1 card" : `${n} cards`;
+  return n === 1 ? "1 card" : `${formatCount(n)} cards`;
 }
 
 /**
@@ -135,12 +138,12 @@ export function cardCount(n: number): string {
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
 
 /** `D Mon YYYY` in the viewer's time zone, e.g. `5 Sep 2026`. */
-function createdDate(createdAt: string): string {
-  const date = new Date(createdAt);
+export function shortDate(isoDateTime: string): string {
+  const date = new Date(isoDateTime);
   return `${date.getDate()} ${MONTHS[date.getMonth()] ?? ""} ${date.getFullYear()}`;
 }
 
 /** `<N cards> · Created <D Mon YYYY>` for the Manage account header. */
 export function metaLine(cards: number, createdAt: string): string {
-  return `${cardCount(cards)} · Created ${createdDate(createdAt)}`;
+  return `${cardCount(cards)} · Created ${shortDate(createdAt)}`;
 }

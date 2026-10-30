@@ -11,7 +11,7 @@ import { FormBanner } from "./FormBanner";
 import type { CopyText } from "../../lib/loginText";
 import { LoginText } from "./LoginText";
 import { PasswordField, SubmitButton, TextField } from "./fields";
-import { BODY_TEXT, BUTTON, HINT_TEXT, PANEL_HEADING, SECTION_HEADING } from "./styles";
+import { BODY_TEXT, BUTTON, DIALOG, HINT_TEXT, PANEL_HEADING, SECTION_HEADING } from "./styles";
 
 interface Props {
   account: AccountPublic;
@@ -123,7 +123,7 @@ function DeleteDialog({ open, openingId, account, onClose, onDeleted }: DeleteDi
       onClose={() => {
         if (ref.current?.open !== true) onClose();
       }}
-      className="pop-in m-auto max-h-[85vh] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-100 backdrop:bg-zinc-950/70 backdrop:backdrop-blur-sm focus:outline-none"
+      className={DIALOG}
     >
       {open && (
         <ConfirmDelete

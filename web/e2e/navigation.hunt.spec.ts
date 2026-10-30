@@ -6,8 +6,8 @@ import {
   expect,
   isolated,
   makeAccount,
+  mockCardImages,
   noContent,
-  PNG,
   recordStatusTexts,
   signedIn,
   signedOut,
@@ -15,7 +15,6 @@ import {
   test,
   type Answer,
 } from "./support/fake-api";
-import { makeAniListResponse } from "../src/test/fixtures";
 
 /**
  * Test plan (tester's hunt): what the navigation PR's own suites do not reach, in a real browser
@@ -95,7 +94,7 @@ const h1 = (page: Page, name: string) => page.getByRole("heading", { level: 1, n
 const mainNav = (page: Page) => page.getByRole("navigation", { name: "Main" });
 const control = (page: Page, login = "Chris") =>
   page.getByRole("button", { name: `Account menu. Signed in as ${isolated(login)}`, exact: true });
-const packButton = (page: Page) => page.getByRole("button", { name: /open booster pack/i });
+const packButton = (page: Page) => page.getByRole("button", { name: "Open pack", exact: true });
 const loginField = (page: Page) => page.getByRole("textbox", { name: "Login", exact: true });
 const passwordField = (page: Page) => page.getByLabel("Password", { exact: true });
 const scrollY = (page: Page) => page.evaluate(() => window.scrollY);
@@ -137,8 +136,7 @@ function recordOrigins(page: Page): { foreign: string[] } {
       protocol === "about:" ||
       hostname === "localhost" ||
       hostname === "127.0.0.1" ||
-      // AniList is mocked by the fixture; anything else is foreign.
-      hostname === "graphql.anilist.co" ||
+      // AniList's image CDN is mocked by the fixture; anything else, its API included, is foreign.
       hostname === "s4.anilist.co"
     );
   };
@@ -233,21 +231,28 @@ test.describe("dialogs, openings and the session (§3.10, §3.5)", () => {
     api,
   }) => {
     api.on("GET /api/session", signedIn(CHRIS));
+    const opening = deferred();
+    api.on("POST /api/packs/open", async ({ key }) => {
+      await opening.promise;
+      return api.game.reply(key)!;
+    });
     await signedInAt(page, "/packs");
-    await expect(packButton(page)).toBeEnabled();
+    await expect(page.getByText("3 of 3 packs ready")).toBeVisible();
     await packButton(page).click();
     // The links stay usable during an opening; the Account control does not (accounts.md §4.5).
+    await expect(control(page)).toBeDisabled();
     await mainNav(page)
       .getByRole("link", { name: /^Collection/ })
       .click();
     await expect(h1(page, "Collection")).toBeFocused();
+    opening.release();
     await expect(mainNav(page).getByRole("link", { name: "Collection (5)" })).toBeVisible();
     await expect(control(page)).toBeEnabled();
 
     await mainNav(page).getByRole("link", { name: "Packs", exact: true }).click();
     await expect(h1(page, "Packs")).toBeFocused();
     await expect(page.getByRole("article")).toHaveCount(5);
-    await expect(page.locator("article.card-reveal")).toHaveCount(0);
+    await expect(page.locator("li.animate-card-enter")).toHaveCount(0);
   });
 
   test("the session ending while a pack opens: /login with the banner, and the pack never reaches the next sign-in", async ({
@@ -255,37 +260,42 @@ test.describe("dialogs, openings and the session (§3.10, §3.5)", () => {
     api,
   }) => {
     api.on("GET /api/session", signedIn(CHRIS));
-    const hold = deferred();
+    const rename = deferred();
     api.on("PATCH /api/account/login", async () => {
-      await hold.promise;
+      await rename.promise;
       return envelope(401, "unauthenticated");
     });
+    const opening = deferred();
+    api.on("POST /api/packs/open", async ({ key }) => {
+      await opening.promise;
+      return api.game.reply(key)!;
+    });
     api.on("POST /api/session/login", signedIn(CHRIS));
-    // A fake clock that flows like the real one, so the reveal timer can be run out below instead of waited for.
-    await page.clock.install();
     await signedInAt(page, "/account");
     await page.getByRole("main").getByRole("textbox", { name: "New login" }).fill("Kris");
     await page.getByRole("main").getByRole("button", { name: "Save" }).click();
     await expect.poll(() => api.count("PATCH /api/account/login")).toBe(1);
 
     await mainNav(page).getByRole("link", { name: "Packs", exact: true }).click();
-    await expect(packButton(page)).toBeEnabled();
+    await expect(page.getByText("3 of 3 packs ready")).toBeVisible();
     await packButton(page).click();
-    hold.release();
+    rename.release();
 
     await expect(page).toHaveURL(/\/login$/);
     await expect(h1(page, "Log in")).toBeFocused();
     await expect(page.getByRole("status").filter({ hasText: SESSION_ENDED })).toBeVisible();
     expect(await heldReturnTo(page)).toBe("/packs");
-    // Fires every timer due in the next second, useGame's 350 ms reveal among them: the pack has
-    // landed, while signed out, before the next sign-in starts.
-    await page.clock.runFor(1_000);
+    // The opening answers while signed out: the server dealt it, the page drops it.
+    opening.release();
+    await expect.poll(() => api.game.opened).toBe(1);
     await logIn(page);
     await expect(page).toHaveURL(/\/packs$/);
     await expect(h1(page, "Packs")).toBeFocused();
     await expect(page.getByRole("article")).toHaveCount(0);
+    await expect(packButton(page)).toBeVisible();
+    // The collection is the server's, so the dealt pack is in it.
     await expect(mainNav(page).getByRole("link", { name: /^Collection/ })).toHaveAccessibleName(
-      "Collection (0)",
+      "Collection (5)",
     );
   });
 
@@ -344,12 +354,7 @@ test.describe("dialogs, openings and the session (§3.10, §3.5)", () => {
 test.describe("modified clicks open a new tab and leave this one alone (§3.5 step 3)", () => {
   /** The new tab boots from its own session check: script it for the whole context. */
   async function scriptContext(context: BrowserContext, session: Answer) {
-    await context.route("https://graphql.anilist.co/**", (route) =>
-      route.fulfill({ json: makeAniListResponse(20) }),
-    );
-    await context.route("https://s4.anilist.co/**", (route) =>
-      route.fulfill({ body: PNG, contentType: "image/png" }),
-    );
+    await mockCardImages(context);
     await context.route(
       (url) => url.pathname.startsWith("/api/"),
       (route) =>
@@ -535,7 +540,7 @@ test.describe("phone widths (§5.1, §7 touch targets)", () => {
       await mainNav(page).getByRole("link", { name: "Packs", exact: true }).click();
       await expect(h1(page, "Packs")).toBeFocused();
       for (let pack = 1; pack <= 3; pack += 1) {
-        await expect(packButton(page)).toBeEnabled();
+        await expect(page.getByText(`${4 - pack} of 3 packs ready`)).toBeVisible();
         await packButton(page).click();
         await expect(mainNav(page).getByRole("link", { name: `Collection (${pack * 5})` })).toBeVisible();
       }
@@ -636,10 +641,12 @@ test.describe("screen-reader order on navigation (§3.6, §7)", () => {
 test.describe("scroll (§3.11)", () => {
   test("Forward restores the position of the entry it returns to", async ({ page, api }) => {
     api.on("GET /api/session", signedIn(CHRIS));
+    api.game.cap = 4;
+    api.game.available = 4;
     await page.setViewportSize({ width: 800, height: 420 });
     await signedInAt(page, "/packs");
     for (let pack = 1; pack <= 4; pack += 1) {
-      await expect(packButton(page)).toBeEnabled();
+      await expect(page.getByText(`${5 - pack} of 4 packs ready`)).toBeVisible();
       await packButton(page).click();
       await expect(mainNav(page).getByRole("link", { name: `Collection (${pack * 5})` })).toBeVisible();
     }
@@ -656,12 +663,17 @@ test.describe("scroll (§3.11)", () => {
     await expect.poll(() => scrollY(page)).toBeGreaterThan(500);
   });
 
-  test("Back across a reload starts at the top, with the h1 focused", async ({ page, api }) => {
+  test("Back across a reload: the h1 focused, and the collection the layout holds again keeps its place", async ({
+    page,
+    api,
+  }) => {
     api.on("GET /api/session", signedIn(CHRIS));
+    api.game.cap = 4;
+    api.game.available = 4;
     await page.setViewportSize({ width: 800, height: 420 });
     await signedInAt(page, "/packs");
     for (let pack = 1; pack <= 4; pack += 1) {
-      await expect(packButton(page)).toBeEnabled();
+      await expect(page.getByText(`${5 - pack} of 4 packs ready`)).toBeVisible();
       await packButton(page).click();
       await expect(mainNav(page).getByRole("link", { name: `Collection (${pack * 5})` })).toBeVisible();
     }
@@ -678,11 +690,12 @@ test.describe("scroll (§3.11)", () => {
     await page.goBack();
     await expect(page).toHaveURL(/\/collection$/);
     await expect.poll(() => focusedHeading(page)).toBe("Collection");
-    // The reload discarded the collection (§3.10 step 3), so there is nothing to restore into.
+    // The reload discarded the page state (§3.10 step 3), but the collection is the server's: the layout
+    // asked for it again at sign-in, so it is held and its position is restored (§3.11 step 3).
     await expect(mainNav(page).getByRole("link", { name: /^Collection/ })).toHaveAccessibleName(
-      "Collection (0)",
+      "Collection (20)",
     );
-    await expect.poll(() => scrollY(page)).toBe(0);
+    await expect.poll(() => scrollY(page)).toBeGreaterThan(500);
   });
 });
 
@@ -1067,7 +1080,9 @@ test.describe("copy (§8 Words)", () => {
       await signedInAt(page, path);
       await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
       const text = await page.evaluate(() => document.body.innerText);
-      expect(text.match(FORBIDDEN_RE)?.[0] ?? null, `${path}: ${text}`).toBeNull();
+      // The one exception (§8, packs-page.md §9): the owner's `free pack(s)` on the packs page.
+      const scanned = path === "/packs" ? text.replace(/\bfree (?=packs?\b)/gi, "") : text;
+      expect(scanned.match(FORBIDDEN_RE)?.[0] ?? null, `${path}: ${text}`).toBeNull();
     }
   });
 });
