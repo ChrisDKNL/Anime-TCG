@@ -65,6 +65,8 @@ function renderLanding(routes: Record<string, MockHandler> = {}) {
 }
 
 const main = () => within(screen.getByRole("main"));
+/** Lets answers already sent reach the page. */
+const settle = () => act(() => new Promise<void>((resolve) => setTimeout(resolve, 50)));
 /** The demo button, once the page (not the boot frame, which has a `main` of its own) has rendered. */
 async function demoButton(name = "Open a demo pack") {
   await pageHeading("Anime TCG");
@@ -304,6 +306,18 @@ describe("opening demo packs", () => {
     await waitFor(() => expect(heading).toHaveFocus());
     expect(main().queryByRole("button")).not.toBeInTheDocument();
     expect(callsTo(fetchMock, DEMO_OPEN)).toHaveLength(3);
+  });
+
+  it("the facts are asked for once per page load: a link out and Back sends no second GET /api/demo", async () => {
+    const { fetchMock, history } = renderLanding();
+    expect(await screen.findByText(LEDE)).toBeInTheDocument();
+    act(() => history.push("/login"));
+    await pageHeading("Log in");
+    act(() => history.back());
+    await pageHeading("Anime TCG");
+    expect(screen.getByText(LEDE)).toBeInTheDocument();
+    await settle();
+    expect(callsTo(fetchMock, DEMO)).toHaveLength(1);
   });
 
   it("the cap holds without the facts: ten packs and then the Join offer, the facts never answered", async () => {

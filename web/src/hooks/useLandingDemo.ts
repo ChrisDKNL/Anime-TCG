@@ -29,6 +29,9 @@ export function useLandingDemo() {
   const facts = useQuery(
     queryOptions({
       queryKey: DEMO_FACTS_KEY,
+      // Once per page load: a return to `/` shows the facts held; the banner's `Try again` and a demo
+      // pack that answers after a failure still refetch them.
+      staleTime: Infinity,
       queryFn: async (): Promise<DemoResponse> => {
         try {
           return await getDemo();
