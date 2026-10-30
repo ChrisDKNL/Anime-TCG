@@ -1,6 +1,6 @@
 import type { CharacterPublic, FranchiseRef, Rarity } from "@anime-tcg/shared/api";
 import { RARITY_LABEL } from "@anime-tcg/shared/rarity";
-import { useId } from "react";
+import { useId, type ReactNode, type Ref } from "react";
 import { formatCount, listSeparator, revealCopy, summaryParts } from "../../lib/packsCopy";
 import { Card, type CardEffects } from "../card/Card";
 import { NEW_MARKER, REVEAL_GRID, TIER_TEXT } from "./styles";
@@ -17,7 +17,8 @@ export interface RevealCard {
 export interface RevealPack {
   /** Changes with every opening, so a new pack's slots enter afresh. */
   id: string;
-  heading: string;
+  /** Plain copy, or markup with an AniList title in a `<bdi>` (a shop pack's `<title> pack`). */
+  heading: ReactNode;
   cards: readonly RevealCard[];
   franchises: readonly FranchiseRef[];
   /** The special-pack lines under the summary, in order (card-and-rarity.md §7.1). */
@@ -34,6 +35,10 @@ interface Props {
   showNew: boolean;
   /** An opening is in flight: the previous pack stays, marked busy, until the answer replaces it. */
   busy: boolean;
+  /** The heading as a focus target: the Shop page moves focus to it after a purchase (market-and-shop.md §3.3). */
+  headingRef?: Ref<HTMLHeadingElement>;
+  /** The section's spacing on its page: below the pack control on `/packs`, above the themes on `/shop`. */
+  className?: string;
 }
 
 /** The empty slots before the first pack: a pack's five cards, so the first reveal moves nothing. */
@@ -46,11 +51,20 @@ const EMPTY_SLOTS = [0, 1, 2, 3, 4] as const;
  * markers, no lines and no effects. The entrance is the same for every pack:
  * no tier, kind or guarantee gets more motion, delay or colour than its frame.
  */
-export function Reveal({ pack, poolSize, entering, effects, showNew, busy }: Props) {
+export function Reveal({
+  pack,
+  poolSize,
+  entering,
+  effects,
+  showNew,
+  busy,
+  headingRef,
+  className = "mt-10",
+}: Props) {
   const headingId = useId();
   if (pack === null) {
     return (
-      <section className="mt-10">
+      <section className={className}>
         <div aria-hidden="true" className={`mt-4 ${REVEAL_GRID}`}>
           {EMPTY_SLOTS.map((slot) => (
             <div key={slot}>
@@ -66,8 +80,13 @@ export function Reveal({ pack, poolSize, entering, effects, showNew, busy }: Pro
   const cards = [...pack.cards].sort((a, b) => a.slot - b.slot);
   const newCount = showNew ? cards.filter((card) => card.isNew === true).length : 0;
   return (
-    <section aria-labelledby={headingId} className="mt-10">
-      <h2 id={headingId} className="text-lg font-bold text-zinc-100">
+    <section aria-labelledby={headingId} className={className}>
+      <h2
+        id={headingId}
+        ref={headingRef}
+        tabIndex={headingRef === undefined ? undefined : -1}
+        className="text-lg font-bold break-words text-zinc-100 focus:outline-none"
+      >
         {pack.heading}
       </h2>
       <Summary rarities={cards.map((card) => card.rarity)} newCount={newCount} />

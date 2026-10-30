@@ -22,6 +22,7 @@ import { NotFoundPage } from "./pages/NotFoundPage";
 import { PacksPage } from "./pages/PacksPage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { RegisterPage } from "./pages/RegisterPage";
+import { ShopPage } from "./pages/ShopPage";
 
 /**
  * The route tree (ADR 0012: TanStack Router, code-based, no generated files),
@@ -78,11 +79,12 @@ const routeTree = rootRoute.addChildren([
   ]),
   accountLayout.addChildren([
     createRoute({ getParentRoute: () => accountLayout, path: "/packs", component: PacksPage }),
+    createRoute({ getParentRoute: () => accountLayout, path: "/shop", component: ShopPage }),
     createRoute({ getParentRoute: () => accountLayout, path: "/collection", component: CollectionPage }),
     createRoute({ getParentRoute: () => accountLayout, path: "/profile", component: ProfilePage }),
     createRoute({ getParentRoute: () => accountLayout, path: "/account", component: AccountPage }),
   ]),
-  // Everything else, `/shop` and `/market` included until their PRs (§3.1 rule 1).
+  // Everything else, `/market` included until its PR (§3.1 rule 1).
   createRoute({ getParentRoute: () => rootRoute, path: "$", component: NotFoundPage }),
 ]);
 
