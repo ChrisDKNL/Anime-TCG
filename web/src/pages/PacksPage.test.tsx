@@ -3,13 +3,14 @@ import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { envelope, makeAccount, requestIdOf, type MockAnswer, type MockHandler } from "../test/api";
-import { callsTo, liveRegion, OPEN, PACKS, pageHeading, renderApp } from "../test/app";
+import { callsTo, liveRegion, OPEN, PACKS, pageHeading, renderApp, WALLET } from "../test/app";
 import {
   makeAllowance,
   makeOpenedCard,
   makePackOpened,
   makePacks,
   makeUnavailablePacks,
+  makeWallet,
 } from "../test/fixtures";
 
 const ASYNC_TIMEOUT = 5_000;
@@ -85,7 +86,11 @@ describe("/packs: arriving", () => {
 
   it("a first load with no answer: the failure line, the banner, and Try again asks once more", async () => {
     const { fetchMock } = renderApp(
-      { [PACKS]: sequence({ status: 502, raw: "bad gateway" }, packs({ available: 3 })) },
+      {
+        [PACKS]: sequence({ status: 502, raw: "bad gateway" }, packs({ available: 3 })),
+        // The server is out of reach for the wallet's first read too.
+        [WALLET]: sequence({ status: 502, raw: "bad gateway" }, { status: 200, body: makeWallet() }),
+      },
       account,
       "/packs",
     );

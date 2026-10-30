@@ -8,8 +8,8 @@ import { notFoundCopy } from "../lib/navigationCopy";
 import { NOT_FOUND } from "../lib/routes";
 
 /**
- * Every path the route list does not hold, `/shop` and `/market` included
- * until their PRs (navigation-and-landing.md §4.7). Its frame follows the
+ * Every path the route list does not hold, `/market` included until its PR
+ * (navigation-and-landing.md §4.7). Its frame follows the
  * session: the public header signed out, the signed-in one with the game state
  * intact signed in.
  */

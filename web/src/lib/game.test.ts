@@ -1,9 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { makeAllowance, makeOdds, makePackOpened, makePacks, makeUnavailablePacks } from "../test/fixtures";
+import {
+  makeAllowance,
+  makeOdds,
+  makePackOpened,
+  makePacks,
+  makeUnavailablePacks,
+  makeWallet,
+} from "../test/fixtures";
 import {
   controlRow,
   gameReducer,
   heldAllowance,
+  heldBalance,
   heldOdds,
   initialGame,
   RATE_LIMIT_FALLBACK_SECONDS,
@@ -238,5 +246,40 @@ describe("controlRow and visibleLine (§4.1)", () => {
     expect(visibleLine(wait, "ready", true)).toBe("wait");
     expect(visibleLine(wait, "ready", false)).toBeNull();
     expect(visibleLine(base, "ready", true)).toBeNull();
+  });
+});
+
+describe("the balance the header shows (market-and-shop.md §3.1)", () => {
+  const wallet = (seq: number, balance: number) => ({ seq, wallet: makeWallet(balance) });
+  const carried = (seq: number, value: number): GameAction => ({
+    type: "balance",
+    ...owner,
+    balance: { seq, value },
+  });
+
+  it("is null before any answer, then the wallet's", () => {
+    expect(heldBalance(undefined, initialGame(CHRIS))).toBeNull();
+    expect(heldBalance(wallet(1, 1_240), initialGame(CHRIS))).toBe(1_240);
+  });
+
+  it("a receipt's balance replaces an older wallet read, and a newer wallet read replaces it", () => {
+    const state = run(initialGame(CHRIS), carried(2, 840));
+    expect(heldBalance(undefined, state)).toBe(840);
+    expect(heldBalance(wallet(1, 1_240), state)).toBe(840);
+    expect(heldBalance(wallet(3, 900), state)).toBe(900);
+  });
+
+  it("keeps the newest carried balance by when its request was sent, whatever order the answers came in", () => {
+    const state = run(initialGame(CHRIS), carried(5, 400), carried(4, 800));
+    expect(state.balance).toEqual({ seq: 5, value: 400 });
+    expect(run(state, carried(6, 0)).balance).toEqual({ seq: 6, value: 0 });
+  });
+
+  it("drops a balance of another session, and a reset forgets it", () => {
+    const state = run(initialGame(CHRIS), carried(2, 840));
+    expect(run(state, { type: "balance", accountId: CHRIS, session: 1, balance: { seq: 9, value: 1 } })).toBe(
+      state,
+    );
+    expect(run(state, { type: "reset", accountId: CHRIS }).balance).toBeNull();
   });
 });

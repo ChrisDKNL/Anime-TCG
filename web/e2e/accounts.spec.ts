@@ -1090,11 +1090,20 @@ test.describe("hunt", () => {
     await page.setViewportSize({ width: 375, height: 740 });
     await signedInPage(page);
 
-    // Row 1 on phone is the wordmark and the Account control, the login truncated; row 2 the page links.
+    // On phone (market-and-shop.md §5.1): the wordmark; then the balance and the Account control, the
+    // login truncated; then the page links.
     const box = await accountControl(page, LONG_LOGIN).boundingBox();
     expect(box!.x + box!.width, "the Account control's right edge").toBeLessThanOrEqual(375);
     const wordmark = await page.getByRole("link", { name: "Anime TCG" }).boundingBox();
-    expect(Math.abs(wordmark!.y - box!.y), "wordmark and control share row 1").toBeLessThan(box!.height);
+    expect(box!.y, "the control sits below the wordmark").toBeGreaterThanOrEqual(
+      wordmark!.y + wordmark!.height,
+    );
+    const balance = await page.getByRole("banner").getByText("1,240 Karma").boundingBox();
+    expect(
+      Math.abs(balance!.y + balance!.height / 2 - (box!.y + box!.height / 2)),
+      "balance and control share a row",
+    ).toBeLessThan(box!.height / 2);
+    expect(balance!.x + balance!.width, "the balance sits left of the control").toBeLessThanOrEqual(box!.x);
     const nav = await mainNav(page).boundingBox();
     expect(nav!.y, "the page links sit below row 1").toBeGreaterThanOrEqual(box!.y + box!.height);
     expect(await page.evaluate(() => document.documentElement.scrollWidth), "page width").toBeLessThanOrEqual(

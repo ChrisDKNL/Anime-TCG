@@ -117,7 +117,7 @@ test("Back and Forward: title and focus follow, and each entry's scroll position
 });
 
 test.describe("addresses (§3.1 rule 2, §4.7)", () => {
-  for (const path of ["/no-such-page", "/Packs", "/packs/1", "/shop", "/market", "/index.html"]) {
+  for (const path of ["/no-such-page", "/Packs", "/packs/1", "/Shop", "/market", "/index.html"]) {
     test(`${path} is the not-found page with a 200, signed out with the public header`, async ({
       page,
       api,

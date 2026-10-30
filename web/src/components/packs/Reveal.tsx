@@ -1,6 +1,6 @@
 import type { CharacterPublic, FranchiseRef, Rarity } from "@anime-tcg/shared/api";
 import { RARITY_LABEL } from "@anime-tcg/shared/rarity";
-import { useId } from "react";
+import { useId, type ReactNode, type Ref } from "react";
 import { formatCount, listSeparator, revealCopy, summaryParts } from "../../lib/packsCopy";
 import { Card, type CardEffects } from "../card/Card";
 import { NEW_MARKER, REVEAL_GRID, TIER_TEXT } from "./styles";
@@ -17,8 +17,11 @@ export interface RevealCard {
 export interface RevealPack {
   /** Changes with every opening, so a new pack's slots enter afresh. */
   id: string;
-  /** The section's `h2`, which also names the list; null for the demo, which has none (navigation-and-landing.md §3.7). */
-  heading: string | null;
+  /**
+   * The section's `h2`, which also names the list; null for the demo, which has none (navigation-and-landing.md
+   * §3.7). Plain copy, or markup with a title in a `<bdi>` (a shop pack's `<title> pack`).
+   */
+  heading: ReactNode;
   /** The list's name without a heading. */
   label: string;
   /** Words before the summary: the demo's `Demo pack: `. */
@@ -39,8 +42,10 @@ interface Props {
   showNew: boolean;
   /** An opening is in flight: the previous pack stays, marked busy, until the answer replaces it. */
   busy: boolean;
-  /** The section's top margin: the packs page's `mt-10`, the landing page's `mt-6`. */
+  /** The section's margin: the packs page's `mt-10`, the landing page's `mt-6`, the Shop page's `mb-8`. */
   spacing?: string;
+  /** The heading as a focus target: the Shop page moves focus to it after a purchase (market-and-shop.md §3.3). */
+  headingRef?: Ref<HTMLHeadingElement>;
 }
 
 /** The empty slots before the first pack: a pack's five cards, so the first reveal moves nothing. */
@@ -53,7 +58,16 @@ const EMPTY_SLOTS = [0, 1, 2, 3, 4] as const;
  * markers, no lines and no effects. The entrance is the same for every pack:
  * no tier, kind or guarantee gets more motion, delay or colour than its frame.
  */
-export function Reveal({ pack, poolSize, entering, effects, showNew, busy, spacing = "mt-10" }: Props) {
+export function Reveal({
+  pack,
+  poolSize,
+  entering,
+  effects,
+  showNew,
+  busy,
+  spacing = "mt-10",
+  headingRef,
+}: Props) {
   const headingId = useId();
   if (pack === null) {
     return (
@@ -75,7 +89,12 @@ export function Reveal({ pack, poolSize, entering, effects, showNew, busy, spaci
   return (
     <section aria-labelledby={pack.heading === null ? undefined : headingId} className={spacing}>
       {pack.heading !== null && (
-        <h2 id={headingId} className="text-lg font-bold text-zinc-100">
+        <h2
+          id={headingId}
+          ref={headingRef}
+          tabIndex={headingRef === undefined ? undefined : -1}
+          className="text-lg font-bold break-words text-zinc-100 focus:outline-none"
+        >
           {pack.heading}
         </h2>
       )}

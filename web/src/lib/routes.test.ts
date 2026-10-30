@@ -16,44 +16,55 @@ import {
 } from "./routes";
 
 describe("the route list (§3.1)", () => {
-  it("holds exactly the pages of this build; /shop and /market wait for their PRs", () => {
+  it("holds exactly the pages of this build; /market waits for its PR", () => {
     expect(Object.keys(PUBLIC_PAGES)).toEqual(["/", "/login", "/register"]);
-    expect(Object.keys(ACCOUNT_PAGES)).toEqual(["/packs", "/collection", "/profile", "/account"]);
-    expect(pagePath("/shop")).toBeNull();
+    expect(Object.keys(ACCOUNT_PAGES)).toEqual(["/packs", "/shop", "/collection", "/profile", "/account"]);
+    expect(pagePath("/shop")).toBe("/shop");
     expect(pagePath("/market")).toBeNull();
   });
 
   it("names every page's h1 as the route table does", () => {
     expect(
-      (["/", "/packs", "/collection", "/profile", "/login", "/register", "/account"] as const).map(
+      (["/", "/packs", "/shop", "/collection", "/profile", "/login", "/register", "/account"] as const).map(
         pageHeading,
       ),
-    ).toEqual(["Anime TCG", "Packs", "Collection", "Profile", "Log in", "Register", "Manage account"]);
+    ).toEqual([
+      "Anime TCG",
+      "Packs",
+      "Shop",
+      "Collection",
+      "Profile",
+      "Log in",
+      "Register",
+      "Manage account",
+    ]);
     expect(NOT_FOUND.heading).toBe("Page not found");
   });
 
   it("titles each page with its name first and no login; anything else is the not-found title", () => {
     expect(pageTitle("/")).toBe("Anime TCG");
     expect(pageTitle("/packs")).toBe("Packs · Anime TCG");
+    expect(pageTitle("/shop")).toBe("Shop · Anime TCG");
     expect(pageTitle("/collection")).toBe("Collection · Anime TCG");
     expect(pageTitle("/profile")).toBe("Profile · Anime TCG");
     expect(pageTitle("/login")).toBe("Log in · Anime TCG");
     expect(pageTitle("/register")).toBe("Register · Anime TCG");
     expect(pageTitle("/account")).toBe("Manage account · Anime TCG");
-    for (const path of ["/shop", "/market", "/Packs", "/packs/1", "/index.html", "", "/packs/"]) {
+    for (const path of ["/Shop", "/market", "/Packs", "/packs/1", "/index.html", "", "/packs/"]) {
       expect(pageTitle(path), path).toBe("Page not found · Anime TCG");
     }
     expect(BOOT_TITLE).toBe("Anime TCG");
   });
 
-  it("links Packs then Collection in the header; Profile has no link until item 4", () => {
-    expect(NAV_LINKS).toEqual(["/packs", "/collection"]);
+  it("links Packs, Shop, then Collection in the header; Profile has no link until item 4", () => {
+    expect(NAV_LINKS).toEqual(["/packs", "/shop", "/collection"]);
     expect(HOME_PATH).toBe("/packs");
   });
 
   it("gives every account page a guard line (§8)", () => {
     expect(Object.values(ACCOUNT_PAGES).map((page) => page.guardLine)).toEqual([
       "Log in to open your packs.",
+      "Log in to see the shop.",
       "Log in to see your collection.",
       "Log in to see your profile.",
       "Log in to manage your account.",
@@ -104,8 +115,8 @@ describe("the return path check (§3.3 step 3)", () => {
     ["a public page", "/login"],
     ["the start page", "/"],
     ["an unknown page", "/no-such-page"],
-    ["a page that does not exist yet", "/shop"],
-    ["another future page", "/market"],
+    ["a page that does not exist yet", "/market"],
+    ["another case of a listed page", "/Shop"],
     ["an empty string", ""],
     ["a value longer than any listed path", `/collection${"/".repeat(200)}`],
     ["a number", 42],
@@ -145,7 +156,7 @@ describe("the trailing-slash replace (§3.1 rule 2)", () => {
       "//evil.example/",
       "/\\evil.example/",
       "/Packs/",
-      "/shop/",
+      "/market/",
       "/no-such/",
       "/packs/1/",
     ]) {

@@ -1,6 +1,16 @@
 import type { FranchiseRef } from "@anime-tcg/shared/api";
 import { RARITY_LABEL } from "@anime-tcg/shared/rarity";
-import { useId, useLayoutEffect, useRef, useState } from "react";
+import {
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type RefObject,
+  type SyntheticEvent,
+} from "react";
+import { useGame } from "../../hooks/useGame";
+import { useRecycle } from "../../hooks/useRecycle";
 import { isolate } from "../../lib/bidi";
 import { dialogCopy, seriesTitle } from "../../lib/collectionCopy";
 import type { SeriesName } from "../../lib/collectionSeries";
@@ -10,6 +20,7 @@ import { LoginText } from "../account/LoginText";
 import { BUTTON, PANEL_HEADING, WIDE_DIALOG } from "../account/styles";
 import { Card } from "../card/Card";
 import { TEXT_BUTTON_SM, TIER_TEXT } from "../packs/styles";
+import { RecycleConfirmation, RecycleSection } from "./RecycleSection";
 
 /** §5.4: `Also in` shows five titles, then `and <N> more`. */
 const ALSO_IN_SHOWN = 5;
@@ -23,20 +34,50 @@ interface Props {
   onClose: () => void;
 }
 
+/** Where focus goes once the body the last action left has rendered (§7 "Dialog"). */
+type FocusTarget = "confirmation" | "heading" | "recycleButton";
+
 /**
  * The card dialog (collection-overview.md §3.4, §5.4, §7) as a native modal
  * `<dialog>`: `showModal()` gives the focus trap, Escape and the inert page,
- * and focus starts on the dialog itself, as in Manage account. It shows the
- * entry's details only (owner, round 3 decision 12): the economy PRs add
- * `List on the market` and `Recycle for Karma` as sections under the notes
- * (§3.4 step 4), each with its own confirmation in place of the body.
- * It mounts per opening, so it opens on mount and closes by unmounting.
+ * and focus starts on the dialog itself, as in Manage account. Under the
+ * details sits Recycle for Karma (§3.6), whose confirmation replaces the body
+ * below the close button and names the dialog while it shows; `List on the
+ * market` joins with the market UI. While a recycle is in flight nothing
+ * closes the dialog, so it cannot close on an unknown outcome. It mounts per
+ * opening, so it opens on mount and closes by unmounting.
  */
 export function CardDialog({ indexed, names, poolSize, onClose }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
   const goneRef = useRef<HTMLParagraphElement>(null);
+  const headingRef = useRef<HTMLHeadingElement>(null);
+  const confirmationRef = useRef<HTMLHeadingElement>(null);
+  const recycleButtonRef = useRef<HTMLButtonElement>(null);
+  const fieldRef = useRef<HTMLInputElement>(null);
+  const focusAfter = useRef<FocusTarget | null>(null);
   const headingId = useId();
   const gone = indexed === null;
+
+  const game = useGame();
+  const rules = game.wallet.data?.wallet.rules ?? null;
+  const stale = game.collection.isError || game.wallet.isError || rules === null;
+  const recycle = useRecycle(indexed?.entry ?? null, rules);
+  const confirming = recycle.asking !== null && !gone;
+
+  // A confirmation's answer that returns to the details puts focus on the name heading (§3.6 step 7).
+  const { result } = recycle;
+  useLayoutEffect(() => {
+    if (result !== null) headingRef.current?.focus();
+  }, [result]);
+
+  // After every render: the target the last action asked for, once its element is there.
+  useLayoutEffect(() => {
+    const target = focusAfter.current;
+    focusAfter.current = null;
+    if (target === "confirmation") confirmationRef.current?.focus();
+    if (target === "heading") headingRef.current?.focus();
+    if (target === "recycleButton") recycleButtonRef.current?.focus();
+  });
 
   useLayoutEffect(() => {
     const dialog = ref.current;
@@ -54,12 +95,51 @@ export function CardDialog({ indexed, names, poolSize, onClose }: Props) {
     goneRef.current?.focus();
   }, [gone]);
 
-  const close = () => ref.current?.close();
+  /** `Cancel` or Escape on the confirmation: the details, focus back on `Recycle…`. */
+  const back = () => {
+    recycle.back();
+    focusAfter.current = "recycleButton";
+  };
+
+  /** Close: never in flight; the `close` event does the rest. */
+  const close = () => {
+    if (!recycle.action.sending) ref.current?.close();
+  };
+
+  /**
+   * Every close, however it came: Chromium honours a prevented `cancel` once, and a second Escape
+   * closes the dialog with no cancelable event. In flight it opens again at once, so it never closes
+   * on an unknown outcome. Otherwise a confirmation's `Cancel` runs first (after no answer it
+   * discards the key and reads the server again), then the dialog goes.
+   */
+  const onCloseEvent = () => {
+    if (recycle.action.sending) {
+      ref.current?.showModal();
+      confirmationRef.current?.focus();
+      return;
+    }
+    if (confirming) recycle.back();
+    onClose();
+  };
+
+  /** Escape: ignored in flight; on a confirmation it returns to the details first (§3.7 step 1). */
+  const onCancel = (event: SyntheticEvent) => {
+    if (!recycle.action.sending && !confirming) return;
+    event.preventDefault();
+    if (!recycle.action.sending) back();
+  };
 
   return (
-    <dialog ref={ref} tabIndex={-1} aria-labelledby={headingId} onClose={onClose} className={WIDE_DIALOG}>
+    <dialog
+      ref={ref}
+      tabIndex={-1}
+      aria-labelledby={headingId}
+      onCancel={onCancel}
+      onClose={onCloseEvent}
+      className={WIDE_DIALOG}
+    >
       <div className="flex justify-end">
-        <button type="button" onClick={close} className={TEXT_BUTTON_SM}>
+        <button type="button" onClick={close} disabled={recycle.action.sending} className={TEXT_BUTTON_SM}>
           {dialogCopy.close}
         </button>
       </div>
@@ -72,8 +152,35 @@ export function CardDialog({ indexed, names, poolSize, onClose }: Props) {
             {dialogCopy.goneClose}
           </button>
         </div>
+      ) : confirming ? (
+        <RecycleConfirmation
+          entry={indexed.entry}
+          recycle={recycle}
+          onBack={back}
+          headingId={headingId}
+          headingRef={confirmationRef}
+        />
       ) : (
-        <Details indexed={indexed} names={names} poolSize={poolSize} headingId={headingId} />
+        <Details
+          indexed={indexed}
+          names={names}
+          poolSize={poolSize}
+          headingId={headingId}
+          headingRef={headingRef}
+          section={
+            <RecycleSection
+              entry={indexed.entry}
+              rules={rules}
+              stale={stale}
+              recycle={recycle}
+              buttonRef={recycleButtonRef}
+              fieldRef={fieldRef}
+              onAsk={() => {
+                focusAfter.current = "confirmation";
+              }}
+            />
+          }
+        />
       )}
     </dialog>
   );
@@ -84,11 +191,16 @@ function Details({
   names,
   poolSize,
   headingId,
+  headingRef,
+  section,
 }: {
   indexed: IndexedEntry;
   names: ReadonlyMap<number, SeriesName>;
   poolSize: number | null;
   headingId: string;
+  headingRef: RefObject<HTMLHeadingElement | null>;
+  /** The economy sections under the facts and the note (§3.4 step 4). */
+  section: ReactNode;
 }) {
   const { entry, franchises, series } = indexed;
   const { character } = entry;
@@ -107,7 +219,13 @@ function Details({
       </div>
       <div className="flex min-w-0 flex-col gap-4">
         <div className="flex flex-col gap-1">
-          <h2 id={headingId} dir="auto" className={`${PANEL_HEADING} break-words`}>
+          <h2
+            id={headingId}
+            ref={headingRef}
+            tabIndex={-1}
+            dir="auto"
+            className={`${PANEL_HEADING} break-words focus:outline-none`}
+          >
             {character.name}
           </h2>
           {character.nameNative !== null && character.nameNative !== character.name && (
@@ -120,6 +238,7 @@ function Details({
         </div>
         <Facts indexed={indexed} />
         <Note indexed={indexed} />
+        {section}
       </div>
     </div>
   );

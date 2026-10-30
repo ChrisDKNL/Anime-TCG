@@ -19,6 +19,7 @@
     "e2e/**/*.ts",
     "src/test/fixtures.ts",
     "src/test/collectionFixtures.ts",
+    "src/test/copyWords.ts",
     "src/types.ts"
   ],
   "references": [{ "path": "../shared" }]

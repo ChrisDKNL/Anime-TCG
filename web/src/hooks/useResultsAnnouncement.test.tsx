@@ -10,6 +10,7 @@ function setup(initial: string) {
     announce,
     sessionEnded: () => undefined,
     unreachable: () => undefined,
+    serverAnswered: () => undefined,
     clearNotice: () => undefined,
     notice: "none",
   };
