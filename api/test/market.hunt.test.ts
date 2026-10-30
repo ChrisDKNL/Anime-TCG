@@ -218,118 +218,134 @@ describe("market hunt (tester, economy.md PR 3)", () => {
       expect(balances.filter((b) => b === start)).toHaveLength(4);
     });
 
-    it("a buy racing the seller's recycle of the same entry: the buy always wins, the recycle sees its result", async () => {
-      for (let round = 0; round < 5; round += 1) {
-        const seller = await holding(copies(ID.uncommon(3), 3));
-        const buyer = await funded(100);
-        const listing = await listed(app, seller, ID.uncommon(3), 20);
-        const [buy, recycled] = await Promise.all([
-          buyListing(app, buyer.cookie, listing.listingId),
-          recycle(app, seller.cookie, recycleBody(ID.uncommon(3), "uncommon", 2)),
-        ]);
-        expect(buy.statusCode, buy.body).toBe(201);
-        const held = await heldCopies(app, seller.account.id, ID.uncommon(3));
-        if (recycled.statusCode === 201) {
-          // The recycle ran first: it took the two unlisted copies and kept the listed one, which then sold.
-          expect(held).toHaveLength(0);
-        } else {
-          // The buy ran first: two held, one may go (never the last).
-          expect(marketErrorOf(recycled).code).toBe("not_enough_copies");
-          expect(held).toHaveLength(2);
+    it(
+      "a buy racing the seller's recycle of the same entry: the buy always wins, the recycle sees its result",
+      { timeout: HEAVY_MS },
+      async () => {
+        for (let round = 0; round < 5; round += 1) {
+          const seller = await holding(copies(ID.uncommon(3), 3));
+          const buyer = await funded(100);
+          const listing = await listed(app, seller, ID.uncommon(3), 20);
+          const [buy, recycled] = await Promise.all([
+            buyListing(app, buyer.cookie, listing.listingId),
+            recycle(app, seller.cookie, recycleBody(ID.uncommon(3), "uncommon", 2)),
+          ]);
+          expect(buy.statusCode, buy.body).toBe(201);
+          const held = await heldCopies(app, seller.account.id, ID.uncommon(3));
+          if (recycled.statusCode === 201) {
+            // The recycle ran first: it took the two unlisted copies and kept the listed one, which then sold.
+            expect(held).toHaveLength(0);
+          } else {
+            // The buy ran first: two held, one may go (never the last).
+            expect(marketErrorOf(recycled).code).toBe("not_enough_copies");
+            expect(held).toHaveLength(2);
+          }
+          const [purchase] = await purchasesOf(listing.listingId);
+          const sold = await app.db
+            .select()
+            .from(cards)
+            .where(eq(cards.removedByPurchase, purchase?.id ?? ""));
+          expect(sold).toHaveLength(1);
+          expect(sold[0]?.removedByRecycle).toBeNull();
         }
-        const [purchase] = await purchasesOf(listing.listingId);
-        const sold = await app.db
-          .select()
-          .from(cards)
-          .where(eq(cards.removedByPurchase, purchase?.id ?? ""));
-        expect(sold).toHaveLength(1);
-        expect(sold[0]?.removedByRecycle).toBeNull();
-      }
-    });
+      },
+    );
 
-    it("a buy racing an owner reset of the seller: either the sale or the cancellation, whole", async () => {
-      for (let round = 0; round < 4; round += 1) {
-        const seller = await holding([ID.rare(1)]);
-        const buyer = await funded(100);
-        const listing = await listed(app, seller, ID.rare(1), 30);
-        tick();
-        const [buy] = await Promise.all([
-          buyListing(app, buyer.cookie, listing.listingId),
-          reset(seller, round % 2 === 0),
-        ]);
-        const row = await listingRow(listing.listingId);
-        expect(await allCardsOf(seller.account.id)).toEqual([]);
-        if (buy.statusCode === 201) {
-          expect(row?.status).toBe("sold");
-          expect(await purchasesOf(listing.listingId)).toHaveLength(1);
-          expect(await heldCopies(app, buyer.account.id, ID.rare(1))).toHaveLength(1);
-        } else {
-          expect(marketErrorOf(buy).code).toBe("listing_unavailable");
-          expect(row?.status).toBe("cancelled");
-          expect(await purchasesOf(listing.listingId)).toEqual([]);
-          expect(await balanceOf(app, buyer.account.id)).toBe(RECYCLE_VALUE.mythic);
+    it(
+      "a buy racing an owner reset of the seller: either the sale or the cancellation, whole",
+      { timeout: HEAVY_MS },
+      async () => {
+        for (let round = 0; round < 4; round += 1) {
+          const seller = await holding([ID.rare(1)]);
+          const buyer = await funded(100);
+          const listing = await listed(app, seller, ID.rare(1), 30);
+          tick();
+          const [buy] = await Promise.all([
+            buyListing(app, buyer.cookie, listing.listingId),
+            reset(seller, round % 2 === 0),
+          ]);
+          const row = await listingRow(listing.listingId);
+          expect(await allCardsOf(seller.account.id)).toEqual([]);
+          if (buy.statusCode === 201) {
+            expect(row?.status).toBe("sold");
+            expect(await purchasesOf(listing.listingId)).toHaveLength(1);
+            expect(await heldCopies(app, buyer.account.id, ID.rare(1))).toHaveLength(1);
+          } else {
+            expect(marketErrorOf(buy).code).toBe("listing_unavailable");
+            expect(row?.status).toBe("cancelled");
+            expect(await purchasesOf(listing.listingId)).toEqual([]);
+            expect(await balanceOf(app, buyer.account.id)).toBe(RECYCLE_VALUE.mythic);
+          }
         }
-      }
-      await expectLedgerConsistent(app, forged.splice(0));
-    });
+        await expectLedgerConsistent(app, forged.splice(0));
+      },
+    );
 
-    it("a buy racing an owner reset of the buyer: either order is whole and the ledger explains it", async () => {
-      for (let round = 0; round < 4; round += 1) {
-        const seller = await holding([ID.rare(2)]);
-        const buyer = await funded(100);
-        const listing = await listed(app, seller, ID.rare(2), 30);
-        tick();
-        const keepKarma = round % 2 === 1;
-        const [buy] = await Promise.all([
-          buyListing(app, buyer.cookie, listing.listingId),
-          reset(buyer, keepKarma),
-        ]);
-        const sold = (await listingRow(listing.listingId))?.status === "sold";
-        expect(sold).toBe(buy.statusCode === 201);
-        if (buy.statusCode !== 201) {
-          // Only a reset that zeroed the balance first can stop the buy.
-          expect(keepKarma).toBe(false);
-          expect(marketErrorOf(buy)).toMatchObject({ code: "insufficient_funds", balance: 0 });
+    it(
+      "a buy racing an owner reset of the buyer: either order is whole and the ledger explains it",
+      { timeout: HEAVY_MS },
+      async () => {
+        for (let round = 0; round < 4; round += 1) {
+          const seller = await holding([ID.rare(2)]);
+          const buyer = await funded(100);
+          const listing = await listed(app, seller, ID.rare(2), 30);
+          tick();
+          const keepKarma = round % 2 === 1;
+          const [buy] = await Promise.all([
+            buyListing(app, buyer.cookie, listing.listingId),
+            reset(buyer, keepKarma),
+          ]);
+          const sold = (await listingRow(listing.listingId))?.status === "sold";
+          expect(sold).toBe(buy.statusCode === 201);
+          if (buy.statusCode !== 201) {
+            // Only a reset that zeroed the balance first can stop the buy.
+            expect(keepKarma).toBe(false);
+            expect(marketErrorOf(buy)).toMatchObject({ code: "insufficient_funds", balance: 0 });
+          }
+          expect(await purchasesOf(listing.listingId)).toHaveLength(sold ? 1 : 0);
+          expect(await heldCopies(app, seller.account.id, ID.rare(2))).toHaveLength(sold ? 0 : 1);
         }
-        expect(await purchasesOf(listing.listingId)).toHaveLength(sold ? 1 : 0);
-        expect(await heldCopies(app, seller.account.id, ID.rare(2))).toHaveLength(sold ? 0 : 1);
-      }
-      await expectLedgerConsistent(app, forged.splice(0));
-    });
+        await expectLedgerConsistent(app, forged.splice(0));
+      },
+    );
 
-    it("a buy racing the expiry sweep one millisecond before expiry: exactly one of sold and expired", async () => {
-      for (let round = 0; round < 6; round += 1) {
-        const seller = await holding([ID.rare(3)]);
-        const buyer = await funded(100);
-        // Listed a week less a millisecond ago: live now, lapsed at now + 1 ms.
-        const [seeded] = await seedListings(
-          app,
-          seller,
-          ID.rare(3),
-          30,
-          1,
-          new Date(now.getTime() - TTL_MS + 1),
-        );
-        if (seeded === undefined) throw new Error("one listing");
-        const expiry = new Date(now.getTime() + 1);
-        const [buy, swept] = await Promise.all([
-          buyListing(app, buyer.cookie, seeded.listingId),
-          app.market.expireLapsed(app.log, expiry),
-        ]);
-        const row = await listingRow(seeded.listingId);
-        if (buy.statusCode === 201) {
-          expect(row?.status).toBe("sold");
-          expect(await purchasesOf(seeded.listingId)).toHaveLength(1);
-        } else {
-          expect(marketErrorOf(buy).code).toBe("listing_unavailable");
-          expect(row).toMatchObject({ status: "expired", closedAt: expiry });
-          expect(swept).toBeGreaterThanOrEqual(1);
-          expect(await purchasesOf(seeded.listingId)).toEqual([]);
-          expect(await balanceOf(app, buyer.account.id)).toBe(RECYCLE_VALUE.mythic);
+    it(
+      "a buy racing the expiry sweep one millisecond before expiry: exactly one of sold and expired",
+      { timeout: HEAVY_MS },
+      async () => {
+        for (let round = 0; round < 6; round += 1) {
+          const seller = await holding([ID.rare(3)]);
+          const buyer = await funded(100);
+          // Listed a week less a millisecond ago: live now, lapsed at now + 1 ms.
+          const [seeded] = await seedListings(
+            app,
+            seller,
+            ID.rare(3),
+            30,
+            1,
+            new Date(now.getTime() - TTL_MS + 1),
+          );
+          if (seeded === undefined) throw new Error("one listing");
+          const expiry = new Date(now.getTime() + 1);
+          const [buy, swept] = await Promise.all([
+            buyListing(app, buyer.cookie, seeded.listingId),
+            app.market.expireLapsed(app.log, expiry),
+          ]);
+          const row = await listingRow(seeded.listingId);
+          if (buy.statusCode === 201) {
+            expect(row?.status).toBe("sold");
+            expect(await purchasesOf(seeded.listingId)).toHaveLength(1);
+          } else {
+            expect(marketErrorOf(buy).code).toBe("listing_unavailable");
+            expect(row).toMatchObject({ status: "expired", closedAt: expiry });
+            expect(swept).toBeGreaterThanOrEqual(1);
+            expect(await purchasesOf(seeded.listingId)).toEqual([]);
+            expect(await balanceOf(app, buyer.account.id)).toBe(RECYCLE_VALUE.mythic);
+          }
+          tick();
         }
-        tick();
-      }
-    });
+      },
+    );
 
     it("one card listed twice in parallel is one listing; two copies listed three times are two, on different cards", async () => {
       const single = await holding([ID.epic(1)]);

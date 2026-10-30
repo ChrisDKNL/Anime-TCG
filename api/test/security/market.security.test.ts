@@ -62,6 +62,8 @@ import {
 } from "../support.js";
 
 const MINUTE = 60_000;
+/** The tests that loop over races: seconds on an idle machine, so the bound only catches a hang. */
+const HEAVY_MS = 120_000;
 /** A name built to break markup and the reading order; the market must carry it as text. */
 const HOSTILE = ID.common(5);
 const HOSTILE_NAME = `<script>alert(1)</script>${String.fromCodePoint(0x202e)}`;
@@ -164,24 +166,31 @@ describe("market, adversarial (economy.md §10, §14)", () => {
   });
 
   describe("2. double buy, self-trade and replays across accounts", () => {
-    it("two buyers of one listing through two app instances on one database: exactly one purchase", async () => {
-      for (let round = 0; round < 5; round += 1) {
-        const seller = await holding([ID.legendary(1)]);
-        const buyers = await Promise.all([0, 1].map(() => funded(MARKET_PRICE_MIN.legendary)));
-        const listing = await listed(app, seller, ID.legendary(1), MARKET_PRICE_MIN.legendary);
-        const results = await Promise.all([
-          buyListing(app, buyers[0]?.cookie, listing.listingId),
-          buyListing(twin, buyers[1]?.cookie, listing.listingId),
-        ]);
-        expect(results.map((res) => res.statusCode).sort()).toEqual([201, 409]);
-        expect(
-          await app.db.select().from(marketPurchases).where(eq(marketPurchases.listingId, listing.listingId)),
-        ).toHaveLength(1);
-        expect(await balanceOf(app, seller.account.id)).toBe(
-          MARKET_PRICE_MIN.legendary - marketFee(MARKET_PRICE_MIN.legendary),
-        );
-      }
-    });
+    it(
+      "two buyers of one listing through two app instances on one database: exactly one purchase",
+      { timeout: HEAVY_MS },
+      async () => {
+        for (let round = 0; round < 5; round += 1) {
+          const seller = await holding([ID.legendary(1)]);
+          const buyers = await Promise.all([0, 1].map(() => funded(MARKET_PRICE_MIN.legendary)));
+          const listing = await listed(app, seller, ID.legendary(1), MARKET_PRICE_MIN.legendary);
+          const results = await Promise.all([
+            buyListing(app, buyers[0]?.cookie, listing.listingId),
+            buyListing(twin, buyers[1]?.cookie, listing.listingId),
+          ]);
+          expect(results.map((res) => res.statusCode).sort()).toEqual([201, 409]);
+          expect(
+            await app.db
+              .select()
+              .from(marketPurchases)
+              .where(eq(marketPurchases.listingId, listing.listingId)),
+          ).toHaveLength(1);
+          expect(await balanceOf(app, seller.account.id)).toBe(
+            MARKET_PRICE_MIN.legendary - marketFee(MARKET_PRICE_MIN.legendary),
+          );
+        }
+      },
+    );
 
     it("buying one's own listing is 409 own_listing and writes nothing, through either instance", async () => {
       const seller = await holding([ID.rare(3)]);
@@ -345,45 +354,49 @@ describe("market, adversarial (economy.md §10, §14)", () => {
   });
 
   describe("6. farming between accounts (economy.md §10)", () => {
-    it("two accounts trading a Common back and forth at the cap lose the fee every round, and audit-market reports the pair", async () => {
-      const main = await holding([ID.common(12)]);
-      const alt = await player();
-      await fund(app, main, snapshotId, 100, now);
-      await fund(app, alt, snapshotId, 100, now);
-      const total = async () =>
-        (await balanceOf(app, main.account.id)) + (await balanceOf(app, alt.account.id));
-      const fee = marketFee(MARKET_PRICE_MAX.common);
-      let holder: SignedInClient = main;
-      let other: SignedInClient = alt;
-      for (let round = 0; round < 6; round += 1) {
-        const before = await total();
-        now = new Date(now.getTime() + 10_000);
-        const listing = await listed(app, holder, ID.common(12), MARKET_PRICE_MAX.common);
-        await bought(app, other, listing.listingId);
-        expect(await total()).toBe(before - fee);
-        [holder, other] = [other, holder];
-      }
-      const lines: string[] = [];
-      const code = await auditMarket([], testDatabaseUrl(), {
-        stdout: { write: (text: string) => lines.push(text) },
-        stderr: { write: (text: string) => lines.push(`stderr: ${text}`) },
-        clock: () => now,
-      });
-      expect(code).toBe(0);
-      const report = lines.join("");
-      const pair = (text: string) => text.includes(main.account.id) && text.includes(alt.account.id);
-      expect(report).toContain("Net Karma per pair, last 7 days:");
-      expect(
-        report
-          .split("\n")
-          .filter(pair)
-          .some((line) => line.includes("6 purchases")),
-      ).toBe(true);
-      expect(report).toContain("Same invite code, and traded:");
-      expect(report.split("\n").some((line) => pair(line) && line.includes("same invite code"))).toBe(true);
-      expect(report).toContain("Listings bought within 60 seconds:");
-      expect(report).toContain("sold 0 cards at the floor and 3 at the cap");
-    });
+    it(
+      "two accounts trading a Common back and forth at the cap lose the fee every round, and audit-market reports the pair",
+      { timeout: HEAVY_MS },
+      async () => {
+        const main = await holding([ID.common(12)]);
+        const alt = await player();
+        await fund(app, main, snapshotId, 100, now);
+        await fund(app, alt, snapshotId, 100, now);
+        const total = async () =>
+          (await balanceOf(app, main.account.id)) + (await balanceOf(app, alt.account.id));
+        const fee = marketFee(MARKET_PRICE_MAX.common);
+        let holder: SignedInClient = main;
+        let other: SignedInClient = alt;
+        for (let round = 0; round < 6; round += 1) {
+          const before = await total();
+          now = new Date(now.getTime() + 10_000);
+          const listing = await listed(app, holder, ID.common(12), MARKET_PRICE_MAX.common);
+          await bought(app, other, listing.listingId);
+          expect(await total()).toBe(before - fee);
+          [holder, other] = [other, holder];
+        }
+        const lines: string[] = [];
+        const code = await auditMarket([], testDatabaseUrl(), {
+          stdout: { write: (text: string) => lines.push(text) },
+          stderr: { write: (text: string) => lines.push(`stderr: ${text}`) },
+          clock: () => now,
+        });
+        expect(code).toBe(0);
+        const report = lines.join("");
+        const pair = (text: string) => text.includes(main.account.id) && text.includes(alt.account.id);
+        expect(report).toContain("Net Karma per pair, last 7 days:");
+        expect(
+          report
+            .split("\n")
+            .filter(pair)
+            .some((line) => line.includes("6 purchases")),
+        ).toBe(true);
+        expect(report).toContain("Same invite code, and traded:");
+        expect(report.split("\n").some((line) => pair(line) && line.includes("same invite code"))).toBe(true);
+        expect(report).toContain("Listings bought within 60 seconds:");
+        expect(report).toContain("sold 0 cards at the floor and 3 at the cap");
+      },
+    );
 
     it("the pair limit stops one alternate feeding one main at one Mythic at the cap a week", async () => {
       const main = await holding([ID.mythic(1), ID.mythic(2)]);

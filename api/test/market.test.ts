@@ -955,7 +955,7 @@ describe("market routes (economy.md §8.3 to §8.5, §11.3, §14)", () => {
       expect(await ledgerOf(app, seller.account.id)).toHaveLength(2);
     });
 
-    it("a buy and a cancel of one listing: exactly one succeeds", async () => {
+    it("a buy and a cancel of one listing: exactly one succeeds", { timeout: HEAVY_MS }, async () => {
       for (let round = 0; round < 5; round += 1) {
         const seller = await holding([ID.rare(60)]);
         const buyer = await funded(100);
@@ -1025,25 +1025,29 @@ describe("market routes (economy.md §8.3 to §8.5, §11.3, §14)", () => {
       expect(await balanceOf(app, buyer.account.id)).toBe(0);
     });
 
-    it("a listing and a recycle racing for an entry's copies: the recycle never takes the listed card or the last copy", async () => {
-      for (let round = 0; round < 5; round += 1) {
-        const seller = await holding(copies(ID.uncommon(20), 2));
-        const [listing, recycled] = await Promise.all([
-          listCard(app, seller.cookie, ID.uncommon(20), 20),
-          recycle(app, seller.cookie, recycleBody(ID.uncommon(20), "uncommon", 1)),
-        ]);
-        const held = await heldCopies(app, seller.account.id, ID.uncommon(20));
-        expect(held.length).toBeGreaterThanOrEqual(1);
-        if (listing.statusCode === 201) {
-          const [row] = await app.db
-            .select({ cardId: marketListings.cardId })
-            .from(marketListings)
-            .where(eq(marketListings.id, listing.json<Listing>().listingId));
-          expect(held.map((card) => card.id)).toContain(row?.cardId);
+    it(
+      "a listing and a recycle racing for an entry's copies: the recycle never takes the listed card or the last copy",
+      { timeout: HEAVY_MS },
+      async () => {
+        for (let round = 0; round < 5; round += 1) {
+          const seller = await holding(copies(ID.uncommon(20), 2));
+          const [listing, recycled] = await Promise.all([
+            listCard(app, seller.cookie, ID.uncommon(20), 20),
+            recycle(app, seller.cookie, recycleBody(ID.uncommon(20), "uncommon", 1)),
+          ]);
+          const held = await heldCopies(app, seller.account.id, ID.uncommon(20));
+          expect(held.length).toBeGreaterThanOrEqual(1);
+          if (listing.statusCode === 201) {
+            const [row] = await app.db
+              .select({ cardId: marketListings.cardId })
+              .from(marketListings)
+              .where(eq(marketListings.id, listing.json<Listing>().listingId));
+            expect(held.map((card) => card.id)).toContain(row?.cardId);
+          }
+          expect([listing.statusCode, recycled.statusCode]).toContain(201);
         }
-        expect([listing.statusCode, recycled.statusCode]).toContain(201);
-      }
-    });
+      },
+    );
 
     it("the same requestId twice in parallel: one 201 and one 200 with the same body, for a listing and a purchase", async () => {
       const seller = await holding(copies(ID.rare(70), 2));
