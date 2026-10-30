@@ -1,6 +1,6 @@
 # Market and Karma shop (UI)
 
-Roadmap item 2, the two UI PRs of `docs/design/economy.md` §3 (`feat/economy-ui`: the balance and the shop; `feat/market-ui`: browse, buy, my listings) · pages `/shop` and `/market` (`navigation-and-landing.md` §3.1, shipped in #30) · server: `economy.md` §8, §11, §12 · [ADR 0011](../adr/0011-economy-revised-karma-market-snapshot.md) · companion of `docs/design/collection-overview.md` · written 2026-10-29
+Roadmap item 2, the two UI PRs of `docs/design/economy.md` §3 (`feat/economy-ui`: the balance and the shop; `feat/market-ui`: browse, buy, my listings) · pages `/shop` and `/market` (`navigation-and-landing.md` §3.1, shipped in #30) · server: `economy.md` §8, §11, §12 · [ADR 0011](../adr/0011-economy-revised-karma-market-snapshot.md) · companion of `docs/design/collection-overview.md` · written 2026-10-29 · revised 2026-10-30: a bought pack opens on its own page, `/shop/open` (§3.3 step 6, `navigation-and-landing.md` §3.13), pending that spec's open question 1
 
 > **Why a second spec.** The collection overview is one screen around one read, the account's own collection, paged in the browser. The shop and the market are two new pages, `/shop` and `/market`, each around reads of their own (`GET /api/shop`; the server-paged `GET /api/market/listings`; `GET /api/market/mine`), and they ship in different PRs from the overview's. One file would make one spec span four PRs and two paging models. Listing a card and recycling duplicates for Karma stay in the overview's card dialog (`collection-overview.md` §3.5, §3.6), because their input is one collection entry. This spec reuses the overview's patterns by reference (the confirmation, in-flight and failure rules of §3.5 step 9, the tile of §6.2, the rarity system of §6.1, the copy rules of §8) and adds only what is new.
 >
@@ -14,7 +14,7 @@ A signed-in player sees their Karma in the header, buys themed packs on the Shop
 
 - Listing a card and recycling duplicates for Karma (`collection-overview.md` §3.5, §3.6).
 - Upgrades to a higher tier: only in the mini-games (items 5 and 6).
-- The free pack control, its countdown and the reveal grid (the 1c web PR, `collection-packs.md` §8, on the `/packs` page). This spec reuses the grid for shop packs and adds nothing to the free pack's reveal (§3.1 step 5).
+- The free pack control, its countdown and the reveal grid (the 1c web PR, `collection-packs.md` §8, on the `/packs` and `/packs/open` pages). This spec reuses the grid for shop packs and adds nothing to the free pack's reveal (§3.1 step 5).
 - A Karma history and the profile (roadmap 4).
 - Price history, charts, "lowest price" or "popular" badges, recommendations, watchlists, and any notice when a listing sells. A seller sees a sale in My listings and in the balance; nothing calls them back.
 - Changing a listing's price (no route: cancel and list again), bulk buying or cancelling.
@@ -38,7 +38,8 @@ A signed-in player sees their Karma in the header, buys themed packs on the Shop
 2. **The shop is a page of its own**, not a section under the free pack, so the free pack's waiting state never sits next to a Karma price; the Packs page never mentions the shop (decided by the owner, 2026-10-29, as "its own Shop tab").
 3. **Titles and focus** (`navigation-and-landing.md` §3.6): arriving by a link, Back or Forward sets the title (`Shop · Anime TCG`, `Market · Anime TCG`) and then moves focus to the page's visible `h1` (`Shop`, `Market`), which is rendered from the start, in the loading and error states too. A load or reload sets the title and moves no focus. A signed-out visitor is sent to `/login` with the page as the return path.
 4. **No address state.** The app never reads or writes a query string or hash (`navigation-and-landing.md` §3.1 rule 2). The market's view, search, filters, sort and character filter live in the signed-in layout's state (`navigation-and-landing.md` §3.10): they survive moving between pages and reset on reload and log out. `ListingsQuery` is the request's parameters to the API, never the page's address.
-5. **Dialogs are not history entries.** Back with a confirmation or the listing dialog open leaves the page; the dialog closes with it, an in-flight request finishes and its result applies to the layout's state (`navigation-and-landing.md` §3.10 item 4).
+5. **`/shop/open`** is the bought pack's own page (owner, 2026-10-30: "Opening packs should also have their own route"; applied to shop packs as `navigation-and-landing.md` §9.2 question 1 recommends). Its routing (push, replace with `/shop`, Back, Forward, the guard, the header link) is `navigation-and-landing.md` §3.13; what it shows is §3.3 step 6.
+6. **Dialogs are not history entries.** Back with a confirmation or the listing dialog open leaves the page; the dialog closes with it, an in-flight request finishes and its result applies to the layout's state (`navigation-and-landing.md` §3.10 item 4).
 
 ### 3.3 Shop
 
@@ -48,7 +49,8 @@ A signed-in player sees their Karma in the header, buys themed packs on the Shop
 4. `Buy…` opens the **pack confirmation**: a native `<dialog>` in the Manage account shell. Heading `Buy the <title> pack?`; body naming the price, the number of cards (`ThemeOffer.cards`), that they come from this pack's characters at the odds shown, the balance, and that there is no undo. `Buy for <price> Karma` and `Cancel`.
 5. The confirm button sends `POST /api/shop/buy` with `requestId` and `themeId`, nothing else. The request id follows `collection-overview.md` §3.8. In flight: `Buying…`, with the button, `Cancel` and Escape disabled.
 6. Answers:
-   - **201, or 200 on a replay**: the dialog closes. At the top of the Shop page, under its `h1`, a reveal section opens: heading `<title> pack` (an `h2`, the focus target), the 1c reveal grid with the receipt's cards in slot order with `isNew`, and the pull summary; when `receipt.pack.packKind` is `radiant`, the Radiant line of `card-and-rarity.md` §7.1 under the summary (the heading stays `<title> pack`). The header takes `receipt.balance`; the collection is marked stale; the live region reads `Bought the <title> pack for <price> Karma. You have <B> Karma.` The reveal stays until the page is left or another pack is bought; the themes follow below it.
+   - **201, or 200 on a replay**: the dialog closes and the app **pushes `/shop/open`** (revised 2026-10-30; until then the reveal opened at the top of `/shop`). Title `Shop pack · Anime TCG`; focus on its `h1` `Shop pack` (`navigation-and-landing.md` §3.6). The page shows, top to bottom: the `h1`; the link `Back to the shop`; the reveal section: heading `<title> pack` (an `h2`), the pull summary, the Radiant line of `card-and-rarity.md` §7.1 when `receipt.pack.packKind` is `radiant` (the heading stays `<title> pack`), and the 1c reveal grid with the receipt's cards in slot order with `isNew`, with the entrance. The header takes `receipt.balance`; the collection is marked stale; the live region reads `Bought the <title> pack for <price> Karma. You have <B> Karma.` once, after the page change.
+   - **On `/shop/open`** there is no buy control: buying again goes through `/shop` and its confirmation, so a Karma spend always starts from the price and the odds. The bought pack is held in the signed-in layout until another pack is bought, log out, session end or reload. Back returns to `/shop`, which shows the themes and, while a pack is held, the text link `See your latest shop pack` under its `h1`; Forward or that link shows the held cards without the entrance. A load or reload of `/shop/open`, or an address typed there, with nothing held replaces it with `/shop`.
    - **`insufficient_funds`**: the confirmation stays, the red line reads `This pack costs <price> Karma. You have <B> Karma.` (B from the error's `balance`, which also replaces the header's) and the confirm button is disabled.
    - **`theme_unavailable`**: the dialog closes, the shop is refetched, and the page shows the neutral notice `That pack is no longer in the shop.`
    - **`pool_unavailable`**: the red line `There are no cards to draw from right now. Nothing changed.`
@@ -133,36 +135,38 @@ All six mismatches of this spec's first version (S1 to S6: `closedAt`, the `limi
 
 ## 4. States
 
-| View              | State                     | User sees                                                                              | User can do                 |
-| ----------------- | ------------------------- | -------------------------------------------------------------------------------------- | --------------------------- |
-| Header            | no answer yet, or failed  | No balance                                                                             | —                           |
-| Header            | loaded                    | `<B> Karma`                                                                            | —                           |
-| Shop              | loading (after 300 ms)    | Three skeleton theme rows (static bars); visually hidden `Loading the shop…`           | Wait                        |
-| Shop              | loaded                    | The themes                                                                             | Buy…                        |
-| Shop              | too little Karma          | That theme's `Buy…` disabled with the reason                                           | —                           |
-| Shop              | empty                     | `No packs in the shop.`                                                                | —                           |
-| Shop              | error, nothing held       | `Couldn't load the shop.` and `Try again`                                              | Try again                   |
-| Shop              | stale                     | The held themes, `Buy…` disabled, reason `Buying waits until the game server answers.` | —                           |
-| Shop              | revealed                  | The reveal section above the themes, focus on its heading                              | Buy another, leave          |
-| Pack confirmation | confirm, buying, failures | As `collection-overview.md` §4.6, with this spec's copy                                | Confirm, cancel             |
-| Browse            | loading (after 300 ms)    | The toolbar disabled, 12 skeleton tiles; visually hidden `Loading the market…`         | Wait                        |
-| Browse            | loaded                    | Results line, tiles, `Show more` when there is a next page                             | Everything                  |
-| Browse            | refreshing (new filters)  | The previous list stays, unchanged, until the new first page arrives                   | Keep filtering              |
-| Browse            | empty market              | `No cards on the market.`                                                              | —                           |
-| Browse            | no matches                | `No listings match "<q>".` or `No listings match these filters.` and `Clear filters`   | Clear                       |
-| Browse            | loading more              | `Show more` reads `Loading…`, disabled                                                 | Wait                        |
-| Browse            | more failed               | Under the list: `Couldn't load more.` and `Try again`                                  | Try again                   |
-| Browse            | error, nothing held       | `Couldn't load the market.` and `Try again`                                            | Try again                   |
-| Listing dialog    | open                      | Details, `In your collection`, `Buy…` or, if yours, `Cancel listing`                   | Buy…, cancel listing, close |
-| Listing dialog    | too little Karma          | `Buy…` disabled, reason `Costs <price> Karma. You have <B>.`                           | Close                       |
-| Buy               | confirm, buying, failures | As `collection-overview.md` §4.6, with this spec's copy                                | Confirm, cancel             |
-| Buy               | bought                    | The result, focus on its heading                                                       | Close                       |
-| Buy               | gone                      | `This card is no longer on the market.`                                                | Close                       |
-| Buy               | limit                     | The red line with the time; confirm disabled                                           | Cancel                      |
-| My listings       | loading, error            | As browse, with `Loading your listings…` and `Couldn't load your listings.`            | Try again                   |
-| My listings       | loaded                    | The four parts                                                                         | Cancel listing              |
-| My listings       | cancelling                | That row's button `Cancelling…`, disabled; other rows usable                           | Wait                        |
-| My listings       | cancelled                 | The row moves to Closed; the status line                                               | Continue                    |
+| View              | State                      | User sees                                                                                  | User can do                 |
+| ----------------- | -------------------------- | ------------------------------------------------------------------------------------------ | --------------------------- |
+| Header            | no answer yet, or failed   | No balance                                                                                 | —                           |
+| Header            | loaded                     | `<B> Karma`                                                                                | —                           |
+| Shop              | loading (after 300 ms)     | Three skeleton theme rows (static bars); visually hidden `Loading the shop…`               | Wait                        |
+| Shop              | loaded                     | The themes                                                                                 | Buy…                        |
+| Shop              | too little Karma           | That theme's `Buy…` disabled with the reason                                               | —                           |
+| Shop              | empty                      | `No packs in the shop.`                                                                    | —                           |
+| Shop              | error, nothing held        | `Couldn't load the shop.` and `Try again`                                                  | Try again                   |
+| Shop              | stale                      | The held themes, `Buy…` disabled, reason `Buying waits until the game server answers.`     | —                           |
+| Shop              | bought                     | `/shop/open`: `h1` `Shop pack` (focused), `Back to the shop`, the reveal with its entrance | Go back to the shop, leave  |
+| Shop              | pack held                  | `/shop`: the themes, and `See your latest shop pack` under the `h1`                        | Buy…, see the pack          |
+| Shop              | `/shop/open`, nothing held | Replaced by `/shop`                                                                        | Buy…                        |
+| Pack confirmation | confirm, buying, failures  | As `collection-overview.md` §4.6, with this spec's copy                                    | Confirm, cancel             |
+| Browse            | loading (after 300 ms)     | The toolbar disabled, 12 skeleton tiles; visually hidden `Loading the market…`             | Wait                        |
+| Browse            | loaded                     | Results line, tiles, `Show more` when there is a next page                                 | Everything                  |
+| Browse            | refreshing (new filters)   | The previous list stays, unchanged, until the new first page arrives                       | Keep filtering              |
+| Browse            | empty market               | `No cards on the market.`                                                                  | —                           |
+| Browse            | no matches                 | `No listings match "<q>".` or `No listings match these filters.` and `Clear filters`       | Clear                       |
+| Browse            | loading more               | `Show more` reads `Loading…`, disabled                                                     | Wait                        |
+| Browse            | more failed                | Under the list: `Couldn't load more.` and `Try again`                                      | Try again                   |
+| Browse            | error, nothing held        | `Couldn't load the market.` and `Try again`                                                | Try again                   |
+| Listing dialog    | open                       | Details, `In your collection`, `Buy…` or, if yours, `Cancel listing`                       | Buy…, cancel listing, close |
+| Listing dialog    | too little Karma           | `Buy…` disabled, reason `Costs <price> Karma. You have <B>.`                               | Close                       |
+| Buy               | confirm, buying, failures  | As `collection-overview.md` §4.6, with this spec's copy                                    | Confirm, cancel             |
+| Buy               | bought                     | The result, focus on its heading                                                           | Close                       |
+| Buy               | gone                       | `This card is no longer on the market.`                                                    | Close                       |
+| Buy               | limit                      | The red line with the time; confirm disabled                                               | Cancel                      |
+| My listings       | loading, error             | As browse, with `Loading your listings…` and `Couldn't load your listings.`                | Try again                   |
+| My listings       | loaded                     | The four parts                                                                             | Cancel listing              |
+| My listings       | cancelling                 | That row's button `Cancelling…`, disabled; other rows usable                               | Wait                        |
+| My listings       | cancelled                  | The row moves to Closed; the status line                                                   | Continue                    |
 
 Session ended and unreachable: `accounts.md` §4.8, as everywhere.
 
@@ -180,7 +184,9 @@ This is the "with Shop and Market" column of `navigation-and-landing.md` §5.1: 
 
 ### 5.2 Shop
 
-The page's `h1` `Shop` first (`navigation-and-landing.md` §5.2), then one column, `max-w-3xl`. Each theme is a block with `border-b border-zinc-800 py-5`: row 1 the title (`h2`) on the left, the price and `Buy…` on the right (stacked under the title below 640 px); then the series line, the odds line and the tier sizes line. Not cards in a grid: one list, read top to bottom. The reveal section, when present, sits above with `mb-8` and the 1c reveal grid's own layout.
+The page's `h1` `Shop` first (`navigation-and-landing.md` §5.2), then one column, `max-w-3xl`. Each theme is a block with `border-b border-zinc-800 py-5`: row 1 the title (`h2`) on the left, the price and `Buy…` on the right (stacked under the title below 640 px); then the series line, the odds line and the tier sizes line. Not cards in a grid: one list, read top to bottom. `See your latest shop pack`, when shown, sits under the `h1`, `mb-6`.
+
+**`/shop/open`**: the `h1` `Shop pack` (`mb-6`), `Back to the shop`, then the reveal section `mt-10` with `packs-page.md` §5.5's heading block and the 1c reveal grid's layout (§5.2 there).
 
 ### 5.3 Market
 
@@ -197,6 +203,7 @@ No new tokens. Everything reuses `collection-overview.md` §6: the card and rari
 - Page links: `navigation-and-landing.md` §6.1 (the former tab group's look), `px-2` on a phone with four links.
 - Balance in the header: `text-sm`; the number `font-medium text-zinc-100 tabular-nums`, the word `Karma` `text-zinc-400`. No icon (decided by the owner, 2026-10-29), no box, no colour of its own.
 - Theme title `text-base font-semibold text-zinc-100`; the series, odds and tier lines `text-sm text-zinc-400`, the `Odds per card` summary `BUTTON.text`, tier words in `text-rarity-<tier>-text`, numbers `tabular-nums`; the price `text-sm text-zinc-200 tabular-nums`. `Buy…` is `BUTTON.primary`, as every primary action; no larger or louder button for a paid pack.
+- `See your latest shop pack`: `BUTTON.text` at `text-sm`, a link. `Back to the shop`: a link with `BUTTON.secondary`'s classes. The `h1` `Shop pack` as every account page's.
 - My listings: names `text-sm text-zinc-100`, the other lines `text-xs text-zinc-400`, `Cancel listing` `BUTTON.secondary`. Statuses are words in `text-zinc-300`; no green for sold, no red for expired.
 - Nothing marks a price as low, high, popular or new on the market.
 
@@ -205,7 +212,7 @@ No new tokens. Everything reuses `collection-overview.md` §6: the card and rari
 - **Page links**: `<nav aria-label="Main">` with real links (`<a href="/shop">` and so on) and `aria-current="page"` on the current page's link only, not `aria-pressed` buttons; Tab moves through them in order (`navigation-and-landing.md` §7).
 - **Titles and focus**: `Shop · Anime TCG` and `Market · Anime TCG`, set before focus moves to the page's `h1` (`tabindex="-1"`) on every navigation after the first render; the `h1` is also the target of `Skip to content`. When the page is left with a dialog open, focus goes to the new page's `h1` (`navigation-and-landing.md` §3.6, §7).
 - **Balance**: a `<p>` reading `1,240 Karma`; not live. The action's status line or the live region carries a change.
-- **Shop**: `<main>` starts with the visible `h1` `Shop` (the visually hidden `h2` of the previous revision is gone) and holds a `<section aria-labelledby>` on it; each theme an `<article aria-labelledby>` on its `h2`; the reveal section's heading is an `h2`. `Buy…` is described by the price and any reason. The reveal heading takes focus after a purchase.
+- **Shop**: `<main>` starts with the visible `h1` `Shop` (the visually hidden `h2` of the previous revision is gone) and holds a `<section aria-labelledby>` on it; each theme an `<article aria-labelledby>` on its `h2`; the reveal section's heading is an `h2`. `Buy…` is described by the price and any reason. After a purchase, focus goes to `/shop/open`'s `h1` `Shop pack` (`navigation-and-landing.md` §3.6); the reveal there is a `<section aria-labelledby>` its `h2` `<title> pack`, with the list of `packs-page.md` §7.
 - **Market**: `<main>` starts with the visible `h1` `Market` (replacing the visually hidden `h2`) and holds a `<section>` labelled by it; My listings' parts are `h2`s; the view switch as in the collection; the toolbar a `<search>` labelled `Market filters`, each control with a visible label. The results line is the focus target after a filter change from the keyboard is applied, and goes to the live region 500 ms after the last change. `Show more` keeps focus after it appends; the live region reads `<N> listings shown`. Tiles are `<button aria-haspopup="dialog">` named `<name>, <Rarity>, <series>, <price> Karma`, or `…, yours`.
 - **Dialogs and confirmations**: as `collection-overview.md` §7 (native `<dialog>`, heading focus, `aria-describedby` on the body, in-flight rules, countdown, banners).
 - **My listings**: each part a list; `Cancel listing` named `Cancel listing of <name>`; after a cancel, focus moves to the status line (`role="status"`, `tabindex="-1"`).
@@ -243,6 +250,8 @@ The word rules, placeholders and number formats of `collection-overview.md` §8 
 | Confirmation body         | `<price> Karma for <cards> cards from this pack's characters, at the odds shown. You have <B> Karma. There is no undo.`   |
 | Confirm button            | `Buy for <price> Karma` / in flight `Buying…`                                                                             |
 | Reveal heading            | `<title> pack`                                                                                                            |
+| Opening page              | `h1` `Shop pack` · title `Shop pack · Anime TCG` · link `Back to the shop`                                                |
+| Link while a pack is held | `See your latest shop pack`                                                                                               |
 | Bought (live region)      | `Bought the <title> pack for <price> Karma. You have <B> Karma.`                                                          |
 | Not enough Karma (red)    | `This pack costs <price> Karma. You have <B> Karma.`                                                                      |
 | Gone (neutral)            | `That pack is no longer in the shop.`                                                                                     |
@@ -320,4 +329,6 @@ Failures not listed here use `collection-overview.md` §8's "Failures" strings.
 
 ## 9. Open questions
 
-None. Decided by the owner on 2026-10-29: the shop is its own Shop tab (now the `/shop` page); Karma has no icon; genre packs are automatic, and there are no franchise packs: every themed pack draws from all franchises (ADR 0013, replacing the earlier answer that franchise packs are owner-picked); the market fee is 5 %, the bounds 0.5 × to 2.5 × the reference value, the limits per rolling 7 days (`collection-overview.md` §9.1).
+One, owned by `navigation-and-landing.md` §9.2 question 1 (2026-10-30): whether a bought pack opens on `/shop/open` (written here as recommended), on `/packs/open`, or stays on `/shop` as before.
+
+Decided by the owner on 2026-10-29: the shop is its own Shop tab (now the `/shop` page); Karma has no icon; genre packs are automatic, and there are no franchise packs: every themed pack draws from all franchises (ADR 0013, replacing the earlier answer that franchise packs are owner-picked); the market fee is 5 %, the bounds 0.5 × to 2.5 × the reference value, the limits per rolling 7 days (`collection-overview.md` §9.1).
