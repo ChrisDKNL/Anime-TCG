@@ -12,13 +12,20 @@ import {
   BODY_TEXT,
   BUTTON,
   ERROR_TEXT,
+  FOCUS_RING,
   INPUT,
   INPUT_BORDER,
   PANEL_HEADING,
   STATUS_BANNER,
 } from "../account/styles";
 import { ignoreRepeat, openOnce } from "../packs/activation";
-import { ERROR_LINE, SECONDARY_LINE, TEXT_BUTTON_SM, TEXT_LINK_SM } from "../packs/styles";
+import { ERROR_LINE, SECONDARY_LINE, TEXT_LINK_SM } from "../packs/styles";
+
+/**
+ * `BUTTON.text` at `text-sm` for a label that holds an AniList name: it grows instead of a fixed height,
+ * and an unbroken name wraps anywhere, so it never widens the dialog (collection-overview.md §5.6).
+ */
+const MARKET_LINK = `min-h-10 rounded px-1 text-left text-sm font-medium text-zinc-400 [overflow-wrap:anywhere] hover:text-zinc-200 sm:min-h-7 ${FOCUS_RING}`;
 
 interface SectionProps {
   entry: CollectionEntry;
@@ -156,7 +163,7 @@ export function ListSection({ entry, rules, stale, list, buttonRef, fieldRef, on
         )}
         {showCapReason && rules !== null && <CapLine id={reasonId} max={rules.maxListings} alert={false} />}
       </form>
-      <button type="button" onClick={seeOnMarket} className={`${TEXT_BUTTON_SM} mt-2 -ml-1 break-words`}>
+      <button type="button" onClick={seeOnMarket} className={`${MARKET_LINK} mt-2 -ml-1`}>
         <LoginText text={{ template: listCopy.marketLink, login: entry.character.name }} />
       </button>
     </section>

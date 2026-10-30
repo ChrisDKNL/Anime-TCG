@@ -37,6 +37,8 @@ interface Props {
 export function MyListings({ cancel, wait }: Props) {
   const game = useGame();
   const mine = useQuery(game.marketMineQuery);
+  // §3.6 step 1: showing the view reads the wallet too, whose rules its headings name.
+  useQuery(game.walletQuery);
   const rules = game.wallet.data?.wallet.rules ?? null;
   const showLoading = useDelayedFlag(mine.data === undefined && !mine.isError, LOADING_DELAY_MS);
   const [last, setLast] = useState<Cancelled | null>(null);
