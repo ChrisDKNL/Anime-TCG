@@ -1,0 +1,67 @@
+import { describe, expect, it } from "vitest";
+import { matchesTerms, normalise, searchTerms } from "./collectionSearch";
+
+describe("normalise (collection-overview.md §3.3 step 1)", () => {
+  it("folds full-width letters, case and Latin accents", () => {
+    expect(normalise("ＬＵＦＦＹ")).toBe("luffy");
+    expect(normalise("Pokémon")).toBe("pokemon");
+    expect(normalise("ÅNGSTRÖM Çà")).toBe("angstrom ca");
+  });
+
+  it("keeps the kana voiced marks, so か does not become が or the reverse", () => {
+    expect(normalise("が")).toBe("が");
+    expect(normalise("か")).not.toBe(normalise("が"));
+    expect(normalise("パ")).toBe("パ");
+  });
+
+  it("trims and collapses whitespace runs, tabs and ideographic spaces included", () => {
+    expect(normalise("  Spike \t\n Spiegel  ")).toBe("spike spiegel");
+    expect(normalise("進撃　の巨人")).toBe("進撃 の巨人");
+  });
+
+  it("keeps punctuation", () => {
+    expect(normalise("Monkey D. Luffy")).toBe("monkey d. luffy");
+  });
+});
+
+describe("searchTerms (§3.3 step 2)", () => {
+  it("splits the normalised query on spaces", () => {
+    expect(searchTerms("  Bebop   SPIKE ")).toEqual(["bebop", "spike"]);
+  });
+
+  it("an empty or blank query has no terms", () => {
+    expect(searchTerms("")).toEqual([]);
+    expect(searchTerms("   ")).toEqual([]);
+  });
+});
+
+describe("matchesTerms (§3.3 step 3 and the examples table)", () => {
+  const luffy = ["monkey d. luffy", normalise("モンキー・D・ルフィ"), "one piece", "ワンピース"];
+  const spike = ["spike spiegel", "cowboy bebop"];
+  const eren = ["eren yeager", "attack on titan", normalise("進撃の巨人")];
+  const pikachu = ["pikachu", normalise("Pokémon")];
+
+  it.each([
+    ["spike", spike, true],
+    ["bebop spike", spike, true],
+    ["titan", eren, true],
+    ["pokemon", pikachu, true],
+    ["ＬＵＦＦＹ", luffy, true],
+    ["進撃", eren, true],
+    ["ルフィ", luffy, true],
+    ["d. luffy", luffy, true],
+    ["d.luffy", luffy, false],
+    ["luffy zoro", luffy, false],
+  ])("%s", (query, fields, expected) => {
+    expect(matchesTerms(fields, searchTerms(query))).toBe(expected);
+  });
+
+  it("matches each term on its own: `d luffy` matches, as `d` is in `d.` (rule 3 over the table's example)", () => {
+    expect(matchesTerms(luffy, searchTerms("d luffy"))).toBe(true);
+  });
+
+  it("no terms match everything", () => {
+    expect(matchesTerms(spike, [])).toBe(true);
+    expect(matchesTerms([], [])).toBe(true);
+  });
+});
