@@ -315,7 +315,6 @@ export function valueChanges(
     if (listing.fee !== today)
       changes.push(`listing ${listing.listingId} at a fee of ${listing.fee}, today ${today}`);
   }
-
   return changes;
 }
 
@@ -365,7 +364,6 @@ const BUYERLESS_SALE_OF_CARD = sql`select 1 from market_listings l
 
 /**
  * Reads everything the checks need in one read-only, repeatable-read
-
  * transaction, so the audit sees one consistent moment even while the game
  * runs, and audits every account.
  */

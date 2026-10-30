@@ -92,7 +92,6 @@ export class CollectionService {
         variant: row.variant,
         count: row.count,
         ...holdingOf({ held: row.count, listed: row.listed, escrowed: row.escrowed }),
-
         firstObtainedAt: row.firstObtainedAt.toISOString(),
         lastObtainedAt: row.lastObtainedAt.toISOString(),
       };

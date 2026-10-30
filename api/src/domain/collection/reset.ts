@@ -65,16 +65,16 @@ async function holdings(
  * `owner_reset` row of minus the balance (none at 0), with `keepKarma` it
  * stays and nothing is written. The account's live listings are cancelled
  * first (a lapsed one is closed as expired, as everywhere), so nobody can
- * buy one, and every card goes whatever its origin: an opening's with the
- * opening, a bought one through 0006's `delete_bought_cards`, the listings keeping their history with
- * no card. The lock order is the account, its listings, its cards. Every
- * confirmed reset, whichever the Karma
- * rule, sets `last_reset_at` to its time (taken from `clock` once the lock
- * is held), which is how `audit-ledger` tells the recycles and shop debits
- * it emptied from forged ones (§13.1). The account's ledger, recycles and
- * their entries stay as history. The login, password, sessions and account
- * id stay. Without `confirm` it only counts: the cards held and, apart, the
- * recycled ones it would delete with them (§13.4).
+ * buy one; then every card goes whatever its origin, an opening's with the
+ * opening and a bought one through `delete_bought_cards` (0006, 0007), and
+ * the listings keep their history without their card. The lock order is
+ * the account, its listings, its cards. Every confirmed reset, whichever the
+ * Karma rule, sets `last_reset_at` to its time (taken from `clock` once the
+ * lock is held), which is how `audit-ledger` tells the recycles and shop
+ * debits it emptied from forged ones (§13.1). The account's ledger, recycles
+ * and their entries stay as history. The login, password, sessions and
+ * account id stay. Without `confirm` it only counts: the cards held and,
+ * apart, the recycled ones it would delete with them (§13.4).
  */
 export async function resetCollection(
   db: Db,
@@ -118,7 +118,6 @@ export async function resetCollection(
       ...held,
       listings,
       balance: account.balance,
-
       keepKarma,
       applied: options.confirm,
     };

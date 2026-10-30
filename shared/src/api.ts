@@ -1,6 +1,5 @@
 import { type Static, Type } from "@sinclair/typebox";
 import { MARKET_PAGE_SIZE, MAX_ENTRY_AMOUNT, MAX_RECYCLE_COUNT, PACK_CAP, PACK_SIZE } from "./economy.js";
-
 import { PITY_PACKS } from "./rarity.js";
 
 /**

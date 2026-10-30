@@ -510,7 +510,6 @@ export const cards = pgTable(
     index("cards_removed_by_purchase_idx")
       .on(table.removedByPurchase)
       .where(sql`${table.removedByPurchase} is not null`),
-
     index("cards_held_entry_idx")
       .on(table.accountId, table.characterId, table.rarity, table.variant)
       .where(sql`${table.removedAt} is null`),

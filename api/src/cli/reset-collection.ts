@@ -17,12 +17,10 @@ import { escapeUnprintable, quote } from "./quote.js";
  *   node api/dist/cli/reset-collection.js <login> --keep-karma --confirm   reset it, Karma kept
  *
  * Cancels the account's market listings, removes its openings and cards
- * (recycled, sold and bought ones included), fills
-
- * its pack allowance, sets its pity and Enchanted counters to zero and
- * records the reset's time; the Karma balance goes to 0 with one ledger row
- * unless `--keep-karma` (economy.md §8.10, §13.4); the login, password and
- * sessions stay. The dry run counts the cards the player holds and, apart,
+ * (recycled, sold and bought ones included), fills its pack allowance, sets
+ * its pity and Enchanted counters to zero and records the reset's time; the
+ * Karma balance goes to 0 with one ledger row unless `--keep-karma`
+ * (economy.md §8.10, §13.4); the login, password and sessions stay. The dry run counts the cards the player holds and, apart,
  * the recycled ones. Uses DATABASE_URL: the app role has every statement
  * this needs. There is no route for it, by design.
  */

@@ -56,7 +56,6 @@ export function errorEnvelopeFor(err: unknown): EnvelopeResponse {
     const body = envelope(err.code, err.message);
     if (err.balance !== undefined) body.error.balance = err.balance;
     if (err.limit !== undefined) body.error.limit = err.limit;
-
     if (err.retryAfterSeconds === undefined) return { statusCode: err.statusCode, body };
     body.error.retryAfterSeconds = err.retryAfterSeconds;
     return { statusCode: err.statusCode, body, retryAfterSeconds: err.retryAfterSeconds };
