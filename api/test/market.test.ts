@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { Writable } from "node:stream";
 import type { Listing, PurchaseReceipt, Wallet } from "@anime-tcg/shared/api";
 import {
   MARKET_LISTING_TTL_SECONDS,
@@ -17,11 +18,14 @@ import {
 } from "@anime-tcg/shared/economy";
 import { RARITIES } from "@anime-tcg/shared/rarity";
 import { asc, eq } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import type { App } from "../src/app.js";
+import { createDb } from "../src/db/client.js";
 import { cards, marketListings, marketPurchases, poolSnapshotFranchises } from "../src/db/schema.js";
 import { resetCollection } from "../src/domain/collection/reset.js";
 import { marketFee } from "../src/domain/economy/fee.js";
+import { PURGE_INTERVAL_MS } from "../src/domain/session/policy.js";
+import { createLogger } from "../src/plugins/logging.js";
 import {
   balanceOf,
   buyPack,
@@ -726,6 +730,82 @@ describe("market routes (economy.md §8.3 to §8.5, §11.3, §14)", () => {
       tick(TTL_MS);
       const res = await cancelListing(app, seller.cookie, fresh.listingId);
       expect(res.json<Listing>()).toMatchObject({ status: "expired", closedAt: fresh.expiresAt });
+    });
+  });
+
+  describe("the hourly sweep (economy.md §8.5, M10)", () => {
+    /** An app logging at info into `lines`, and the market's hourly tick: the third, after the session and throttle purges. */
+    async function timedApp(db = patientDb()) {
+      const setIntervalSpy = vi.spyOn(globalThis, "setInterval");
+      const chunks: string[] = [];
+      const sink = new Writable({
+        write(chunk: Buffer, _encoding, done) {
+          chunks.push(chunk.toString());
+          done();
+        },
+      });
+      const timed = await createTestApp({
+        config: testConfig({ ACCOUNT_CAP: "1000" }),
+        db,
+        logger: createLogger("info", sink),
+        clock: () => now,
+      });
+      try {
+        await timed.ready();
+        const hourly = setIntervalSpy.mock.calls.filter(([, ms]) => ms === PURGE_INTERVAL_MS);
+        expect(hourly).toHaveLength(3);
+        const [tick] = hourly[2] as [() => void, number];
+        const lines = () => chunks.map((line) => JSON.parse(line) as Record<string, unknown>);
+        return { timed, tick, lines };
+      } finally {
+        setIntervalSpy.mockRestore();
+      }
+    }
+
+    it("marks every lapsed listing expired on its tick, a line per listing and one with the count", async () => {
+      const seller = await holding([ID.rare(42)]);
+      const listing = await listed(app, seller, ID.rare(42), 30);
+      tick(TTL_MS);
+      const { timed, tick: sweep, lines } = await timedApp();
+      try {
+        sweep();
+        await vi.waitFor(() => {
+          expect(lines()).toContainEqual(
+            expect.objectContaining({
+              level: 30,
+              msg: "lapsed listings expired",
+              expired: expect.any(Number) as number,
+            }),
+          );
+        });
+        expect(lines()).toContainEqual(
+          expect.objectContaining({ msg: "listing expired", listingId: listing.listingId, replayed: false }),
+        );
+        const [row] = await app.db
+          .select({ status: marketListings.status, closedAt: marketListings.closedAt })
+          .from(marketListings)
+          .where(eq(marketListings.id, listing.listingId));
+        expect(row).toEqual({ status: "expired", closedAt: new Date(listing.expiresAt) });
+      } finally {
+        await timed.close();
+      }
+    });
+
+    it("survives a failed sweep: logs the error and keeps serving", async () => {
+      const {
+        timed,
+        tick: sweep,
+        lines,
+      } = await timedApp(createDb("postgres://anime:anime@127.0.0.1:1/anime"));
+      try {
+        sweep();
+        await vi.waitFor(() => {
+          expect(lines()).toContainEqual(expect.objectContaining({ level: 50, msg: "listing purge failed" }));
+        });
+        expect((await timed.inject({ method: "GET", url: "/healthz" })).statusCode).toBe(503);
+      } finally {
+        await timed.close();
+      }
     });
   });
 
