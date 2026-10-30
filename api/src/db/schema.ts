@@ -2,6 +2,7 @@ import { MAX_BALANCE, MAX_ENTRY_AMOUNT, MAX_RECYCLE_COUNT, PACK_SIZE } from "@an
 import { PITY_PACKS, RARITIES } from "@anime-tcg/shared/rarity";
 import { sql } from "drizzle-orm";
 import {
+  type AnyPgColumn,
   boolean,
   check,
   foreignKey,
@@ -165,6 +166,8 @@ export const characterRole = pgEnum("character_role", ["main", "supporting"]);
 export const packKind = pgEnum("pack_kind", ["standard", "enchanted", "radiant"]);
 /** What paid for an opening (economy.md §7): the allowance or the shop; items 5 and 6 add `prize`. */
 export const openingSource = pgEnum("opening_source", ["timer", "shop"]);
+/** A market listing's state (economy.md §7); a listing past `expires_at` is expired whatever this says until the purge marks it. */
+export const listingStatus = pgEnum("listing_status", ["active", "sold", "cancelled", "expired"]);
 
 /**
  * One row per snapshot of the AniList pool (collection-packs.md §4.1), never
@@ -197,18 +200,27 @@ export const poolSnapshots = pgTable(
   ],
 );
 
-/** The latest display data of every anime entry that was ever in a snapshot; never deleted. */
+/**
+ * The latest display data of every anime entry that was ever in a snapshot;
+ * never deleted. `search_title` and `search_title_native` are the titles in
+ * the search normalisation of `@anime-tcg/shared/search` (economy.md §7,
+ * §8.4), written with them by every snapshot.
+ */
 export const series = pgTable("series", {
   id: integer("id").primaryKey(),
   title: text("title").notNull(),
   titleNative: text("title_native"),
   startYear: smallint("start_year"),
+  searchTitle: text("search_title").notNull(),
+  searchTitleNative: text("search_title_native"),
 });
 
 /**
  * The latest display data of every character that was ever in a snapshot;
  * never deleted. The check repeats the host rule of the snapshot validation
  * (spec §5.1.6) so no write path can store an image URL off the CSP's host.
+ * `search_name` and `search_name_native` are the names in the search
+ * normalisation, as `series` holds its titles.
  */
 export const characters = pgTable(
   "characters",
@@ -217,6 +229,8 @@ export const characters = pgTable(
     name: text("name").notNull(),
     nameNative: text("name_native"),
     imageUrl: text("image_url").notNull(),
+    searchName: text("search_name").notNull(),
+    searchNameNative: text("search_name_native"),
   },
   (table) => [
     check("characters_image_url_check", sql`${table.imageUrl} like ${sql.raw(`'https://${IMAGE_HOST}/%'`)}`),
@@ -442,10 +456,9 @@ export const cards = pgTable(
     accountId: uuid("account_id")
       .notNull()
       .references(() => accounts.id, { onDelete: "cascade" }),
-    openingId: uuid("opening_id")
-      .notNull()
-      .references(() => packOpenings.id, { onDelete: "cascade" }),
-    slot: smallint("slot").notNull(),
+    /** The pack that dealt the card; null for a card a market purchase delivered (`purchase_id`), which has no slot either. */
+    openingId: uuid("opening_id").references(() => packOpenings.id, { onDelete: "cascade" }),
+    slot: smallint("slot"),
     characterId: integer("character_id")
       .notNull()
       .references(() => characters.id),
@@ -457,21 +470,46 @@ export const cards = pgTable(
     isNew: boolean("is_new").notNull(),
     pulledAt: timestamp("pulled_at", { withTimezone: true }).notNull(),
     /**
-     * Null while held; set when the card is recycled (economy.md §7). The row
-     * stays, so the recycle can be audited, and once set neither this nor
-     * `removed_by_recycle` changes again: migration 0005's trigger
-     * `cards_removed_stays` refuses it, the app role included.
+     * Null while held; set when the card is recycled or sold (economy.md §7).
+     * The row stays, so the recycle or the sale can be audited, and once set
+     * neither this nor `removed_by_recycle` changes again, and
+     * `removed_by_purchase` changes only to null (the buyer's account went):
+     * the trigger `cards_removed_stays` (0005, extended by 0006) refuses it,
+     * the app role included.
      */
     removedAt: timestamp("removed_at", { withTimezone: true }),
     removedByRecycle: uuid("removed_by_recycle").references(() => recycles.id),
+    /** The market purchase that sold this card to another account. */
+    removedByPurchase: uuid("removed_by_purchase").references((): AnyPgColumn => marketPurchases.id, {
+      onDelete: "set null",
+    }),
+    /** The market purchase that delivered this card: a bought card is a new row of the buyer's (§7). */
+    purchaseId: uuid("purchase_id").references((): AnyPgColumn => marketPurchases.id),
     /** Reserved for a game ante (items 5 and 6): always null in item 2, and nothing writes it. */
     escrowId: uuid("escrow_id"),
   },
   (table) => [
     unique("cards_opening_slot_unique").on(table.openingId, table.slot),
     check("cards_slot_check", sql`${table.slot} between 0 and ${sql.raw(String(PACK_SIZE - 1))}`),
-    check("cards_removed_check", sql`${table.removedAt} is not null or ${table.removedByRecycle} is null`),
+    check(
+      "cards_removed_check",
+      sql`${table.removedAt} is not null or (${table.removedByRecycle} is null and ${table.removedByPurchase} is null)`,
+    ),
+    check(
+      "cards_removed_once_check",
+      sql`num_nonnulls(${table.removedByRecycle}, ${table.removedByPurchase}) <= 1`,
+    ),
+    check("cards_origin_check", sql`num_nonnulls(${table.openingId}, ${table.purchaseId}) = 1`),
+    check("cards_slot_origin_check", sql`(${table.openingId} is null) = (${table.slot} is null)`),
     check("cards_escrow_check", sql`${table.removedAt} is null or ${table.escrowId} is null`),
+    // A purchase delivers exactly one card.
+    uniqueIndex("cards_purchase_idx")
+      .on(table.purchaseId)
+      .where(sql`${table.purchaseId} is not null`),
+    // audit-ledger finds each sale's removed card by this column (economy.md §13.1).
+    index("cards_removed_by_purchase_idx")
+      .on(table.removedByPurchase)
+      .where(sql`${table.removedByPurchase} is not null`),
     index("cards_held_entry_idx")
       .on(table.accountId, table.characterId, table.rarity, table.variant)
       .where(sql`${table.removedAt} is null`),
@@ -479,5 +517,111 @@ export const cards = pgTable(
     index("cards_removed_by_recycle_idx")
       .on(table.removedByRecycle)
       .where(sql`${table.removedByRecycle} is not null`),
+  ],
+);
+
+/**
+ * One card offered on the player market (economy.md §7, §8.3). `id` is
+ * public: the market names listings by it. The rarity and variant are the
+ * card's, copied, and the fee is fixed when the card is listed. The app
+ * role may change only `status` and `closed_at` (migration 0006); `card_id`
+ * goes to null only when an owner reset deletes the card.
+ */
+export const marketListings = pgTable(
+  "market_listings",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    sellerId: uuid("seller_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    requestId: uuid("request_id").notNull(),
+    itemKind: itemKind("item_kind").notNull().default("card"),
+    cardId: uuid("card_id").references(() => cards.id, { onDelete: "set null" }),
+    characterId: integer("character_id")
+      .notNull()
+      .references(() => characters.id),
+    rarity: rarity("rarity").notNull(),
+    variant: cardVariant("variant").notNull().default("standard"),
+    price: integer("price").notNull(),
+    fee: integer("fee").notNull(),
+    status: listingStatus("status").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+    closedAt: timestamp("closed_at", { withTimezone: true }),
+  },
+  (table) => [
+    unique("market_listings_seller_request_unique").on(table.sellerId, table.requestId),
+    // A card is listed at most once at a time.
+    uniqueIndex("market_listings_active_card_idx")
+      .on(table.cardId)
+      .where(sql`${table.status} = 'active'`),
+    index("market_listings_active_price_idx")
+      .on(table.rarity, table.price, table.id)
+      .where(sql`${table.status} = 'active'`),
+    index("market_listings_active_character_idx")
+      .on(table.characterId)
+      .where(sql`${table.status} = 'active'`),
+    index("market_listings_seller_status_idx").on(table.sellerId, table.status),
+    check(
+      "market_listings_price_check",
+      sql`${table.price} between 1 and ${sql.raw(String(MAX_ENTRY_AMOUNT))}`,
+    ),
+    check("market_listings_fee_check", sql`${table.fee} between 1 and ${table.price}`),
+    check("market_listings_expiry_check", sql`${table.expiresAt} > ${table.createdAt}`),
+    check("market_listings_closed_check", sql`(${table.status} = 'active') = (${table.closedAt} is null)`),
+  ],
+);
+
+/**
+ * One row per market purchase (economy.md §7, §8.5): the buyer's receipt
+ * and idempotency record, never updated or deleted by the app role. The
+ * buyer's debit and the seller's sale and fee are its three ledger rows;
+ * deleting the seller's account keeps the buyer's receipt and nulls only
+ * the seller's side.
+ */
+export const marketPurchases = pgTable(
+  "market_purchases",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    buyerId: uuid("buyer_id")
+      .notNull()
+      .references(() => accounts.id, { onDelete: "cascade" }),
+    requestId: uuid("request_id").notNull(),
+    listingId: uuid("listing_id")
+      .unique("market_purchases_listing_unique")
+      .references(() => marketListings.id, { onDelete: "set null" }),
+    sellerId: uuid("seller_id").references(() => accounts.id, { onDelete: "set null" }),
+    characterId: integer("character_id")
+      .notNull()
+      .references(() => characters.id),
+    rarity: rarity("rarity").notNull(),
+    variant: cardVariant("variant").notNull(),
+    price: integer("price").notNull(),
+    fee: integer("fee").notNull(),
+    buyerEntryId: uuid("buyer_entry_id")
+      .notNull()
+      .unique("market_purchases_buyer_entry_unique")
+      .references(() => ledgerEntries.id),
+    sellerSaleEntryId: uuid("seller_sale_entry_id")
+      .unique("market_purchases_sale_entry_unique")
+      .references(() => ledgerEntries.id, { onDelete: "set null" }),
+    sellerFeeEntryId: uuid("seller_fee_entry_id")
+      .unique("market_purchases_fee_entry_unique")
+      .references(() => ledgerEntries.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    unique("market_purchases_buyer_request_unique").on(table.buyerId, table.requestId),
+    index("market_purchases_seller_created_idx").on(table.sellerId, table.createdAt),
+    index("market_purchases_buyer_created_idx").on(table.buyerId, table.createdAt),
+    check(
+      "market_purchases_price_check",
+      sql`${table.price} between 1 and ${sql.raw(String(MAX_ENTRY_AMOUNT))}`,
+    ),
+    check("market_purchases_fee_check", sql`${table.fee} between 1 and ${table.price}`),
+    check(
+      "market_purchases_self_trade_check",
+      sql`${table.sellerId} is null or ${table.sellerId} <> ${table.buyerId}`,
+    ),
   ],
 );

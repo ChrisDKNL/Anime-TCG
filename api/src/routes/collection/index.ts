@@ -21,7 +21,7 @@ export const collectionRoutes: FastifyPluginAsyncTypebox = async (app) => {
     },
     async (req, reply): Promise<CollectionResponse> => {
       const { account } = await requireAccount(req, reply);
-      return app.collection.read(account.id);
+      return app.collection.read(account.id, app.clock());
     },
   );
 

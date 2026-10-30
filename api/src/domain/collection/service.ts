@@ -10,6 +10,7 @@ import { and, count, countDistinct, eq, isNull, max, min, sql } from "drizzle-or
 import type { Db } from "../../db/client.js";
 import { cards, poolSnapshotCharacters } from "../../db/schema.js";
 import { holdingOf } from "../economy/recycle.js";
+import { cardIsListed } from "../market/listings.js";
 import { type CurrentSnapshot, currentSnapshot, describeCharacters, franchiseRefs } from "../pool/catalog.js";
 import { perRarity } from "../pool/tiers.js";
 
@@ -18,6 +19,7 @@ interface EntryRow {
   rarity: Rarity;
   variant: "standard";
   count: number;
+  listed: number;
   escrowed: number;
   firstObtainedAt: Date | null;
   lastObtainedAt: Date | null;
@@ -49,12 +51,14 @@ export function totalsOf(entries: readonly { rarity: Rarity; count: number }[]):
  * character, granted rarity and variant, totals, and completion against
  * the current snapshot, each character counted once in the pool and once
  * per franchise it belongs to. Only held cards count (economy.md §7): a
- * recycled card stays as a row for the audit and is in none of these.
+ * recycled or sold card stays as a row for the audit and is in none of
+ * these, while a listed one is held and counts. An entry's `listed` copies
+ * are the cards of its live listings at `now`.
  */
 export class CollectionService {
   constructor(private readonly db: Db) {}
 
-  async read(accountId: string): Promise<CollectionResponse> {
+  async read(accountId: string, now: Date): Promise<CollectionResponse> {
     const snapshot = await currentSnapshot(this.db);
     const rows: EntryRow[] = await this.db
       .select({
@@ -62,6 +66,7 @@ export class CollectionService {
         rarity: cards.rarity,
         variant: cards.variant,
         count: count(),
+        listed: sql<number>`count(*) filter (where ${cardIsListed(now)})::int`,
         escrowed: count(cards.escrowId),
         firstObtainedAt: min(cards.pulledAt),
         lastObtainedAt: max(cards.pulledAt),
@@ -86,7 +91,7 @@ export class CollectionService {
         rarity: row.rarity,
         variant: row.variant,
         count: row.count,
-        ...holdingOf({ held: row.count, listed: 0, escrowed: row.escrowed }),
+        ...holdingOf({ held: row.count, listed: row.listed, escrowed: row.escrowed }),
         firstObtainedAt: row.firstObtainedAt.toISOString(),
         lastObtainedAt: row.lastObtainedAt.toISOString(),
       };

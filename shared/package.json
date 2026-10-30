@@ -20,6 +20,10 @@
     "./rarity": {
       "types": "./dist/rarity.d.ts",
       "default": "./dist/rarity.js"
+    },
+    "./search": {
+      "types": "./dist/search.d.ts",
+      "default": "./dist/search.js"
     }
   },
   "files": [

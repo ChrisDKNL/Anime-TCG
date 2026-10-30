@@ -9,6 +9,8 @@ import {
   cards,
   characters,
   ledgerEntries,
+  marketListings,
+  marketPurchases,
   packOpenings,
   poolFetches,
   poolFetchPages,
@@ -123,7 +125,7 @@ describe("app database role", () => {
     probeSnapshots.push(snapshot.id);
     await app.db
       .insert(characters)
-      .values({ id: PROBE_CHARACTER, name: "Probe", imageUrl: PROBE_IMAGE })
+      .values({ id: PROBE_CHARACTER, name: "Probe", imageUrl: PROBE_IMAGE, searchName: "probe" })
       .onConflictDoNothing();
     const [opening] = await app.db
       .insert(packOpenings)
@@ -173,7 +175,7 @@ describe("app database role", () => {
     ).toEqual([{ variant: "standard" }]);
   });
 
-  it("holds exactly the rights 0001 granted less 0004's and 0005's revokes, table by table", async () => {
+  it("holds exactly the rights 0001 granted less 0004's, 0005's and 0006's revokes, table by table", async () => {
     const grants = await app.db.execute<{ table_name: string; rights: string }>(sql`
       select table_name, string_agg(privilege_type, ',' order by privilege_type) as rights
       from information_schema.role_table_grants
@@ -187,6 +189,8 @@ describe("app database role", () => {
       { table_name: "cards", rights: "INSERT,SELECT" },
       { table_name: "characters", rights: "INSERT,SELECT,UPDATE" },
       { table_name: "ledger_entries", rights: "INSERT,SELECT" },
+      { table_name: "market_listings", rights: "INSERT,SELECT" },
+      { table_name: "market_purchases", rights: "INSERT,SELECT" },
       { table_name: "pack_openings", rights: "DELETE,INSERT,SELECT" },
       { table_name: "pool_fetch_pages", rights: "INSERT,SELECT" },
       { table_name: "pool_fetches", rights: "DELETE,INSERT,SELECT" },
@@ -202,7 +206,7 @@ describe("app database role", () => {
     ]);
   });
 
-  it("may update exactly the two card columns a recycle writes, and no other column of a table without UPDATE (0005)", async () => {
+  it("may update exactly the card columns a recycle and a sale write and a listing's state, and no other column of a table without UPDATE (0005, 0006)", async () => {
     const columns = await app.db.execute<{ table_name: string; column_name: string }>(sql`
       select c.table_name, c.column_name from information_schema.column_privileges c
       where c.grantee = 'anime_app' and c.table_schema = 'public' and c.privilege_type = 'UPDATE'
@@ -215,8 +219,329 @@ describe("app database role", () => {
     `);
     expect(columns.rows).toEqual([
       { table_name: "cards", column_name: "removed_at" },
+      { table_name: "cards", column_name: "removed_by_purchase" },
       { table_name: "cards", column_name: "removed_by_recycle" },
+      { table_name: "market_listings", column_name: "closed_at" },
+      { table_name: "market_listings", column_name: "status" },
     ]);
+  });
+
+  it("may call delete_bought_cards, the one function besides the trigger functions, which nobody else may call (0006)", async () => {
+    const routines = await app.db.execute<{ routine_name: string; grantee: string }>(sql`
+      select p.routine_name, p.grantee from information_schema.routine_privileges p
+      join information_schema.routines r on r.specific_name = p.specific_name
+      where p.routine_schema = 'public' and p.privilege_type = 'EXECUTE' and p.grantee <> 'anime'
+        and r.data_type <> 'trigger'
+      order by p.routine_name, p.grantee
+    `);
+    expect(routines.rows).toEqual([{ routine_name: "delete_bought_cards", grantee: "anime_app" }]);
+    const definer = await app.db.execute<{ secdef: boolean; config: string[] | null }>(sql`
+      select prosecdef as secdef, proconfig as config from pg_proc where proname = 'delete_bought_cards'
+    `);
+    expect(definer.rows).toEqual([{ secdef: true, config: ["search_path=pg_catalog, public"] }]);
+  });
+
+  /** A Mythic sold by `sellerId` to `buyerId` at 27 500, written as the market writes it: rows, ledger, both cards. */
+  async function seedSale(sellerId: string, buyerId: string) {
+    const now = new Date();
+    const cardId = await heldCard(sellerId);
+    const entry = async (
+      accountId: string,
+      seq: number,
+      kind: "market_purchase" | "market_sale" | "market_fee",
+      amount: number,
+      balanceAfter: number,
+    ) => {
+      const [row] = await app.db
+        .insert(ledgerEntries)
+        .values({ accountId, seq, kind, amount, balanceAfter, createdAt: now })
+        .returning({ id: ledgerEntries.id });
+      if (row === undefined) throw new Error("ledger insert returned no row");
+      return row.id;
+    };
+    // The buyer's 27 500 come from a forged first row; the probe accounts are deleted after each test.
+    await app.db.insert(ledgerEntries).values({
+      accountId: buyerId,
+      seq: 1,
+      kind: "recycle_credit",
+      amount: 27_500,
+      balanceAfter: 27_500,
+      createdAt: now,
+    });
+    const buyerEntry = await entry(buyerId, 2, "market_purchase", -27_500, 0);
+    const saleEntry = await entry(sellerId, 1, "market_sale", 27_500, 27_500);
+    const feeEntry = await entry(sellerId, 2, "market_fee", -1_375, 26_125);
+    await app.db.update(accounts).set({ balance: 26_125 }).where(eq(accounts.id, sellerId));
+    const [listing] = await app.db
+      .insert(marketListings)
+      .values({
+        sellerId,
+        requestId: randomUUID(),
+        cardId,
+        characterId: PROBE_CHARACTER,
+        rarity: "mythic",
+        price: 27_500,
+        fee: 1_375,
+        status: "active",
+        createdAt: now,
+        expiresAt: new Date(now.getTime() + 60_000),
+      })
+      .returning({ id: marketListings.id });
+    if (listing === undefined) throw new Error("listing insert returned no row");
+    const [purchase] = await app.db
+      .insert(marketPurchases)
+      .values({
+        buyerId,
+        requestId: randomUUID(),
+        listingId: listing.id,
+        sellerId,
+        characterId: PROBE_CHARACTER,
+        rarity: "mythic",
+        variant: "standard",
+        price: 27_500,
+        fee: 1_375,
+        buyerEntryId: buyerEntry,
+        sellerSaleEntryId: saleEntry,
+        sellerFeeEntryId: feeEntry,
+        createdAt: now,
+      })
+      .returning({ id: marketPurchases.id });
+    if (purchase === undefined) throw new Error("purchase insert returned no row");
+    await app.db
+      .update(cards)
+      .set({ removedAt: now, removedByPurchase: purchase.id })
+      .where(eq(cards.id, cardId));
+    const [snapshot] = await app.db.select({ id: cards.snapshotId }).from(cards).where(eq(cards.id, cardId));
+    if (snapshot === undefined) throw new Error("the sold card is gone");
+    const [bought] = await app.db
+      .insert(cards)
+      .values({
+        accountId: buyerId,
+        purchaseId: purchase.id,
+        characterId: PROBE_CHARACTER,
+        rarity: "mythic",
+        snapshotId: snapshot.id,
+        isNew: true,
+        pulledAt: now,
+      })
+      .returning({ id: cards.id });
+    if (bought === undefined) throw new Error("card insert returned no row");
+    await app.db
+      .update(marketListings)
+      .set({ status: "sold", closedAt: now })
+      .where(eq(marketListings.id, listing.id));
+    return { cardId, boughtId: bought.id, listingId: listing.id, purchaseId: purchase.id };
+  }
+
+  it("cannot update or delete a purchase, delete a listing, or change a listing's price, card or seller (0006)", async () => {
+    const seller = await insertAccount(app.db, "MarketSeller");
+    const buyer = await insertAccount(app.db, "MarketBuyer");
+    await seedSale(seller, buyer);
+    await expect(app.db.update(marketPurchases).set({ price: 1 })).rejects.toMatchObject({
+      cause: { code: PERMISSION_DENIED },
+    });
+    await expect(app.db.delete(marketPurchases)).rejects.toMatchObject({
+      cause: { code: PERMISSION_DENIED },
+    });
+    await expect(app.db.delete(marketListings)).rejects.toMatchObject({ cause: { code: PERMISSION_DENIED } });
+    for (const change of [
+      { price: 1 },
+      { fee: 1 },
+      { cardId: null },
+      { sellerId: buyer },
+      { expiresAt: new Date() },
+    ]) {
+      await expect(app.db.update(marketListings).set(change), JSON.stringify(change)).rejects.toMatchObject({
+        cause: { code: PERMISSION_DENIED },
+      });
+    }
+    await expect(app.db.update(cards).set({ purchaseId: null })).rejects.toMatchObject({
+      cause: { code: PERMISSION_DENIED },
+    });
+  });
+
+  it("keeps a sold card sold: the trigger refuses another purchase or none, the app role and the owner alike (0006)", async () => {
+    const seller = await insertAccount(app.db, "SoldStays");
+    const buyer = await insertAccount(app.db, "SoldStays2");
+    const sale = await seedSale(seller, buyer);
+    const other = await seedSale(
+      await insertAccount(app.db, "SoldStays3"),
+      await insertAccount(app.db, "SoldStays4"),
+    );
+    const owner = createDb(migrationsDatabaseUrl());
+    try {
+      for (const db of [app.db, owner]) {
+        for (const change of [
+          { removedByPurchase: other.purchaseId },
+          // To null only once the purchase is gone (0008, manager decision, 2026-10-30).
+          { removedByPurchase: null },
+          { removedAt: null, removedByPurchase: null },
+          { removedByRecycle: null, removedAt: new Date(0) },
+        ]) {
+          const refused: unknown = await db
+            .update(cards)
+            .set(change)
+            .where(eq(cards.id, sale.cardId))
+            .then(
+              () => null,
+              (err: unknown) => err,
+            );
+          expect(refused, JSON.stringify(change)).toMatchObject({ cause: { code: INTEGRITY_VIOLATION } });
+        }
+      }
+    } finally {
+      await owner.$client.end();
+    }
+    // A card is removed by one recycle or one purchase, never both.
+    const recycler = await insertAccount(app.db, "SoldStays5");
+    const { recycleId } = await seedRecycle(recycler, await heldCard(recycler));
+    await expect(
+      app.db
+        .update(cards)
+        .set({ removedAt: new Date(), removedByPurchase: sale.purchaseId, removedByRecycle: recycleId })
+        .where(eq(cards.id, sale.boughtId)),
+    ).rejects.toMatchObject({ cause: { code: CHECK_VIOLATION, constraint: "cards_removed_once_check" } });
+  });
+
+  it("deletes a buyer's account with its purchase and card, leaving the seller's sold card removed and its listing sold (0006)", async () => {
+    const seller = await insertAccount(app.db, "CascadeSeller");
+    const buyer = await insertAccount(app.db, "CascadeBuyer");
+    const sale = await seedSale(seller, buyer);
+    await app.db.delete(accounts).where(eq(accounts.id, buyer));
+    expect(
+      await app.db.select().from(marketPurchases).where(eq(marketPurchases.id, sale.purchaseId)),
+    ).toEqual([]);
+    // The foreign key's set null passes the trigger: a removed card's purchase may only go away.
+    const [sold] = await app.db
+      .select({ removedAt: cards.removedAt, removedByPurchase: cards.removedByPurchase })
+      .from(cards)
+      .where(eq(cards.id, sale.cardId));
+    expect(sold?.removedAt).not.toBeNull();
+    expect(sold?.removedByPurchase).toBeNull();
+    const [listing] = await app.db
+      .select({ status: marketListings.status })
+      .from(marketListings)
+      .where(eq(marketListings.id, sale.listingId));
+    expect(listing).toEqual({ status: "sold" });
+  });
+
+  it("deletes a seller's account with its listings and cards, keeping the buyer's card and receipt (0006)", async () => {
+    const seller = await insertAccount(app.db, "GoneSeller");
+    const buyer = await insertAccount(app.db, "StayingBuyer");
+    const sale = await seedSale(seller, buyer);
+    await app.db.delete(accounts).where(eq(accounts.id, seller));
+    const [receipt] = await app.db
+      .select({
+        listingId: marketPurchases.listingId,
+        sellerId: marketPurchases.sellerId,
+        sale: marketPurchases.sellerSaleEntryId,
+        fee: marketPurchases.sellerFeeEntryId,
+      })
+      .from(marketPurchases)
+      .where(eq(marketPurchases.id, sale.purchaseId));
+    expect(receipt).toEqual({ listingId: null, sellerId: null, sale: null, fee: null });
+    expect(await app.db.select({ id: cards.id }).from(cards).where(eq(cards.id, sale.boughtId))).toEqual([
+      { id: sale.boughtId },
+    ]);
+  });
+
+  it("resets a buyer's collection: its bought card goes through delete_bought_cards, its receipt stays (0006)", async () => {
+    const seller = await insertAccount(app.db, "ResetSeller");
+    const buyer = await insertAccount(app.db, "ResetBuyer");
+    const sale = await seedSale(seller, buyer);
+    await resetCollection(app.db, "ResetBuyer", { confirm: true, keepKarma: true });
+    expect(await app.db.select().from(cards).where(eq(cards.accountId, buyer))).toEqual([]);
+    expect(
+      await app.db
+        .select({ id: marketPurchases.id })
+        .from(marketPurchases)
+        .where(eq(marketPurchases.id, sale.purchaseId)),
+    ).toEqual([{ id: sale.purchaseId }]);
+    // The seller's reset deletes the sold card; the listing keeps its history without it.
+    await resetCollection(app.db, "ResetSeller", { confirm: true, keepKarma: true });
+    expect(
+      await app.db
+        .select({ status: marketListings.status, cardId: marketListings.cardId })
+        .from(marketListings)
+        .where(eq(marketListings.id, sale.listingId)),
+    ).toEqual([{ status: "sold", cardId: null }]);
+  });
+
+  it("refuses delete_bought_cards on an account with an active listing, deleting nothing, live or lapsed (0007, manager decision, 2026-10-30)", async () => {
+    const seller = await insertAccount(app.db, "GuardSeller");
+    const buyer = await insertAccount(app.db, "GuardBuyer");
+    const sale = await seedSale(seller, buyer);
+    const now = new Date();
+    // The buyer lists the card it bought: a live listing, then one lapsed but not yet swept.
+    for (const expiresAt of [new Date(now.getTime() + 60_000), new Date(now.getTime() - 1)]) {
+      const [listing] = await app.db
+        .insert(marketListings)
+        .values({
+          sellerId: buyer,
+          requestId: randomUUID(),
+          cardId: sale.boughtId,
+          characterId: PROBE_CHARACTER,
+          rarity: "mythic",
+          price: 27_500,
+          fee: 1_375,
+          status: "active",
+          createdAt: new Date(expiresAt.getTime() - 120_000),
+          expiresAt,
+        })
+        .returning({ id: marketListings.id });
+      if (listing === undefined) throw new Error("listing insert returned no row");
+      const refused: unknown = await app.db
+        .execute(sql`select delete_bought_cards(${buyer}) as deleted`)
+        .then(
+          () => null,
+          (err: unknown) => err,
+        );
+      expect(refused).toMatchObject({ cause: { code: INTEGRITY_VIOLATION } });
+      expect((refused as { cause: Error }).cause.message).toMatch(/cancel its active listings/);
+      expect(await app.db.select({ id: cards.id }).from(cards).where(eq(cards.id, sale.boughtId))).toEqual([
+        { id: sale.boughtId },
+      ]);
+      await app.db
+        .update(marketListings)
+        .set({ status: "cancelled", closedAt: now })
+        .where(eq(marketListings.id, listing.id));
+    }
+    // With no active listing left it deletes the bought card, and only that.
+    expect((await app.db.execute(sql`select delete_bought_cards(${buyer}) as deleted`)).rows).toEqual([
+      { deleted: 1 },
+    ]);
+  });
+
+  it("still resets an account whose bought card is listed: the reset cancels the listing, then deletes the card (0007)", async () => {
+    const seller = await insertAccount(app.db, "GuardResetSeller");
+    const buyer = await insertAccount(app.db, "GuardResetBuyer");
+    const sale = await seedSale(seller, buyer);
+    const now = new Date();
+    const [listing] = await app.db
+      .insert(marketListings)
+      .values({
+        sellerId: buyer,
+        requestId: randomUUID(),
+        cardId: sale.boughtId,
+        characterId: PROBE_CHARACTER,
+        rarity: "mythic",
+        price: 27_500,
+        fee: 1_375,
+        status: "active",
+        createdAt: now,
+        expiresAt: new Date(now.getTime() + 60_000),
+      })
+      .returning({ id: marketListings.id });
+    if (listing === undefined) throw new Error("listing insert returned no row");
+    const result = await resetCollection(app.db, "GuardResetBuyer", { confirm: true, keepKarma: true });
+    expect(result).toMatchObject({ applied: true, listings: 1 });
+    expect(await app.db.select().from(cards).where(eq(cards.accountId, buyer))).toEqual([]);
+    expect(
+      await app.db
+        .select({ status: marketListings.status, cardId: marketListings.cardId })
+        .from(marketListings)
+        .where(eq(marketListings.id, listing.id)),
+    ).toEqual([{ status: "cancelled", cardId: null }]);
   });
 
   /** A ledger row and a recycle that removes `cardId`, written as the app role writes them. */
@@ -513,7 +838,9 @@ describe("app database role", () => {
       "javascript:alert(1)",
     ]) {
       await expect(
-        app.db.insert(characters).values({ id: PROBE_CHARACTER + 1, name: "Probe", imageUrl }),
+        app.db
+          .insert(characters)
+          .values({ id: PROBE_CHARACTER + 1, name: "Probe", imageUrl, searchName: "probe" }),
       ).rejects.toMatchObject({ cause: { code: CHECK_VIOLATION, constraint: "characters_image_url_check" } });
     }
   });

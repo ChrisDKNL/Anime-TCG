@@ -1,5 +1,5 @@
 import { type Static, Type } from "@sinclair/typebox";
-import { MAX_RECYCLE_COUNT, PACK_CAP, PACK_SIZE } from "./economy.js";
+import { MARKET_PAGE_SIZE, MAX_ENTRY_AMOUNT, MAX_RECYCLE_COUNT, PACK_CAP, PACK_SIZE } from "./economy.js";
 import { PITY_PACKS } from "./rarity.js";
 
 /**
@@ -536,3 +536,189 @@ export const RecycleReceipt = Type.Object(
   { additionalProperties: false },
 );
 export type RecycleReceipt = Static<typeof RecycleReceipt>;
+
+/**
+ * `POST /api/market/listings` (economy.md §8.3): which entry, and the
+ * seller's asking price, the one price a request ever carries; the server
+ * bounds it per rarity and picks the card. The fee and the expiry are the
+ * server's.
+ */
+export const ListBody = Type.Object(
+  {
+    requestId: RequestId,
+    characterId: Type.Integer({ minimum: 1, maximum: MAX_ID }),
+    rarity: Rarity,
+    price: Type.Integer({ minimum: 1, maximum: MAX_ENTRY_AMOUNT }),
+  },
+  { additionalProperties: false },
+);
+export type ListBody = Static<typeof ListBody>;
+
+export const ListingStatus = Type.Union([
+  Type.Literal("active"),
+  Type.Literal("sold"),
+  Type.Literal("cancelled"),
+  Type.Literal("expired"),
+]);
+export type ListingStatus = Static<typeof ListingStatus>;
+
+const listingFields = {
+  listingId: Type.String({ format: "uuid" }),
+  kind: Type.Literal("card"),
+  character: CharacterPublic,
+  rarity: Rarity,
+  variant: CardVariant,
+  price: Type.Integer({ minimum: 1 }),
+  /** `fee(price)`, fixed when the card was listed: the seller receives `price − fee` on a sale. */
+  fee: Type.Integer({ minimum: 1 }),
+  listedAt: DateTime,
+  expiresAt: DateTime,
+  /** When it sold, was cancelled or expired (its `expiresAt` for an expired one); null while active. */
+  closedAt: Type.Union([DateTime, Type.Null()]),
+  status: ListingStatus,
+  /** The caller's own listing: the UI offers no buy for it, and the server refuses one (`own_listing`). */
+  mine: Type.Boolean(),
+};
+
+/** One card on the market (economy.md §11.2); a listing past its `expiresAt` is `expired` whether or not the purge has run. */
+export const Listing = Type.Object(listingFields, { additionalProperties: false });
+export type Listing = Static<typeof Listing>;
+
+/** A listing of `GET /api/market/mine`'s `closed`: `proceeds` is `price − fee` for a sale, null otherwise. */
+export const ClosedListing = Type.Object(
+  { ...listingFields, proceeds: Type.Union([Count, Type.Null()]) },
+  { additionalProperties: false },
+);
+export type ClosedListing = Static<typeof ClosedListing>;
+
+/** The `{listingId}` of the market's listing paths: a uuid, anything else is a 400. */
+export const ListingParams = Type.Object(
+  { listingId: Type.String({ format: "uuid", maxLength: 36 }) },
+  { additionalProperties: false },
+);
+export type ListingParams = Static<typeof ListingParams>;
+
+/**
+ * An id in a query string: digits only, no sign, no leading zero, no
+ * exponent and no whitespace, since query values arrive as text and the api
+ * coerces nothing (manager decision, 2026-10-30). The api range-checks it.
+ */
+const QueryId = Type.String({ pattern: "^[1-9][0-9]{0,9}$" });
+
+/**
+ * A search text: 1 to 100 characters with no control character (`\p{Cc}`,
+ * U+0000 to U+001F and U+007F to U+009F). A name or title never holds one,
+ * and Postgres cannot take U+0000 as text at all (manager decision, 2026-10-30).
+ */
+const SearchText = Type.String({
+  minLength: 1,
+  maxLength: 100,
+  pattern: "^[^\\u0000-\\u001f\\u007f-\\u009f]*$",
+});
+
+export const ListingSort = Type.Union([
+  Type.Literal("price_asc"),
+  Type.Literal("price_desc"),
+  Type.Literal("newest"),
+]);
+export type ListingSort = Static<typeof ListingSort>;
+
+/**
+ * `GET /api/market/listings` (economy.md §8.4), every parameter optional:
+ * `q` is matched term by term against the normalised names and franchise
+ * titles, `cursor` is the previous page's `nextCursor` and only valid with
+ * the same `sort`.
+ */
+export const ListingsQuery = Type.Object(
+  {
+    rarity: Type.Optional(Rarity),
+    franchiseId: Type.Optional(QueryId),
+    characterId: Type.Optional(QueryId),
+    q: Type.Optional(SearchText),
+    sort: Type.Optional(ListingSort),
+    cursor: Type.Optional(Type.String({ minLength: 1, maxLength: 200, pattern: "^[A-Za-z0-9_-]+$" })),
+  },
+  { additionalProperties: false },
+);
+export type ListingsQuery = Static<typeof ListingsQuery>;
+
+/**
+ * A page of active, unexpired listings of every account. `filterFranchiseIds`
+ * is on the first page only (null on later ones): every franchise with an
+ * active listing, whatever the other parameters, in popularity order.
+ * `franchises` covers the listings and `filterFranchiseIds`.
+ */
+export const ListingsPage = Type.Object(
+  {
+    listings: Type.Array(Listing, { maxItems: MARKET_PAGE_SIZE }),
+    filterFranchiseIds: Type.Union([Type.Array(AniListId), Type.Null()]),
+    franchises: Type.Array(FranchiseRef),
+    nextCursor: Type.Union([Type.String(), Type.Null()]),
+  },
+  { additionalProperties: false },
+);
+export type ListingsPage = Static<typeof ListingsPage>;
+
+/** `POST /api/market/listings/{listingId}/buy`: the idempotency key and nothing else; the price is the listing's. */
+export const BuyBody = Type.Object({ requestId: RequestId }, { additionalProperties: false });
+export type BuyBody = Static<typeof BuyBody>;
+
+/** `POST /api/market/listings/{listingId}/cancel` carries nothing. */
+export const CancelBody = Type.Object({}, { additionalProperties: false });
+export type CancelBody = Static<typeof CancelBody>;
+
+/** The card a purchase delivered: a new card of the buyer's, of the listed card's character, rarity and variant. */
+export const ReceivedCard = Type.Object(
+  {
+    kind: Type.Literal("card"),
+    character: CharacterPublic,
+    rarity: Rarity,
+    variant: CardVariant,
+    isNew: Type.Boolean(),
+  },
+  { additionalProperties: false },
+);
+export type ReceivedCard = Static<typeof ReceivedCard>;
+
+/**
+ * 201 for a purchase, 200 with the same receipt and the current balance on
+ * a replay. `listingId` is null once the seller's account is deleted, which
+ * deletes its listings (manager decision, 2026-10-30).
+ */
+export const PurchaseReceipt = Type.Object(
+  {
+    purchaseId: Type.String({ format: "uuid" }),
+    boughtAt: DateTime,
+    listingId: Type.Union([Type.String({ format: "uuid" }), Type.Null()]),
+    price: Type.Integer({ minimum: 1 }),
+    card: ReceivedCard,
+    franchises: Type.Array(FranchiseRef),
+    balance: Count,
+  },
+  { additionalProperties: false },
+);
+export type PurchaseReceipt = Static<typeof PurchaseReceipt>;
+
+/** What the caller's window limits have left (economy.md §10): purchases and Karma spent as a buyer, Karma received as a seller. */
+export const WindowLeft = Type.Object(
+  { purchases: Count, spend: Count, proceeds: Count },
+  { additionalProperties: false },
+);
+export type WindowLeft = Static<typeof WindowLeft>;
+
+/**
+ * `GET /api/market/mine`: the caller's active, unexpired listings, those
+ * closed in the last 30 days (an unpurged expired one among them), its
+ * purchases of the last 30 days, and its window limits' room.
+ */
+export const MarketMine = Type.Object(
+  {
+    active: Type.Array(Listing),
+    closed: Type.Array(ClosedListing),
+    purchases: Type.Array(PurchaseReceipt),
+    left: WindowLeft,
+    franchises: Type.Array(FranchiseRef),
+  },
+  { additionalProperties: false },
+);
+export type MarketMine = Static<typeof MarketMine>;

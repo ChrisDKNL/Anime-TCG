@@ -8,6 +8,7 @@ import { migrate } from "drizzle-orm/node-postgres/migrator";
 import pg from "pg";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createDb, type Db } from "../src/db/client.js";
+import { normaliseSearchText } from "@anime-tcg/shared/search";
 import { runMigrations } from "../src/db/migrate.js";
 import { migrationsDatabaseUrl, testDatabaseUrl } from "./support.js";
 
@@ -18,6 +19,9 @@ const MIGRATION_FILES = [
   "0003_collection_packs.sql",
   "0004_packs_hardening.sql",
   "0005_economy_ledger.sql",
+  "0006_market.sql",
+  "0007_market_bought_cards_guard.sql",
+  "0008_market_sold_card_stays.sql",
 ];
 const MIGRATION_WHEN = [
   "1793207773838",
@@ -26,6 +30,9 @@ const MIGRATION_WHEN = [
   "1793285235582",
   "1793296711999",
   "1793315346513",
+  "1793364263493",
+  "1793388379456",
+  "1793388639645",
 ];
 
 /**
@@ -102,7 +109,7 @@ describe("migrations", () => {
     ]);
   });
 
-  it("produced every table of 1b, 1c and the economy's first PR, and nothing else", async () => {
+  it("produced every table of 1b, 1c and the economy's first and third PRs, and nothing else", async () => {
     const tables = await db.execute<{ table_name: string }>(sql`
       select table_name from information_schema.tables
       where table_schema = 'public' order by table_name
@@ -113,6 +120,8 @@ describe("migrations", () => {
       "cards",
       "characters",
       "ledger_entries",
+      "market_listings",
+      "market_purchases",
       "pack_openings",
       "pool_fetch_pages",
       "pool_fetches",
@@ -468,10 +477,23 @@ describe("migrations", () => {
         definition: "CHECK (((removed_at IS NULL) OR (escrow_id IS NULL)))",
       },
       {
+        conname: "cards_origin_check",
+        definition: "CHECK ((num_nonnulls(opening_id, purchase_id) = 1))",
+      },
+      {
         conname: "cards_removed_check",
-        definition: "CHECK (((removed_at IS NOT NULL) OR (removed_by_recycle IS NULL)))",
+        definition:
+          "CHECK (((removed_at IS NOT NULL) OR ((removed_by_recycle IS NULL) AND (removed_by_purchase IS NULL))))",
+      },
+      {
+        conname: "cards_removed_once_check",
+        definition: "CHECK ((num_nonnulls(removed_by_recycle, removed_by_purchase) <= 1))",
       },
       { conname: "cards_slot_check", definition: "CHECK (((slot >= 0) AND (slot <= 4)))" },
+      {
+        conname: "cards_slot_origin_check",
+        definition: "CHECK (((opening_id IS NULL) = (slot IS NULL)))",
+      },
       {
         conname: "characters_image_url_check",
         definition: "CHECK ((image_url ~~ 'https://s4.anilist.co/%'::text))",
@@ -493,6 +515,7 @@ describe("migrations", () => {
         name: "ledger_kind",
         labels: "recycle_credit,shop_purchase,market_purchase,market_sale,market_fee,owner_reset",
       },
+      { name: "listing_status", labels: "active,sold,cancelled,expired" },
       { name: "opening_source", labels: "timer,shop" },
       { name: "pack_kind", labels: "standard,enchanted,radiant" },
       { name: "rarity", labels: "common,uncommon,rare,epic,legendary,mythic" },
@@ -517,6 +540,16 @@ describe("migrations", () => {
         table_name: "cards",
         constraint_name: "cards_opening_id_pack_openings_id_fk",
         delete_rule: "CASCADE",
+      },
+      {
+        table_name: "cards",
+        constraint_name: "cards_purchase_id_market_purchases_id_fk",
+        delete_rule: "NO ACTION",
+      },
+      {
+        table_name: "cards",
+        constraint_name: "cards_removed_by_purchase_market_purchases_id_fk",
+        delete_rule: "SET NULL",
       },
       {
         table_name: "cards",
@@ -547,6 +580,179 @@ describe("migrations", () => {
         table_name: "pool_fetch_pages",
         constraint_name: "pool_fetch_pages_fetch_id_pool_fetches_id_fk",
         delete_rule: "CASCADE",
+      },
+    ]);
+  });
+
+  it("applies 0006 over a database that ran 0005: every card keeps its opening, every name and title gets its search form", async () => {
+    // Names and titles of the kinds the snapshot holds: accents, full-width letters, kana, CJK, runs of spaces.
+    const names = [
+      "Spike  Spiegel",
+      "Pokémon Trainer",
+      "ＬＵＦＦＹ",
+      "モンキー・D・ルフィ",
+      "\tÉdouard   Elric ",
+      `Zero${String.fromCodePoint(0x200b)}Width`,
+      `${String.fromCodePoint(0xfeff)}Bom${String.fromCodePoint(0xfeff)}`,
+      "が",
+    ];
+    await migratedOver(
+      5,
+      async (probe) => {
+        await insertOldAccount(probe);
+        for (const [index, name] of names.entries()) {
+          await probe.query(
+            "insert into characters (id, name, name_native, image_url) values ($1, $2, $3, $4)",
+            [index + 1, name, index % 2 === 0 ? name : null, `https://s4.anilist.co/file/b${index + 1}.png`],
+          );
+          await probe.query("insert into series (id, title, title_native) values ($1, $2, $3)", [
+            index + 1,
+            name,
+            index % 2 === 0 ? null : name,
+          ]);
+        }
+        await probe.query(`
+          with snapshot as (
+            insert into pool_snapshots (source, taken_at, activated_at, is_current, series_count,
+              franchise_count, character_count, tier_counts)
+            values ('file', now(), now(), true, 0, 0, 1, '{0,0,0,0,0,1}') returning id
+          ), opening as (
+            insert into pack_openings (account_id, request_id, snapshot_id, kind, pity, opened_at)
+            select a.id, gen_random_uuid(), s.id, 'standard', false, now()
+            from accounts a, snapshot s where a.login = 'old' returning id, account_id, snapshot_id
+          )
+          insert into cards (account_id, opening_id, slot, character_id, rarity, snapshot_id, is_new, pulled_at)
+          select o.account_id, o.id, 4, 1, 'mythic', o.snapshot_id, true, now() from opening o
+        `);
+      },
+      async (probe) => {
+        const characters = await probe.query<{
+          name: string;
+          native: string | null;
+          search: string;
+          searchNative: string | null;
+        }>(
+          'select name, name_native as native, search_name as search, search_name_native as "searchNative" from characters order by id',
+        );
+        for (const row of characters.rows) {
+          expect(row.search, row.name).toBe(normaliseSearchText(row.name));
+          expect(row.searchNative, row.name).toBe(
+            row.native === null ? null : normaliseSearchText(row.native),
+          );
+        }
+        const series = await probe.query<{
+          title: string;
+          native: string | null;
+          search: string;
+          searchNative: string | null;
+        }>(
+          'select title, title_native as native, search_title as search, search_title_native as "searchNative" from series order by id',
+        );
+        for (const row of series.rows) {
+          expect(row.search, row.title).toBe(normaliseSearchText(row.title));
+          expect(row.searchNative, row.title).toBe(
+            row.native === null ? null : normaliseSearchText(row.native),
+          );
+        }
+        expect((await probe.query("select slot, purchase_id, removed_by_purchase from cards")).rows).toEqual([
+          { slot: 4, purchase_id: null, removed_by_purchase: null },
+        ]);
+        const nullable = await probe.query(
+          "select column_name, is_nullable from information_schema.columns where table_name in ('characters', 'series') and column_name like 'search_%' order by column_name",
+        );
+        expect(nullable.rows).toEqual([
+          { column_name: "search_name", is_nullable: "NO" },
+          { column_name: "search_name_native", is_nullable: "YES" },
+          { column_name: "search_title", is_nullable: "NO" },
+          { column_name: "search_title_native", is_nullable: "YES" },
+        ]);
+      },
+    );
+  });
+
+  it("bounds every listing's and purchase's price and fee, keys each idempotency record and forbids a self-trade (0006)", async () => {
+    const checks = await db.execute<{ conname: string; definition: string }>(sql`
+      select conname, pg_get_constraintdef(oid) as definition from pg_constraint
+      where conrelid in ('market_listings'::regclass, 'market_purchases'::regclass) and contype in ('c', 'u')
+      order by conname
+    `);
+    expect(checks.rows).toEqual([
+      {
+        conname: "market_listings_closed_check",
+        definition: "CHECK (((status = 'active'::listing_status) = (closed_at IS NULL)))",
+      },
+      { conname: "market_listings_expiry_check", definition: "CHECK ((expires_at > created_at))" },
+      { conname: "market_listings_fee_check", definition: "CHECK (((fee >= 1) AND (fee <= price)))" },
+      {
+        conname: "market_listings_price_check",
+        definition: "CHECK (((price >= 1) AND (price <= 1000000)))",
+      },
+      { conname: "market_listings_seller_request_unique", definition: "UNIQUE (seller_id, request_id)" },
+      { conname: "market_purchases_buyer_entry_unique", definition: "UNIQUE (buyer_entry_id)" },
+      { conname: "market_purchases_buyer_request_unique", definition: "UNIQUE (buyer_id, request_id)" },
+      { conname: "market_purchases_fee_check", definition: "CHECK (((fee >= 1) AND (fee <= price)))" },
+      { conname: "market_purchases_fee_entry_unique", definition: "UNIQUE (seller_fee_entry_id)" },
+      { conname: "market_purchases_listing_unique", definition: "UNIQUE (listing_id)" },
+      {
+        conname: "market_purchases_price_check",
+        definition: "CHECK (((price >= 1) AND (price <= 1000000)))",
+      },
+      { conname: "market_purchases_sale_entry_unique", definition: "UNIQUE (seller_sale_entry_id)" },
+      {
+        conname: "market_purchases_self_trade_check",
+        definition: "CHECK (((seller_id IS NULL) OR (seller_id <> buyer_id)))",
+      },
+    ]);
+    const indexes = await db.execute<{ indexname: string; indexdef: string }>(sql`
+      select indexname, indexdef from pg_indexes
+      where schemaname = 'public' and (tablename like 'market_%' or indexname like 'cards_%purchase%')
+        and indexname not like '%_pkey' and indexname not like '%_unique'
+      order by indexname
+    `);
+    expect(indexes.rows.map((row) => [row.indexname, row.indexdef.replace(/^.* USING /, "")])).toEqual([
+      ["cards_purchase_idx", "btree (purchase_id) WHERE (purchase_id IS NOT NULL)"],
+      [
+        "cards_removed_by_purchase_idx",
+        "btree (removed_by_purchase) WHERE (removed_by_purchase IS NOT NULL)",
+      ],
+      ["market_listings_active_card_idx", "btree (card_id) WHERE (status = 'active'::listing_status)"],
+      [
+        "market_listings_active_character_idx",
+        "btree (character_id) WHERE (status = 'active'::listing_status)",
+      ],
+      [
+        "market_listings_active_price_idx",
+        "btree (rarity, price, id) WHERE (status = 'active'::listing_status)",
+      ],
+      ["market_listings_seller_status_idx", "btree (seller_id, status)"],
+      ["market_purchases_buyer_created_idx", "btree (buyer_id, created_at)"],
+      ["market_purchases_seller_created_idx", "btree (seller_id, created_at)"],
+    ]);
+  });
+
+  it("cascades a listing with its seller and keeps a purchase with its buyer, the other side set to null (0006)", async () => {
+    const rules = await db.execute<{ constraint_name: string; delete_rule: string }>(sql`
+      select tc.constraint_name, rc.delete_rule from information_schema.referential_constraints rc
+      join information_schema.table_constraints tc on tc.constraint_name = rc.constraint_name
+      where tc.table_schema = 'public' and tc.table_name in ('market_listings', 'market_purchases')
+      order by tc.constraint_name
+    `);
+    expect(rules.rows).toEqual([
+      { constraint_name: "market_listings_card_id_cards_id_fk", delete_rule: "SET NULL" },
+      { constraint_name: "market_listings_character_id_characters_id_fk", delete_rule: "NO ACTION" },
+      { constraint_name: "market_listings_seller_id_accounts_id_fk", delete_rule: "CASCADE" },
+      { constraint_name: "market_purchases_buyer_entry_id_ledger_entries_id_fk", delete_rule: "NO ACTION" },
+      { constraint_name: "market_purchases_buyer_id_accounts_id_fk", delete_rule: "CASCADE" },
+      { constraint_name: "market_purchases_character_id_characters_id_fk", delete_rule: "NO ACTION" },
+      { constraint_name: "market_purchases_listing_id_market_listings_id_fk", delete_rule: "SET NULL" },
+      {
+        constraint_name: "market_purchases_seller_fee_entry_id_ledger_entries_id_fk",
+        delete_rule: "SET NULL",
+      },
+      { constraint_name: "market_purchases_seller_id_accounts_id_fk", delete_rule: "SET NULL" },
+      {
+        constraint_name: "market_purchases_seller_sale_entry_id_ledger_entries_id_fk",
+        delete_rule: "SET NULL",
       },
     ]);
   });

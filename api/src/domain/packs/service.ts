@@ -335,7 +335,11 @@ export async function storedOpening(
       opening.themeId === null || opening.price === null
         ? null
         : { themeId: opening.themeId, price: opening.price },
-    cards: rows,
+    cards: rows.map(({ slot, ...card }) => {
+      // Only a bought card has no slot (economy.md §7), and a bought card has no opening.
+      if (slot === null) throw new Error(`opening ${opening.id} holds a card without a slot`);
+      return { ...card, slot };
+    }),
   };
 }
 
