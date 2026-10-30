@@ -1,3 +1,4 @@
+import { MARKET_SEARCH_TERMS } from "@anime-tcg/shared/economy";
 import { searchTermsOf } from "@anime-tcg/shared/search";
 
 /**
@@ -18,7 +19,14 @@ export function containsPattern(term: string): string {
   return `%${term.replace(LIKE_SPECIAL, (special) => `${LIKE_ESCAPE}${special}`)}%`;
 }
 
-/** The query's terms as `LIKE` patterns; none for a query that normalises to nothing, which is no search. */
+/**
+ * The query's first `MARKET_SEARCH_TERMS` distinct terms as `LIKE` patterns;
+ * none for a query that normalises to nothing, which is no search. Terms
+ * past the cap are dropped rather than refused: every term only narrows the
+ * match, so dropping one can only widen the results, never fail a search
+ * (manager decision, 2026-10-30).
+ */
 export function searchPatterns(query: string | undefined): string[] {
-  return query === undefined ? [] : searchTermsOf(query).map(containsPattern);
+  if (query === undefined) return [];
+  return [...new Set(searchTermsOf(query))].slice(0, MARKET_SEARCH_TERMS).map(containsPattern);
 }

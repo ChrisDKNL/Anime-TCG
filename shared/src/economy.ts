@@ -98,6 +98,12 @@ export const MARKET_WINDOW_PROCEEDS = 55_000;
 export const MARKET_WINDOW_PAIR = 27_500;
 /** Listings per browse page. */
 export const MARKET_PAGE_SIZE = 50;
+/**
+ * Distinct search terms a browse matches; the rest are dropped. NFKC can
+ * turn one character into a phrase (U+FDFA is four words), so a 100-character
+ * query could otherwise become hundreds of `LIKE` conditions.
+ */
+export const MARKET_SEARCH_TERMS = 10;
 
 /** The largest single ledger amount, credit or debit, games included; an owner reset is the one exception. */
 export const MAX_ENTRY_AMOUNT = 1_000_000;

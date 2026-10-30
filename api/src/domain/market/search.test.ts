@@ -1,3 +1,5 @@
+import { MARKET_SEARCH_TERMS } from "@anime-tcg/shared/economy";
+import { searchTermsOf } from "@anime-tcg/shared/search";
 import { describe, expect, it } from "vitest";
 import { containsPattern, LIKE_ESCAPE, searchPatterns } from "./search.js";
 
@@ -46,6 +48,24 @@ describe("the market search's patterns (economy.md §8.4, §14)", () => {
     expect(searchPatterns("  ＬＵＦＦＹ   Pokémon ")).toEqual(["%luffy%", "%pokemon%"]);
     expect(searchPatterns("進撃")).toEqual(["%進撃%"]);
     expect(searchPatterns("d.luffy")).toEqual(["%d.luffy%"]);
+  });
+
+  it(`matches at most MARKET_SEARCH_TERMS distinct terms and drops the rest (manager decision, 2026-10-30)`, () => {
+    // U+FDFA is one character that NFKC spells as four words: 100 of them, the longest q, are 301 terms.
+    const ligatures = String.fromCodePoint(0xfdfa).repeat(100);
+    expect([...ligatures]).toHaveLength(100);
+    const terms = searchTermsOf(ligatures);
+    expect(terms).toHaveLength(301);
+    const patterns = searchPatterns(ligatures);
+    expect(patterns.length).toBeLessThanOrEqual(MARKET_SEARCH_TERMS);
+    expect(patterns).toEqual([...new Set(terms)].slice(0, MARKET_SEARCH_TERMS).map(containsPattern));
+    // Spaced apart, the ligatures repeat the same four words, matched once each.
+    expect(searchPatterns(`${String.fromCodePoint(0xfdfa)} `.repeat(50))).toHaveLength(4);
+    const words = Array.from({ length: 30 }, (_, index) => `w${index}`).join(" ");
+    expect(searchPatterns(words)).toEqual(
+      Array.from({ length: MARKET_SEARCH_TERMS }, (_, index) => `%w${index}%`),
+    );
+    expect(searchPatterns("a a a b")).toEqual(["%a%", "%b%"]);
   });
 
   it("keeps an RTL override as text of its own, and strips a pile of Latin combining marks as the collection does", () => {
