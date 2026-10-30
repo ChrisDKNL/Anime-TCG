@@ -9,7 +9,9 @@ import { expect } from "vitest";
 import type { App } from "../src/app.js";
 import type { Db } from "../src/db/client.js";
 import * as schema from "../src/db/schema.js";
-import { cards, packOpenings } from "../src/db/schema.js";
+import { cards, marketListings, packOpenings } from "../src/db/schema.js";
+import { marketFee } from "../src/domain/economy/fee.js";
+import { expiryOf } from "../src/domain/market/rules.js";
 import { ECONOMY_BASE, economyPool, ID, recycle, recycleBody } from "./economy-support.js";
 import type { FixturePool } from "./fixtures/pool.js";
 import { send, type SignedInClient, testDatabaseUrl } from "./support.js";
@@ -166,6 +168,42 @@ export async function listed(
   const res = await listCard(app, client.cookie, characterId, price);
   expect(res.statusCode, res.body).toBe(201);
   return res.json<Listing>();
+}
+
+/**
+ * Lists `count` of the account's unlisted copies of one character at `price`,
+ * written straight to the database as the listing route writes them, for the
+ * tests that need a hundred listings to buy and test the buying, not the
+ * listing. Returns the listing ids, oldest card first.
+ */
+export async function seedListings(
+  app: App,
+  client: SignedInClient,
+  characterId: number,
+  price: number,
+  count: number,
+  at: Date,
+): Promise<{ listingId: string }[]> {
+  const held = await heldCopies(app, client.account.id, characterId);
+  if (held.length < count) throw new Error(`only ${held.length} copies of ${characterId} to list`);
+  const rows = await app.db
+    .insert(marketListings)
+    .values(
+      held.slice(0, count).map((card) => ({
+        sellerId: client.account.id,
+        requestId: randomUUID(),
+        cardId: card.id,
+        characterId,
+        rarity: tierOf(characterId),
+        price,
+        fee: marketFee(price),
+        status: "active" as const,
+        createdAt: at,
+        expiresAt: expiryOf(at),
+      })),
+    )
+    .returning({ listingId: marketListings.id });
+  return rows;
 }
 
 export const buyListing = (

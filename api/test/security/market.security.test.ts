@@ -111,12 +111,16 @@ describe("market, adversarial (economy.md §10, §14)", () => {
     snapshots.push(snapshotId);
   });
   afterAll(async () => {
-    expectClockBehindDatabase(now);
-    await expectLedgerConsistent(app);
-    await deleteAccounts(app.db, made);
-    await deleteSnapshots(snapshots);
-    await twin.close();
-    await app.close();
+    try {
+      expectClockBehindDatabase(now);
+      await expectLedgerConsistent(app);
+    } finally {
+      // Whatever the audit found, the next file must not find this file's snapshot current.
+      await deleteAccounts(app.db, made);
+      await deleteSnapshots(snapshots);
+      await twin.close();
+      await app.close();
+    }
   });
 
   describe("1. session cookies", () => {

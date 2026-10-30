@@ -56,6 +56,7 @@ import {
   page,
   patientDb,
   PERCENT,
+  seedListings,
   POKEMON,
   UNDERSCORE,
 } from "./market-support.js";
@@ -73,6 +74,8 @@ const SECOND = 1_000;
 const HOUR = 3_600_000;
 const WINDOW_MS = MARKET_WINDOW_SECONDS * SECOND;
 const TTL_MS = MARKET_LISTING_TTL_SECONDS * SECOND;
+/** The tests that make a hundred purchases: seconds on an idle machine, so the bound only catches a hang. */
+const HEAVY_MS = 120_000;
 
 describe("market routes (economy.md §8.3 to §8.5, §11.3, §14)", () => {
   let app: App;
@@ -121,11 +124,15 @@ describe("market routes (economy.md §8.3 to §8.5, §11.3, §14)", () => {
     snapshots.push(snapshotId);
   });
   afterAll(async () => {
-    expectClockBehindDatabase(now);
-    await expectLedgerConsistent(app, forged);
-    await deleteAccounts(app.db, made);
-    await deleteSnapshots(snapshots);
-    await app.close();
+    try {
+      expectClockBehindDatabase(now);
+      await expectLedgerConsistent(app, forged);
+    } finally {
+      // Whatever the audit found, the next file must not find this file's snapshot current.
+      await deleteAccounts(app.db, made);
+      await deleteSnapshots(snapshots);
+      await app.close();
+    }
   });
 
   describe("POST /api/market/listings", () => {
@@ -306,18 +313,22 @@ describe("market routes (economy.md §8.3 to §8.5, §11.3, §14)", () => {
       expect(await entryOf(app, two.cookie, ID.common(22))).toMatchObject({ count: 1, listed: 1 });
     });
 
-    it(`holds an account to ${MARKET_MAX_LISTINGS} live listings, 409 listing_limit, until one closes`, async () => {
-      const seller = await holding(copies(ID.common(30), MARKET_MAX_LISTINGS + 1));
-      for (let i = 0; i < MARKET_MAX_LISTINGS; i += 1) await listed(app, seller, ID.common(30), 5);
-      const over = await listCard(app, seller.cookie, ID.common(30), 5);
-      expect(over.statusCode).toBe(409);
-      expect(marketErrorOf(over).code).toBe("listing_limit");
-      expect(await wallet(seller)).toMatchObject({ activeListings: MARKET_MAX_LISTINGS });
-      const [first] = (await mine(app, seller.cookie)).active;
-      if (first === undefined) throw new Error("no active listing");
-      expect((await cancelListing(app, seller.cookie, first.listingId)).statusCode).toBe(200);
-      expect((await listCard(app, seller.cookie, ID.common(30), 5)).statusCode).toBe(201);
-    });
+    it(
+      `holds an account to ${MARKET_MAX_LISTINGS} live listings, 409 listing_limit, until one closes`,
+      { timeout: HEAVY_MS },
+      async () => {
+        const seller = await holding(copies(ID.common(30), MARKET_MAX_LISTINGS + 1));
+        for (let i = 0; i < MARKET_MAX_LISTINGS; i += 1) await listed(app, seller, ID.common(30), 5);
+        const over = await listCard(app, seller.cookie, ID.common(30), 5);
+        expect(over.statusCode).toBe(409);
+        expect(marketErrorOf(over).code).toBe("listing_limit");
+        expect(await wallet(seller)).toMatchObject({ activeListings: MARKET_MAX_LISTINGS });
+        const [first] = (await mine(app, seller.cookie)).active;
+        if (first === undefined) throw new Error("no active listing");
+        expect((await cancelListing(app, seller.cookie, first.listingId)).statusCode).toBe(200);
+        expect((await listCard(app, seller.cookie, ID.common(30), 5)).statusCode).toBe(201);
+      },
+    );
   });
 
   describe("POST /api/market/listings/{listingId}/buy", () => {
@@ -508,67 +519,74 @@ describe("market routes (economy.md §8.3 to §8.5, §11.3, §14)", () => {
   });
 
   describe("the window limits (economy.md §10)", () => {
-    it("refuses the buyer's 101st purchase in the window, buyer_purchases, and lets it through once the oldest leaves", async () => {
-      const sellers = await Promise.all([0, 1, 2].map(() => holding(copies(ID.common(50), 34))));
-      const buyer = await funded(MARKET_WINDOW_PURCHASES * 6);
-      const listings: Listing[] = [];
-      for (const seller of sellers) {
-        for (let i = 0; i < 34; i += 1) listings.push(await listed(app, seller, ID.common(50), 5));
-      }
-      const firstAt = now;
-      for (const listing of listings.slice(0, MARKET_WINDOW_PURCHASES)) {
-        await bought(app, buyer, listing.listingId);
+    it(
+      "refuses the buyer's 101st purchase in the window, buyer_purchases, and lets it through once the oldest leaves",
+      { timeout: HEAVY_MS },
+      async () => {
+        const sellers = await Promise.all([0, 1, 2].map(() => holding(copies(ID.common(50), 34))));
+        const buyer = await funded(MARKET_WINDOW_PURCHASES * 6);
+        const listings: { listingId: string }[] = [];
+        for (const seller of sellers)
+          listings.push(...(await seedListings(app, seller, ID.common(50), 5, 34, now)));
+        const firstAt = now;
+        for (const listing of listings.slice(0, MARKET_WINDOW_PURCHASES)) {
+          await bought(app, buyer, listing.listingId);
+          tick(SECOND);
+        }
+        const last = listings[MARKET_WINDOW_PURCHASES];
+        if (last === undefined) throw new Error("101 listings");
+        const res = await buyListing(app, buyer.cookie, last.listingId);
+        expect(res.statusCode).toBe(409);
+        const expected = Math.ceil((firstAt.getTime() + WINDOW_MS - now.getTime()) / SECOND);
+        expect(marketErrorOf(res)).toMatchObject({
+          code: "market_limit",
+          limit: "buyer_purchases",
+          retryAfterSeconds: expected,
+        });
+        expect(res.headers["retry-after"]).toBe(String(expected));
+        expect((await mine(app, buyer.cookie)).left).toEqual({
+          purchases: 0,
+          spend: MARKET_WINDOW_SPEND - MARKET_WINDOW_PURCHASES * 5,
+          proceeds: MARKET_WINDOW_PROCEEDS,
+        });
+        // A second before the oldest purchase leaves the window it still counts; at its time plus the window it does not.
+        now = new Date(firstAt.getTime() + WINDOW_MS - SECOND);
+        const seller = sellers[2];
+        if (seller === undefined) throw new Error("three sellers");
+        // Its two unsold listings are still live, so the seller lists a fresh copy that outlives the wait.
+        await grantCards(app, seller.account.id, snapshotId, [ID.common(50)], now);
+        const fresh = await listed(app, seller, ID.common(50), 5);
+        expect(marketErrorOf(await buyListing(app, buyer.cookie, fresh.listingId))).toMatchObject({
+          limit: "buyer_purchases",
+          retryAfterSeconds: 1,
+        });
         tick(SECOND);
-      }
-      const last = listings[MARKET_WINDOW_PURCHASES];
-      if (last === undefined) throw new Error("101 listings");
-      const res = await buyListing(app, buyer.cookie, last.listingId);
-      expect(res.statusCode).toBe(409);
-      const expected = Math.ceil((firstAt.getTime() + WINDOW_MS - now.getTime()) / SECOND);
-      expect(marketErrorOf(res)).toMatchObject({
-        code: "market_limit",
-        limit: "buyer_purchases",
-        retryAfterSeconds: expected,
-      });
-      expect(res.headers["retry-after"]).toBe(String(expected));
-      expect((await mine(app, buyer.cookie)).left).toEqual({
-        purchases: 0,
-        spend: MARKET_WINDOW_SPEND - MARKET_WINDOW_PURCHASES * 5,
-        proceeds: MARKET_WINDOW_PROCEEDS,
-      });
-      // A second before the oldest purchase leaves the window it still counts; at its time plus the window it does not.
-      now = new Date(firstAt.getTime() + WINDOW_MS - SECOND);
-      const seller = sellers[2];
-      if (seller === undefined) throw new Error("three sellers");
-      // Its two unsold listings are still live, so the seller lists a fresh copy that outlives the wait.
-      await grantCards(app, seller.account.id, snapshotId, [ID.common(50)], now);
-      const fresh = await listed(app, seller, ID.common(50), 5);
-      expect(marketErrorOf(await buyListing(app, buyer.cookie, fresh.listingId))).toMatchObject({
-        limit: "buyer_purchases",
-        retryAfterSeconds: 1,
-      });
-      tick(SECOND);
-      expect((await buyListing(app, buyer.cookie, fresh.listingId)).statusCode).toBe(201);
-    });
+        expect((await buyListing(app, buyer.cookie, fresh.listingId)).statusCode).toBe(201);
+      },
+    );
 
-    it("refuses a buyer past MARKET_WINDOW_SPEND, buyer_spend, after two Mythics at the cap from two sellers", async () => {
-      const sellers = await Promise.all([ID.mythic(2), ID.mythic(3)].map((id) => holding([id])));
-      const third = await holding([ID.common(60)]);
-      const buyer = await funded(MARKET_WINDOW_SPEND + 5);
-      for (const [index, seller] of sellers.entries()) {
-        const listing = await listed(app, seller, ID.mythic(2 + index), MARKET_PRICE_MAX.mythic);
-        await bought(app, buyer, listing.listingId);
-      }
-      const extra = await listed(app, third, ID.common(60), 5);
-      const res = await buyListing(app, buyer.cookie, extra.listingId);
-      expect(res.statusCode).toBe(409);
-      expect(marketErrorOf(res)).toMatchObject({
-        code: "market_limit",
-        limit: "buyer_spend",
-        retryAfterSeconds: MARKET_WINDOW_SECONDS,
-      });
-      expect(await balanceOf(app, buyer.account.id)).toBeGreaterThanOrEqual(5);
-    });
+    it(
+      "refuses a buyer past MARKET_WINDOW_SPEND, buyer_spend, after two Mythics at the cap from two sellers",
+      { timeout: HEAVY_MS },
+      async () => {
+        const sellers = await Promise.all([ID.mythic(2), ID.mythic(3)].map((id) => holding([id])));
+        const third = await holding([ID.common(60)]);
+        const buyer = await funded(MARKET_WINDOW_SPEND + 5);
+        for (const [index, seller] of sellers.entries()) {
+          const listing = await listed(app, seller, ID.mythic(2 + index), MARKET_PRICE_MAX.mythic);
+          await bought(app, buyer, listing.listingId);
+        }
+        const extra = await listed(app, third, ID.common(60), 5);
+        const res = await buyListing(app, buyer.cookie, extra.listingId);
+        expect(res.statusCode).toBe(409);
+        expect(marketErrorOf(res)).toMatchObject({
+          code: "market_limit",
+          limit: "buyer_spend",
+          retryAfterSeconds: MARKET_WINDOW_SECONDS,
+        });
+        expect(await balanceOf(app, buyer.account.id)).toBeGreaterThanOrEqual(5);
+      },
+    );
 
     it("refuses a seller past MARKET_WINDOW_PROCEEDS, seller_proceeds, exactly at the bound", async () => {
       const seller = await holding([ID.mythic(4), ID.mythic(5), ID.common(61)]);
@@ -876,33 +894,33 @@ describe("market routes (economy.md §8.3 to §8.5, §11.3, §14)", () => {
       }
     });
 
-    it("A buys B's listing while B buys A's, 50 times in parallel pairs: every request finishes and the ledgers balance", async () => {
-      const a = await holding(copies(ID.common(80), MARKET_MAX_LISTINGS));
-      const b = await holding(copies(ID.common(81), MARKET_MAX_LISTINGS));
-      await fund(app, a, snapshotId, 50 * 5, now);
-      await fund(app, b, snapshotId, 50 * 5, now);
-      const fromA: Listing[] = [];
-      const fromB: Listing[] = [];
-      for (let i = 0; i < MARKET_MAX_LISTINGS; i += 1) {
-        fromA.push(await listed(app, a, ID.common(80), 5));
-        fromB.push(await listed(app, b, ID.common(81), 5));
-      }
-      const results = await Promise.all(
-        fromA.flatMap((listing, index) => [
-          buyListing(app, b.cookie, listing.listingId),
-          buyListing(app, a.cookie, fromB[index]?.listingId ?? ""),
-        ]),
-      );
-      expect(results.map((res) => res.statusCode)).toEqual(results.map(() => 201));
-      for (const client of [a, b]) {
-        const sum = (await ledgerOf(app, client.account.id)).reduce(
-          (total, entry) => total + entry.amount,
-          0,
+    it(
+      "A buys B's listing while B buys A's, 50 times in parallel pairs: every request finishes and the ledgers balance",
+      { timeout: HEAVY_MS },
+      async () => {
+        const a = await holding(copies(ID.common(80), MARKET_MAX_LISTINGS));
+        const b = await holding(copies(ID.common(81), MARKET_MAX_LISTINGS));
+        await fund(app, a, snapshotId, 50 * 5, now);
+        await fund(app, b, snapshotId, 50 * 5, now);
+        const fromA = await seedListings(app, a, ID.common(80), 5, MARKET_MAX_LISTINGS, now);
+        const fromB = await seedListings(app, b, ID.common(81), 5, MARKET_MAX_LISTINGS, now);
+        const results = await Promise.all(
+          fromA.flatMap((listing, index) => [
+            buyListing(app, b.cookie, listing.listingId),
+            buyListing(app, a.cookie, fromB[index]?.listingId ?? ""),
+          ]),
         );
-        expect(await balanceOf(app, client.account.id)).toBe(sum);
-      }
-      await expectLedgerConsistent(app, forged.splice(0));
-    });
+        expect(results.map((res) => res.statusCode)).toEqual(results.map(() => 201));
+        for (const client of [a, b]) {
+          const sum = (await ledgerOf(app, client.account.id)).reduce(
+            (total, entry) => total + entry.amount,
+            0,
+          );
+          expect(await balanceOf(app, client.account.id)).toBe(sum);
+        }
+        await expectLedgerConsistent(app, forged.splice(0));
+      },
+    );
 
     it("two spends with the balance for one, a shop pack and a purchase: one 201, one 409 insufficient_funds, balance ≥ 0", async () => {
       const seller = await holding([ID.epic(30)]);
@@ -967,22 +985,26 @@ describe("market routes (economy.md §8.3 to §8.5, §11.3, §14)", () => {
       expect(await ledgerOf(app, buyer.account.id)).toHaveLength(2);
     });
 
-    it("101 parallel purchases by one buyer in a window: 100 succeed, the rest are market_limit buyer_purchases", async () => {
-      const sellers = await Promise.all([0, 1, 2].map(() => holding(copies(ID.common(95), 34))));
-      const buyer = await funded(MARKET_WINDOW_PURCHASES * 6);
-      const listings: Listing[] = [];
-      for (const seller of sellers)
-        for (let i = 0; i < 34; i += 1) listings.push(await listed(app, seller, ID.common(95), 5));
-      const results = await Promise.all(
-        listings
-          .slice(0, MARKET_WINDOW_PURCHASES + 1)
-          .map((listing) => buyListing(app, buyer.cookie, listing.listingId)),
-      );
-      const statuses = results.map((res) => res.statusCode);
-      expect(statuses.filter((status) => status === 201)).toHaveLength(MARKET_WINDOW_PURCHASES);
-      const refused = results.filter((res) => res.statusCode !== 201);
-      expect(refused.map((res) => marketErrorOf(res).limit)).toEqual(["buyer_purchases"]);
-    });
+    it(
+      "101 parallel purchases by one buyer in a window: 100 succeed, the rest are market_limit buyer_purchases",
+      { timeout: HEAVY_MS },
+      async () => {
+        const sellers = await Promise.all([0, 1, 2].map(() => holding(copies(ID.common(95), 34))));
+        const buyer = await funded(MARKET_WINDOW_PURCHASES * 6);
+        const listings: { listingId: string }[] = [];
+        for (const seller of sellers)
+          listings.push(...(await seedListings(app, seller, ID.common(95), 5, 34, now)));
+        const results = await Promise.all(
+          listings
+            .slice(0, MARKET_WINDOW_PURCHASES + 1)
+            .map((listing) => buyListing(app, buyer.cookie, listing.listingId)),
+        );
+        const statuses = results.map((res) => res.statusCode);
+        expect(statuses.filter((status) => status === 201)).toHaveLength(MARKET_WINDOW_PURCHASES);
+        const refused = results.filter((res) => res.statusCode !== 201);
+        expect(refused.map((res) => marketErrorOf(res).limit)).toEqual(["buyer_purchases"]);
+      },
+    );
 
     it("purchases racing a seller to MARKET_WINDOW_PROCEEDS: exactly the ones that fit succeed", async () => {
       const seller = await holding([ID.mythic(7), ID.mythic(8), ID.mythic(9)]);
@@ -1035,7 +1057,7 @@ describe("market routes (economy.md §8.3 to §8.5, §11.3, §14)", () => {
         all.push(own, await listed(app, bob, ID.common(101), 10 + (i % 7)));
         tick();
       }
-    });
+    }, HEAVY_MS);
 
     it("pages every live listing of every account, cheapest first, marking the caller's own, and keyset-pages the rest", async () => {
       const first = await page(app, alice.cookie);
