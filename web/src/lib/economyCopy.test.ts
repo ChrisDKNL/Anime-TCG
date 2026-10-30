@@ -82,6 +82,8 @@ describe("shop copy (market-and-shop.md §8)", () => {
     expect(shopCopy.gone).toBe("That pack is no longer in the shop.");
     expect(shopCopy.noCards).toBe("There are no cards to draw from right now. Nothing changed.");
     expect(shopCopy.buying).toBe("Buying…");
+    expect(shopCopy.latest).toBe("See your latest shop pack");
+    expect(shopCopy.back).toBe("Back to the shop");
   });
 
   it("writes every amount from the numbers given, grouped", () => {

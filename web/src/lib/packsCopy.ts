@@ -105,6 +105,10 @@ export const packControlCopy = {
   pity: (packs: number, freePacksOnly: boolean) =>
     `Mythic guaranteed within ${formatCount(packs)} ${freePacksOnly ? "free " : ""}${packs === 1 ? "pack" : "packs"}.`,
   odds: "Pack odds",
+  /** `/packs` while the current opening's cards are held (§3.1 step 3). */
+  latest: "See your latest pack",
+  /** `/packs/open`'s way back to the countdown (§3.7). */
+  back: "Back to packs",
 } as const;
 
 export interface TierCount {

@@ -227,7 +227,8 @@ describe("/shop and the header (market-and-shop.md §3.1 to §3.3)", () => {
     await main().findByRole("heading", { level: 2, name: "Action pack" });
     expect(localStorage.length).toBe(0);
     expect(sessionStorage.length).toBe(0);
-    expect(history.location.href).toBe("/shop");
+    // The bought pack has its own page; no query string or hash is ever written.
+    expect(history.location.href).toBe("/shop/open");
   });
 });
 
@@ -244,15 +245,21 @@ describe("buying a pack (§3.3 steps 4 to 6)", () => {
     expect(within(dialog).getByRole("button", { name: "Cancel" })).toBeEnabled();
   });
 
-  it("201: one request with the key and the theme only; the reveal, the header and the live region take the receipt", async () => {
-    const { user, fetchMock } = await confirmBuy();
+  it("201: one request with the key and the theme only; /shop/open, the header and the live region take the receipt", async () => {
+    const { user, fetchMock, history } = await confirmBuy();
     const collectionsBefore = callsTo(fetchMock, COLLECTION).length;
     await user.click(within(confirmation()).getByRole("button", { name: "Buy for 400 Karma" }));
 
-    const heading = await main().findByRole("heading", { level: 2, name: "Action pack" });
-    expect(heading).toHaveFocus();
+    const page = await pageHeading("Shop pack");
+    await waitFor(() => expect(page).toHaveFocus());
+    expect(history.location.pathname).toBe("/shop/open");
+    expect(history.length).toBe(2);
+    expect(document.title).toBe("Shop pack · Anime TCG");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(main().getByRole("list", { name: "Action pack" }).children).toHaveLength(5);
+    expect(main().getByRole("heading", { level: 2, name: "Action pack" })).toBeInTheDocument();
+    const items = within(main().getByRole("list", { name: "Action pack" })).getAllByRole("listitem");
+    expect(items).toHaveLength(5);
+    for (const item of items) expect(item).toHaveClass("animate-card-enter");
     expect(header().getByText("840")).toBeInTheDocument();
     await waitFor(() =>
       expect(liveRegion()).toHaveTextContent("Bought the ⁨Action⁩ pack for 400 Karma. You have 840 Karma."),
@@ -263,8 +270,10 @@ describe("buying a pack (§3.3 steps 4 to 6)", () => {
     expect(body.themeId).toBe("genre-action");
     expect(body.requestId).toMatch(/^[0-9a-f-]{36}$/);
     await waitFor(() => expect(callsTo(fetchMock, COLLECTION).length).toBeGreaterThan(collectionsBefore));
-    // The reveal sits above the themes, which stay.
-    expect(main().getByRole("article", { name: "Action" })).toBeInTheDocument();
+    // No buy button on /shop/open: a spend always starts from the shop, its price and its odds.
+    expect(main().queryByRole("button")).not.toBeInTheDocument();
+    expect(main().queryByRole("article", { name: "Action" })).not.toBeInTheDocument();
+    expect(main().getByRole("link", { name: "Back to the shop" })).toHaveAttribute("href", "/shop");
   });
 
   it("a Radiant shop pack says so under the summary; never Enchanted or the guarantee", async () => {
@@ -489,9 +498,73 @@ describe("buying a pack (§3.3 steps 4 to 6)", () => {
     });
     await user.click(within(confirmation()).getByRole("button", { name: "Buy for 400 Karma" }));
     await main().findByRole("heading", { level: 2, name: "Action pack" });
-    await user.click(within(theme()).getByRole("button", { name: "Buy…" }));
+    await user.click(main().getByRole("link", { name: "Back to the shop" }));
+    await pageHeading("Shop");
+    await user.click(
+      within(await main().findByRole("article", { name: "Action" })).getByRole("button", { name: "Buy…" }),
+    );
     await user.click(within(confirmation()).getByRole("button", { name: "Buy for 400 Karma" }));
     expect(await header().findByText("440")).toBeInTheDocument();
+    await pageHeading("Shop pack");
     expect(main().getAllByRole("region", { name: "Action pack" })).toHaveLength(1);
+    // The new pack's cards, with their entrance: it is the first showing of this pack.
+    const items = within(main().getByRole("list", { name: "Action pack" })).getAllByRole("listitem");
+    expect(items[0]).toHaveClass("animate-card-enter");
+  });
+});
+
+describe("/shop/open (market-and-shop.md §3.3 step 6; navigation-and-landing.md §3.13)", () => {
+  async function bought(routes: Record<string, MockHandler> = {}) {
+    const rendered = await confirmBuy(routes);
+    await rendered.user.click(within(confirmation()).getByRole("button", { name: "Buy for 400 Karma" }));
+    await pageHeading("Shop pack");
+    await main().findByRole("list", { name: "Action pack" });
+    return rendered;
+  }
+
+  it("Back returns to /shop with `See your latest shop pack`; Forward and the link show the cards without the entrance", async () => {
+    const { user, history } = await bought();
+    act(() => history.back());
+    const shopHeading = await pageHeading("Shop");
+    await waitFor(() => expect(shopHeading).toHaveFocus());
+    const latest = main().getByRole("link", { name: "See your latest shop pack" });
+    expect(latest).toHaveAttribute("href", "/shop/open");
+
+    act(() => history.forward());
+    await pageHeading("Shop pack");
+    for (const item of within(main().getByRole("list", { name: "Action pack" })).getAllByRole("listitem")) {
+      expect(item).not.toHaveClass("animate-card-enter");
+    }
+
+    await user.click(main().getByRole("link", { name: "Back to the shop" }));
+    await pageHeading("Shop");
+    expect(history.length).toBe(3);
+    await user.click(main().getByRole("link", { name: "See your latest shop pack" }));
+    await pageHeading("Shop pack");
+    for (const item of within(main().getByRole("list", { name: "Action pack" })).getAllByRole("listitem")) {
+      expect(item).not.toHaveClass("animate-card-enter");
+    }
+  });
+
+  it('the header\'s Shop link keeps the current fill and reads aria-current="true"; it pushes /shop', async () => {
+    const { user, history } = await bought();
+    const shop = header().getByRole("link", { name: "Shop" });
+    expect(shop).toHaveAttribute("aria-current", "true");
+    expect(shop).toHaveClass("bg-zinc-700");
+    await user.click(shop);
+    await pageHeading("Shop");
+    expect(history.location.pathname).toBe("/shop");
+    expect(header().getByRole("link", { name: "Shop" })).toHaveAttribute("aria-current", "page");
+  });
+
+  it("a load or a reload with nothing held: replaced by /shop, no focus move, nothing bought", async () => {
+    const { history, fetchMock } = renderApp({}, account, "/shop/open");
+    expect(await pageHeading("Shop")).toBeInTheDocument();
+    expect(history.location.pathname).toBe("/shop");
+    expect(history.length).toBe(1);
+    await waitFor(() => expect(document.title).toBe("Shop · Anime TCG"));
+    expect(document.body).toHaveFocus();
+    expect(callsTo(fetchMock, BUY)).toHaveLength(0);
+    expect(main().queryByRole("link", { name: "See your latest shop pack" })).not.toBeInTheDocument();
   });
 });

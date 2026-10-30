@@ -43,10 +43,12 @@ function held(answer: MockAnswer): { handler: MockHandler; release: () => void }
 
 /** The pack button, in the page: the unreachable banner has a `Try again` of its own. */
 const main = () => within(screen.getByRole("main"));
-async function openButton(name = "Open pack") {
-  await pageHeading("Packs");
+async function openButton(name = "Open pack", page = "Packs") {
+  await pageHeading(page);
   return main().findByRole("button", { name }, { timeout: ASYNC_TIMEOUT });
 }
+/** `/packs/open`'s own `Open pack`, once the opening page shows. */
+const openingButton = (name = "Open pack") => openButton(name, "Pack opening");
 /** The `requestId` of every opening sent, in order. */
 const requestIds = (fetchMock: Parameters<typeof callsTo>[0]) =>
   callsTo(fetchMock, OPEN).map(([, init]) => requestIdOf(init));
@@ -127,36 +129,44 @@ describe("/packs: arriving", () => {
 });
 
 describe("/packs: opening", () => {
-  it("one request in flight: a double click sends one POST; the button reads Opening…, keeps focus, the reveal is busy", async () => {
+  it("a double click sends one POST and moves to /packs/open once; its Open pack then opens in place, busy, keeping focus", async () => {
     const first = held({ status: 201, body: makePackOpened() });
-    const { fetchMock } = renderApp(
-      {
-        [OPEN]: sequence(first.handler, {
-          status: 201,
-          body: makePackOpened({
-            openingId: "6f9c1a52-4c1e-4b8e-9d3a-000000000002",
-            allowance: { available: 1 },
-          }),
-        }),
-      },
+    const second = held({
+      status: 201,
+      body: makePackOpened({
+        openingId: "6f9c1a52-4c1e-4b8e-9d3a-000000000002",
+        allowance: { available: 1 },
+      }),
+    });
+    const { fetchMock, history } = renderApp(
+      { [OPEN]: sequence(first.handler, second.handler) },
       account,
       "/packs",
     );
     const user = userEvent.setup();
-    const button = await openButton();
-    await user.dblClick(button);
+    await user.dblClick(await openButton());
     expect(callsTo(fetchMock, OPEN)).toHaveLength(1);
-    expect(button).toHaveTextContent("Opening…");
+    const heading = await pageHeading("Pack opening");
+    await waitFor(() => expect(heading).toHaveFocus());
+    expect(history.location.pathname).toBe("/packs/open");
+    expect(history.length).toBe(2);
+    const button = await openingButton("Opening…");
     expect(button).toHaveAttribute("aria-disabled", "true");
-    expect(button).toHaveFocus();
+    expect(screen.queryByRole("list")).not.toBeInTheDocument();
     first.release();
     expect(await screen.findByText("2 of 3 packs ready")).toBeInTheDocument();
-    expect(button).toHaveFocus();
-
-    // The next opening: the previous reveal stays, busy, until the answer replaces it.
-    await user.click(button);
     expect(screen.getByRole("list", { name: "Your pack" })).toBeInTheDocument();
+
+    // The next opening, in place: the previous reveal stays, busy, until the answer replaces it.
+    const next = main().getByRole("button", { name: "Open pack" });
+    await user.click(next);
+    expect(screen.getByRole("list", { name: "Your pack" })).toHaveAttribute("aria-busy", "true");
+    expect(next).toHaveTextContent("Opening…");
+    expect(next).toHaveFocus();
+    second.release();
     expect(await screen.findByText("1 of 3 packs ready")).toBeInTheDocument();
+    expect(next).toHaveFocus();
+    expect(history.length).toBe(2);
     const ids = requestIds(fetchMock);
     expect(ids).toHaveLength(2);
     expect(ids[0]).not.toBe(ids[1]);
@@ -172,13 +182,17 @@ describe("/packs: opening", () => {
           status: 201,
           body: makePackOpened({ packKind: "enchanted", pityMythic: true, cards, packsUntilGuarantee: 300 }),
         },
-        [PACKS]: packs({ available: 3 }, { packsUntilGuarantee: 1 }),
+        [PACKS]: sequence(
+          packs({ available: 3 }, { packsUntilGuarantee: 1 }),
+          packs({ available: 2 }, { packsUntilGuarantee: 300 }),
+        ),
       },
       account,
       "/packs",
     );
     expect(await screen.findByText("Mythic guaranteed within 1 free pack.")).toBeInTheDocument();
-    await userEvent.setup().click(await openButton());
+    const user = userEvent.setup();
+    await user.click(await openButton());
     expect(await screen.findByRole("heading", { level: 2, name: "Enchanted pack" })).toBeInTheDocument();
     const enchanted = screen.getByText(
       "Every 10th free pack is Enchanted: its fifth card is Epic or better.",
@@ -186,8 +200,11 @@ describe("/packs: opening", () => {
     expect(enchanted.nextElementSibling).toHaveTextContent(
       "This Mythic came from the guarantee: a 300th free pack in a row without a Mythic always has one.",
     );
-    expect(screen.getByText("Mythic guaranteed within 300 free packs.")).toBeInTheDocument();
     expect(liveRegion()).toHaveTextContent("Enchanted pack: 1 Mythic, 1 Uncommon and 3 Common. 5 new.");
+    // The pity line stays on /packs (§3.7 step 5), with the opening's number.
+    expect(screen.queryByText(/Mythic guaranteed/)).not.toBeInTheDocument();
+    await user.click(main().getByRole("link", { name: "Back to packs" }));
+    expect(await screen.findByText("Mythic guaranteed within 300 free packs.")).toBeInTheDocument();
   });
 
   it("a Radiant pack: its heading and its line, from packKind", async () => {
@@ -215,30 +232,40 @@ describe("/packs: opening", () => {
     expect(screen.queryByText(/Enchanted:/)).not.toBeInTheDocument();
   });
 
-  it("no answer: the banner, the line and Try again, which resends the same requestId and shows the pack the server dealt", async () => {
+  it("no answer: back on /packs the banner, the line read once and Try again, which resends the same requestId on /packs/open", async () => {
     const replay = makePackOpened({ allowance: { available: 2 } });
-    const { fetchMock } = renderApp(
-      { [OPEN]: sequence({ status: 502, raw: "<html>proxy</html>" }, { status: 200, body: replay }) },
+    let dealt = false;
+    const { fetchMock, history } = renderApp(
+      {
+        [OPEN]: sequence({ status: 502, raw: "<html>proxy</html>" }, () => {
+          dealt = true;
+          return { status: 200, body: replay };
+        }),
+        // The server's allowance: the lost answer's pack was already taken off it.
+        [PACKS]: () => packs({ available: dealt ? 2 : 3 }),
+      },
       account,
       "/packs",
     );
     const user = userEvent.setup();
     await user.click(await openButton());
-    expect(
-      await screen.findByText(
-        "Couldn't reach the game server. Trying again opens this same pack, never a second one.",
-      ),
-    ).toBeInTheDocument();
+    const line = "Couldn't reach the game server. Trying again opens this same pack, never a second one.";
+    expect(await main().findByText(line, {}, { timeout: ASYNC_TIMEOUT })).toBeInTheDocument();
+    const heading = await pageHeading("Packs");
+    await waitFor(() => expect(heading).toHaveFocus());
+    expect(history.location.pathname).toBe("/packs");
+    expect(liveRegion()).toHaveTextContent(line);
     expect(screen.getByRole("alert")).toHaveTextContent("Couldn't reach the game server.");
     expect(screen.getByText("3 of 3 packs ready")).toBeInTheDocument();
 
     await user.click(main().getByRole("button", { name: "Try again" }));
     expect(await screen.findByRole("list", { name: "Your pack" })).toBeInTheDocument();
+    expect(history.location.pathname).toBe("/packs/open");
     expect(screen.getByText("2 of 3 packs ready")).toBeInTheDocument();
     const [first, second] = requestIds(fetchMock);
     expect(second).toBe(first);
     expect(screen.queryByText(/Trying again opens this same pack/)).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Open pack" })).toBeInTheDocument();
+    expect(main().getByRole("button", { name: "Open pack" })).toBeInTheDocument();
   });
 
   it.each([201, 200])(
@@ -292,11 +319,13 @@ describe("/packs: opening", () => {
       "/packs",
     );
     await userEvent.setup().click(await openButton());
-    expect(await screen.findByText("There was no pack left to open.")).toHaveAttribute("role", "status");
+    // Opened on /packs/open and answered without cards: back on /packs, the line there and read once.
+    expect(await main().findByText("There was no pack left to open.")).toHaveAttribute("role", "status");
+    expect(liveRegion()).toHaveTextContent("There was no pack left to open.");
     expect(screen.getByText("0 of 3 packs ready")).toBeInTheDocument();
     await waitFor(() => expect(callsTo(fetchMock, PACKS)).toHaveLength(2));
     expect(await screen.findByText("Next pack in 6:59")).toBeInTheDocument();
-    expect(screen.getByText("There was no pack left to open.")).toBeInTheDocument();
+    expect(main().getByText("There was no pack left to open.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open pack" })).toHaveAttribute("aria-disabled", "true");
     // Another tab or device opened the packs, so the collection is asked again too.
     await waitFor(() => expect(callsTo(fetchMock, "GET /api/collection").length).toBeGreaterThanOrEqual(2));
@@ -312,9 +341,9 @@ describe("/packs: opening", () => {
     );
     const user = userEvent.setup();
     await user.click(await openButton());
-    expect(
-      await screen.findByText("Cards are unavailable right now. Your packs are kept until they're back."),
-    ).toBeInTheDocument();
+    const line = "Cards are unavailable right now. Your packs are kept until they're back.";
+    expect(await main().findByText(line)).toBeInTheDocument();
+    expect(liveRegion()).toHaveTextContent(line);
     expect(screen.queryByRole("button", { name: "Pack odds" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Open pack" })).toHaveAttribute("aria-disabled", "true");
 
@@ -344,7 +373,7 @@ describe("/packs: opening", () => {
     const waiting = await openButton("Try again in 1 s");
     expect(waiting).toHaveAttribute("aria-disabled", "true");
     expect(
-      screen.getByText(
+      main().getByText(
         "Packs take a short pause after many requests in a row. The button comes back by itself.",
       ),
     ).toHaveAttribute("role", "status");
@@ -607,7 +636,8 @@ describe("/packs: the countdown (§3.2)", () => {
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime.bind(vi) });
     await user.click(main().getByRole("button", { name: "Open pack" }));
     await screen.findByRole("list", { name: "Your pack" });
-    expect(screen.getByText("Next pack in 10:00")).toBeInTheDocument();
+    await user.click(main().getByRole("link", { name: "Back to packs" }));
+    expect(await screen.findByText("Next pack in 10:00")).toBeInTheDocument();
     expect(screen.queryByText("Couldn't check for the next pack.")).not.toBeInTheDocument();
     expect(main().queryByRole("button", { name: "Check again" })).not.toBeInTheDocument();
   });

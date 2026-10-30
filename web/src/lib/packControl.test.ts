@@ -2,7 +2,7 @@ import type { PackAllowance } from "@anime-tcg/shared/api";
 import { describe, expect, it } from "vitest";
 import { makeAllowance, makeOdds } from "../test/fixtures";
 import type { Held } from "./game";
-import { packControlView, type ControlInput, type ControlShown } from "./packControl";
+import { openingControlView, packControlView, type ControlInput, type ControlShown } from "./packControl";
 
 const odds = makeOdds();
 
@@ -159,5 +159,63 @@ describe("packControlView: every row of packs-page.md §4.1", () => {
     expect(shown({ held: held({ available: 1, cap: 1, nextPackInSeconds: null }) }).count).toBe(
       "1 of 1 pack ready",
     );
+  });
+});
+
+describe("openingControlView: /packs/open's action row (packs-page.md §3.7, §4.4)", () => {
+  const base = {
+    held: held({ available: 2, nextPackInSeconds: 462 }),
+    odds,
+    opening: false,
+    keyHeld: false,
+    wait: null,
+  };
+
+  it("the count line and Open pack, enabled with a pack ready; no countdown or pity line to give", () => {
+    expect(openingControlView(base)).toEqual({
+      count: "2 of 3 packs ready",
+      button: { label: "Open pack", enabled: true },
+      describedByCount: false,
+    });
+  });
+
+  it("in flight: Opening…, unusable, the count as held", () => {
+    expect(openingControlView({ ...base, opening: true })).toEqual({
+      count: "2 of 3 packs ready",
+      button: { label: "Opening…", enabled: false },
+      describedByCount: false,
+    });
+  });
+
+  it("none left: Open pack unusable and described by `0 of 3 packs ready`", () => {
+    expect(openingControlView({ ...base, held: held({ available: 0, nextPackInSeconds: 600 }) })).toEqual({
+      count: "0 of 3 packs ready",
+      button: { label: "Open pack", enabled: false },
+      describedByCount: true,
+    });
+  });
+
+  it("a held key reads Try again and stays usable; a 429 wait counts down on the button", () => {
+    expect(openingControlView({ ...base, keyHeld: true }).button).toEqual({
+      label: "Try again",
+      enabled: true,
+    });
+    expect(openingControlView({ ...base, wait: 12 }).button).toEqual({
+      label: "Try again in 12 s",
+      enabled: false,
+    });
+  });
+
+  it("no allowance held yet: no count line; only a held key's retry is usable", () => {
+    expect(openingControlView({ ...base, held: null })).toEqual({
+      count: null,
+      button: { label: "Open pack", enabled: false },
+      describedByCount: false,
+    });
+    expect(openingControlView({ ...base, held: null, keyHeld: true }).button.enabled).toBe(true);
+  });
+
+  it("cards unavailable (odds null): Open pack unusable", () => {
+    expect(openingControlView({ ...base, odds: null }).button.enabled).toBe(false);
   });
 });

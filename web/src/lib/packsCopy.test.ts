@@ -126,6 +126,11 @@ describe("pack control copy", () => {
     expect(packControlCopy.pity(1, false)).toBe("Mythic guaranteed within 1 pack.");
   });
 
+  it("names the links between /packs and /packs/open (§8)", () => {
+    expect(packControlCopy.latest).toBe("See your latest pack");
+    expect(packControlCopy.back).toBe("Back to packs");
+  });
+
   it("reuses the accounts wait strings", () => {
     expect(packControlCopy.waitButton(3)).toBe("Try again in 3 s");
     expect(packControlCopy.waitOver).toBe("You can try again now.");

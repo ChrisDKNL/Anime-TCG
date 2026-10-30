@@ -1,4 +1,12 @@
-import type { PackAllowance, PackOpened, PacksResponse, PublishedOdds, Wallet } from "@anime-tcg/shared/api";
+import type {
+  PackAllowance,
+  PackOpened,
+  PacksResponse,
+  PublishedOdds,
+  ShopReceipt,
+  ThemeOffer,
+  Wallet,
+} from "@anime-tcg/shared/api";
 import {
   controlsReducer,
   DEFAULT_CONTROLS,
@@ -10,7 +18,9 @@ import { MAX_WAIT_SECONDS } from "./failures";
 /**
  * The signed-in account's game state, held by the root layout so it survives
  * every page change (navigation-and-landing.md §3.10): the opening in flight,
- * its idempotency key, the last reveal and what the last opening answered.
+ * its idempotency key, the current opening's cards that `/packs/open` shows,
+ * the pack last bought that `/shop/open` shows, and what the last opening
+ * answered.
  * Everything here is a cache of what the server said; the browser decides no
  * outcome (collection-packs.md §8). It belongs to one session of one account:
  * every action names the account and the session it was started in, and an
@@ -66,6 +76,15 @@ export type OpeningLine =
   /** 429: shown while the wait runs. */
   | { kind: "wait" };
 
+/** The pack a shop purchase dealt, held for `/shop/open` (market-and-shop.md §3.3 step 6). */
+export interface ShopPack {
+  receipt: ShopReceipt;
+  /** The theme it was bought from, for the reveal's `<title> pack` heading and its Radiant line. */
+  theme: ThemeOffer;
+  /** The rank chip's pool size from the shop answer it was bought from. */
+  poolSize: number | null;
+}
+
 export interface GameState {
   accountId: string | null;
   /** Counts the resets: each sign-in, sign-out and account change starts a new session of the game. */
@@ -73,10 +92,17 @@ export interface GameState {
   opening: boolean;
   /** The `requestId` of an opening that has had no answer yet; resent on the next click (§3.3 step 4). */
   key: string | null;
-  /** The last pack the server dealt, shown on `/packs` until the next one. */
+  /**
+   * The current opening's cards, shown on `/packs/open` (navigation-and-landing.md §3.13 step 2). A new
+   * opening replaces them: one started on `/packs` clears them at once, so the page shows empty slots,
+   * one started on `/packs/open` keeps them on screen until its answer. An answer without cards leaves
+   * nothing held (§3.13 step 3, manager decision, 2026-10-30).
+   */
   reveal: PackOpened | null;
-  /** How many packs have landed; a reveal that lands while `/packs` is showing runs its entrance, one found on return does not. */
-  reveals: number;
+  /** Whether the current cards landed while `/packs/open` was showing or about to: only then do they enter (§3.4 step 6). */
+  revealLandedShowing: boolean;
+  /** The last pack bought in the shop, until the next one. */
+  shopPack: ShopPack | null;
   /** The allowance of the last opening the server dealt (201 or 200). */
   opened: Held | null;
   /** The last 409: no pack was left, and the next one is `retryAfterSeconds` away. */
@@ -100,15 +126,23 @@ export interface GameOwner {
 
 export type GameAction =
   | { type: "reset"; accountId: string | null }
-  | ({ type: "openStarted"; key: string } & GameOwner)
-  | ({ type: "opened"; seq: number; receivedAt: number; pack: PackOpened } & GameOwner)
+  /** `keepReveal`: started on `/packs/open`, whose previous cards stay until the answer (packs-page.md §3.3 step 2). */
+  | ({ type: "openStarted"; key: string; keepReveal: boolean } & GameOwner)
+  | ({
+      type: "opened";
+      seq: number;
+      receivedAt: number;
+      pack: PackOpened;
+      landedShowing: boolean;
+    } & GameOwner)
   | ({ type: "noneLeft"; seq: number; receivedAt: number; retryAfterSeconds: number | null } & GameOwner)
   | ({ type: "unavailable"; seq: number } & GameOwner)
   | ({ type: "rateLimited"; until: number } & GameOwner)
   | ({ type: "failed"; row: Row } & GameOwner)
   | ({ type: "noAnswer" } & GameOwner)
   | ({ type: "overview"; action: ControlsAction } & GameOwner)
-  | ({ type: "balance"; balance: HeldBalance } & GameOwner);
+  | ({ type: "balance"; balance: HeldBalance } & GameOwner)
+  | ({ type: "shopBought"; pack: ShopPack } & GameOwner);
 
 export function initialGame(accountId: string | null, session = 0): GameState {
   return {
@@ -117,7 +151,8 @@ export function initialGame(accountId: string | null, session = 0): GameState {
     opening: false,
     key: null,
     reveal: null,
-    reveals: 0,
+    revealLandedShowing: false,
+    shopPack: null,
     opened: null,
     noneLeft: null,
     unavailableSince: null,
@@ -138,7 +173,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
   if (action.accountId !== state.accountId || action.session !== state.session) return state;
   switch (action.type) {
     case "openStarted":
-      return { ...state, opening: true, key: action.key };
+      return { ...state, opening: true, key: action.key, reveal: action.keepReveal ? state.reveal : null };
     case "opened": {
       const { pack, seq, receivedAt } = action;
       return {
@@ -146,7 +181,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         opening: false,
         key: null,
         reveal: pack,
-        reveals: state.reveals + 1,
+        revealLandedShowing: action.landedShowing,
         opened: { seq, receivedAt, allowance: pack.allowance, packsUntilGuarantee: pack.packsUntilGuarantee },
         line: null,
       };
@@ -157,19 +192,22 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
         ...state,
         opening: false,
         key: null,
+        reveal: null,
         noneLeft: { seq, receivedAt, retryAfterSeconds },
         line: { kind: "noneLeft" },
       };
     }
     case "unavailable":
-      return { ...state, opening: false, key: null, unavailableSince: action.seq, line: null };
+      return { ...state, opening: false, key: null, reveal: null, unavailableSince: action.seq, line: null };
     case "rateLimited":
       // A 429 comes from the rate limiter before the route reads the key, so the key is kept (§9, question 2).
-      return { ...state, opening: false, waitUntil: action.until, line: { kind: "wait" } };
+      return { ...state, opening: false, reveal: null, waitUntil: action.until, line: { kind: "wait" } };
     case "failed":
-      return { ...state, opening: false, key: null, line: { kind: "failed", row: action.row } };
+      return { ...state, opening: false, key: null, reveal: null, line: { kind: "failed", row: action.row } };
     case "noAnswer":
-      return { ...state, opening: false, line: { kind: "noAnswer" } };
+      return { ...state, opening: false, reveal: null, line: { kind: "noAnswer" } };
+    case "shopBought":
+      return { ...state, shopPack: action.pack };
     case "overview":
       return { ...state, overview: controlsReducer(state.overview, action.action) };
     case "balance":

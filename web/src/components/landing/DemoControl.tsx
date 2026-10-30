@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { DemoControl as Control } from "../../lib/demo";
 import { demoCopy } from "../../lib/navigationCopy";
 import { BUTTON } from "../account/styles";
@@ -10,48 +11,55 @@ interface Props {
   /** The last pack of the visit just landed here: the Join offer takes the focus the button had. */
   finishedHere: boolean;
   onOpen: () => void;
+  /** `/demo`'s `Back to the landing page`: beside the button, and after the Join offer once it is there (§5.4). */
+  back?: ReactNode;
 }
 
 /**
- * What stands under the lede (navigation-and-landing.md §3.7 items 1.3, 1.6
- * and 1.7, §4.5): `Open a demo pack` with the disclosure under it, or the
- * unavailable line in the button's place, or after the last demo pack of the
- * visit the Join offer. The button is never `disabled` while it shows: it is
- * `aria-disabled`, so focus stays on it while a pack opens or a wait runs. It
- * has the pack button's guards: a double click or a held Enter opens one demo
- * pack, never two (manager decision, 2026-10-30).
+ * What stands under the lede on `/` and under the `h1` on `/demo`
+ * (navigation-and-landing.md §3.7 items 1.3, 1.6 and 1.7, §3.14, §4.5, §4.9):
+ * `Open a demo pack` with the disclosure under it, or the unavailable line in
+ * the button's place, or after the last demo pack of the visit the Join offer.
+ * The button is never `disabled` while it shows: it is `aria-disabled`, so
+ * focus stays on it while a pack opens or a wait runs. It has the pack
+ * button's guards: a double click or a held Enter opens one demo pack, never
+ * two (manager decision, 2026-10-30).
  */
-export function DemoControl({ control, finishedHere, onOpen }: Props) {
+export function DemoControl({ control, finishedHere, onOpen, back }: Props) {
   if (control.kind === "done") {
     return (
       <div className="mt-6">
         <JoinOffer takesFocus={finishedHere} />
+        {back !== undefined && <div className="mt-6">{back}</div>}
       </div>
     );
   }
   return (
-    <div className="mt-6 flex max-w-xl flex-col items-start gap-2">
-      {control.kind === "unavailable" ? (
-        <p className={SECONDARY_LINE}>{demoCopy.unavailable}</p>
-      ) : (
-        <button
-          type="button"
-          aria-disabled={control.enabled ? undefined : "true"}
-          onClick={control.enabled ? (event) => openOnce(event, onOpen) : undefined}
-          onKeyDown={ignoreRepeat}
-          className={`${BUTTON.primary} w-full tabular-nums sm:w-auto`}
-        >
-          {label(control.label)}
-        </button>
-      )}
-      <p className={SECONDARY_LINE}>{demoCopy.disclosure}</p>
+    <div className="mt-6 flex max-w-xl flex-col items-start">
+      <div className="flex w-full flex-col items-start gap-2 sm:w-auto sm:flex-row sm:items-center sm:gap-4">
+        {control.kind === "unavailable" ? (
+          <p className={SECONDARY_LINE}>{demoCopy.unavailable}</p>
+        ) : (
+          <button
+            type="button"
+            aria-disabled={control.enabled ? undefined : "true"}
+            onClick={control.enabled ? (event) => openOnce(event, onOpen) : undefined}
+            onKeyDown={ignoreRepeat}
+            className={`${BUTTON.primary} w-full tabular-nums sm:w-auto`}
+          >
+            {label(control.label)}
+          </button>
+        )}
+        {back}
+      </div>
+      <p className={`mt-3 ${SECONDARY_LINE}`}>{demoCopy.disclosure}</p>
       {control.kind === "button" && control.line === "failed" && (
-        <p role="alert" className={ERROR_LINE}>
+        <p role="alert" className={`mt-2 ${ERROR_LINE}`}>
           {demoCopy.failed}
         </p>
       )}
       {control.kind === "button" && control.line === "wait" && (
-        <p role="status" className="text-xs text-zinc-400">
+        <p role="status" className="mt-2 text-xs text-zinc-400">
           {demoCopy.wait}
         </p>
       )}

@@ -58,7 +58,9 @@ export const landingCopy = {
   ledeWithFacts: (characters: number, entries: number) =>
     `${formatCount(characters)} characters from the ${formatCount(entries)} most popular anime on AniList, five to a pack.`,
   howItPlays: "How it plays",
-  terms: { packs: "Packs", rarity: "Rarity", collection: "Collection" },
+  /** The steps' visible numbers (`aria-hidden`, the list position is announced): `01`, `02`, … */
+  stepNumber: (position: number) => String(position).padStart(2, "0"),
+  terms: { packs: "Packs", rarity: "Rarity", collection: "Collection", karma: "Karma" },
   packsRow: "A new pack on a timer, and a few can pile up. Five cards each.",
   packsRowWithFacts: (intervalSeconds: number, cap: number) =>
     `A new pack every ${interval(intervalSeconds)}, and up to ${formatCount(cap)} can pile up. Five cards each.`,
@@ -68,6 +70,11 @@ export const landingCopy = {
   collectionRow: "See how much of each series you have, and of the whole pool.",
   collectionRowWithFacts: (characters: number) =>
     `See how much of each series you have, and how much of all ${formatCount(characters)} characters.`,
+  /** From `feat/economy-ui` (§3.7 item 2). */
+  karmaRow:
+    "Recycle duplicates for Karma and spend it on themed packs. Karma comes only from playing. It can't be bought.",
+  /** The static pack beside the hero (`aria-hidden`, §3.7 item 1.8); the button and `Pack odds` say it aloud. */
+  packDrawing: { brand: "Anime TCG", label: "Demo pack", cards: "Five cards" },
   odds: {
     heading: "Pack odds",
     tier: "Tier",
@@ -105,13 +112,15 @@ export function landingText(facts: DemoResponse | undefined): LandingText {
         term: terms.collection,
         text: pool === null ? landingCopy.collectionRow : landingCopy.collectionRowWithFacts(pool.characters),
       },
+      { term: terms.karma, text: landingCopy.karmaRow },
     ],
   };
 }
 
-/** The demo pack on the landing page (§3.7 items 1.3 to 1.7, §8). */
+/** The demo pack on `/` and `/demo` (§3.7 items 1.3 to 1.7, §3.14, §8). */
 export const demoCopy = {
   open: "Open a demo pack",
+  back: "Back to the landing page",
   opening: "Opening…",
   waitButton: common.tryAgainIn,
   disclosure:
