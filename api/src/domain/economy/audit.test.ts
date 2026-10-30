@@ -1,7 +1,13 @@
 import { describe, expect, it } from "vitest";
 import { RECYCLE_VALUE, THEMED_PACK_PRICE } from "@anime-tcg/shared/economy";
 import { describeAudit, describeNotes } from "../../cli/audit-ledger.js";
-import { type AccountFacts, type AuditEntry, auditAccount, valueChanges } from "./audit.js";
+import {
+  type AccountFacts,
+  type AuditEntry,
+  type AuditPurchase,
+  auditAccount,
+  valueChanges,
+} from "./audit.js";
 
 const ID = "00000000-0000-4000-8000-000000000001";
 /** When the fixture's rows were written; a reset is placed before or after it. */
@@ -59,6 +65,13 @@ function facts(overrides: Partial<AccountFacts> = {}): AccountFacts {
     unexplainedRemovals: 0,
     cardsBeforeReset: [],
     escrowedCards: 0,
+    purchases: [],
+    unclaimedMarketDebits: 0,
+    unclaimedSales: [],
+    unclaimedFees: [],
+    buyerlessSales: [],
+    unsellableListings: [],
+    listingFees: [],
     ...overrides,
   };
 }
@@ -99,7 +112,7 @@ describe("audit-ledger's checks (economy.md §7, §13.1)", () => {
     ).toContain("entry 3: balance_after 9 after 2350 and 4");
   });
 
-  it("finds an entry of the wrong sign, an owner reset that left Karma, and a market row before the market", () => {
+  it("finds an entry of the wrong sign, an owner reset that left Karma, and a market sale without its purchase", () => {
     expect(
       auditAccount(
         facts({ entries: chain(["shop_purchase", 5]), balance: 5, shopOpenings: [], recycles: [] }),
@@ -117,9 +130,15 @@ describe("audit-ledger's checks (economy.md §7, §13.1)", () => {
     ).toEqual(["entry 2: an owner reset left 750"]);
     expect(
       auditAccount(
-        facts({ entries: chain(["market_sale", 10]), balance: 10, shopOpenings: [], recycles: [] }),
+        facts({
+          entries: chain(["market_sale", 10]),
+          balance: 10,
+          shopOpenings: [],
+          recycles: [],
+          unclaimedSales: [10],
+        }),
       ),
-    ).toEqual(["entry 1: market_sale before the market exists"]);
+    ).toEqual(["1 market sales and 0 fees without a purchase, for 0 listings sold to deleted accounts"]);
   });
 
   it("finds a shop opening without its debit, of another account, kind or amount", () => {
@@ -284,13 +303,178 @@ describe("audit-ledger's checks (economy.md §7, §13.1)", () => {
   });
 });
 
+describe("audit-ledger's market checks (economy.md §7, §13.1, PR 3)", () => {
+  const SELLER = "00000000-0000-4000-8000-000000000002";
+
+  /** A Mythic bought at the cap: the buyer's debit, the seller's sale and fee, a sold listing, one card each way. */
+  function purchase(overrides: Partial<AuditPurchase> = {}): AuditPurchase {
+    return {
+      purchaseId: "p1",
+      price: 27_500,
+      fee: 1_375,
+      createdAt: WRITTEN,
+      sellerId: SELLER,
+      sellerLastResetAt: null,
+      buyerEntryAccountId: ID,
+      buyerEntryKind: "market_purchase",
+      buyerEntryAmount: -27_500,
+      saleEntryAccountId: SELLER,
+      saleEntryKind: "market_sale",
+      saleEntryAmount: 27_500,
+      feeEntryAccountId: SELLER,
+      feeEntryKind: "market_fee",
+      feeEntryAmount: -1_375,
+      listingSellerId: SELLER,
+      listingStatus: "sold",
+      listingPrice: 27_500,
+      listingFee: 1_375,
+      deliveredCards: 1,
+      foreignDeliveredCards: 0,
+      removedCards: 1,
+      foreignRemovedCards: 0,
+      ...overrides,
+    };
+  }
+
+  /** The buyer's side: 27 500 Karma earned by recycling, then spent on the purchase. */
+  const buyer = (overrides: Partial<AccountFacts> = {}) =>
+    facts({
+      entries: chain(["recycle_credit", 27_500], ["market_purchase", -27_500]),
+      balance: 0,
+      shopOpenings: [],
+      recycles: [],
+      purchases: [purchase()],
+      ...overrides,
+    });
+
+  it("passes a purchase with its three rows, its sold listing and one card each way", () => {
+    expect(auditAccount(buyer())).toEqual([]);
+  });
+
+  it("finds a purchase whose debit, sale or fee is missing, of another account, kind or amount", () => {
+    expect(auditAccount(buyer({ purchases: [purchase({ buyerEntryAmount: -27_499 })] }))).toEqual([
+      "purchase p1 without its debit of 27500",
+    ]);
+    expect(auditAccount(buyer({ purchases: [purchase({ buyerEntryAccountId: SELLER })] }))).toEqual([
+      "purchase p1 without its debit of 27500",
+    ]);
+    expect(
+      auditAccount(buyer({ purchases: [purchase({ saleEntryAccountId: null, saleEntryAmount: null })] })),
+    ).toEqual(["purchase p1 without the seller's sale of 27500"]);
+    expect(auditAccount(buyer({ purchases: [purchase({ feeEntryKind: "market_sale" })] }))).toEqual([
+      "purchase p1 without the seller's fee of 1375",
+    ]);
+  });
+
+  it("finds a purchase that does not match its listing's state, seller, price or fee", () => {
+    for (const change of [
+      { listingStatus: "active" },
+      { listingStatus: null },
+      { listingSellerId: ID },
+      { listingPrice: 27_499 },
+      { listingFee: 1 },
+    ]) {
+      expect(auditAccount(buyer({ purchases: [purchase(change)] })), JSON.stringify(change)).toEqual([
+        "purchase p1 does not match its listing",
+      ]);
+    }
+  });
+
+  it("accepts a seller whose account went: no sale, no fee, no listing and no removed card are left", () => {
+    const gone = purchase({
+      sellerId: null,
+      saleEntryAccountId: null,
+      saleEntryKind: null,
+      saleEntryAmount: null,
+      feeEntryAccountId: null,
+      feeEntryKind: null,
+      feeEntryAmount: null,
+      listingSellerId: null,
+      listingStatus: null,
+      listingPrice: null,
+      listingFee: null,
+      removedCards: 0,
+    });
+    expect(auditAccount(buyer({ purchases: [gone] }))).toEqual([]);
+  });
+
+  it("finds a missing or extra card each way, unless a reset after the purchase took it", () => {
+    expect(auditAccount(buyer({ purchases: [purchase({ deliveredCards: 0 })] }))).toEqual([
+      "purchase p1 delivered 0 cards, not 1",
+    ]);
+    expect(auditAccount(buyer({ purchases: [purchase({ deliveredCards: 0 })], lastResetAt: AFTER }))).toEqual(
+      [],
+    );
+    expect(
+      auditAccount(buyer({ purchases: [purchase({ deliveredCards: 0 })], lastResetAt: BEFORE })),
+    ).toEqual(["purchase p1 delivered 0 cards, not 1"]);
+    expect(auditAccount(buyer({ purchases: [purchase({ deliveredCards: 2 })] }))).toEqual([
+      "purchase p1 delivered 2 cards, not 1",
+    ]);
+    expect(auditAccount(buyer({ purchases: [purchase({ removedCards: 0 })] }))).toEqual([
+      "purchase p1 removed 0 of the seller's cards, not 1",
+    ]);
+    expect(
+      auditAccount(buyer({ purchases: [purchase({ removedCards: 0, sellerLastResetAt: AFTER })] })),
+    ).toEqual([]);
+    expect(
+      auditAccount(buyer({ purchases: [purchase({ removedCards: 0, sellerLastResetAt: BEFORE })] })),
+    ).toEqual(["purchase p1 removed 0 of the seller's cards, not 1"]);
+  });
+
+  it("finds a purchase that delivered or removed a card of another entry or account", () => {
+    expect(auditAccount(buyer({ purchases: [purchase({ foreignDeliveredCards: 1 })] }))).toEqual([
+      "purchase p1 delivered a card of another entry",
+    ]);
+    expect(auditAccount(buyer({ purchases: [purchase({ foreignRemovedCards: 1 })] }))).toEqual([
+      "purchase p1 removed a card that was not the one it sold",
+    ]);
+  });
+
+  it("finds market debits without a purchase", () => {
+    expect(auditAccount(buyer({ purchases: [], unclaimedMarketDebits: 1 }))).toEqual([
+      "1 market purchase debits without a purchase",
+    ]);
+  });
+
+  it("accepts a sale and fee without a purchase only as a listing sold to an account since deleted, amount for amount", () => {
+    const seller = (overrides: Partial<AccountFacts>) =>
+      facts({
+        entries: chain(["market_sale", 25], ["market_fee", -2]),
+        balance: 23,
+        shopOpenings: [],
+        recycles: [],
+        unclaimedSales: [25],
+        unclaimedFees: [2],
+        ...overrides,
+      });
+    const buyerless = { listingId: "l1", price: 25, fee: 2, cardHeld: false };
+    expect(auditAccount(seller({ buyerlessSales: [buyerless] }))).toEqual([]);
+    expect(auditAccount(seller({ buyerlessSales: [] }))).toEqual([
+      "1 market sales and 1 fees without a purchase, for 0 listings sold to deleted accounts",
+    ]);
+    expect(auditAccount(seller({ buyerlessSales: [{ ...buyerless, price: 24 }] }))).toEqual([
+      "1 market sales and 1 fees without a purchase, for 1 listings sold to deleted accounts",
+    ]);
+    expect(auditAccount(seller({ buyerlessSales: [{ ...buyerless, cardHeld: true }] }))).toEqual([
+      "listing l1 sold, but its card is still held",
+    ]);
+  });
+
+  it("finds a live listing whose card is not the seller's to sell", () => {
+    expect(auditAccount(facts({ unsellableListings: ["l9"] }))).toEqual([
+      "listing l9 is live, but its card is not the seller's to sell",
+    ]);
+  });
+});
+
 describe("values other than today's (economy.md §13.1)", () => {
   it("notes nothing when every row was recorded at today's values", () => {
     expect(valueChanges(facts())).toEqual([]);
     expect(valueChanges(facts({ shopOpenings: [], recycles: [] }))).toEqual([]);
   });
 
-  it("notes each shop opening and recycle recorded at another value, as information", () => {
+  it("notes each shop opening, recycle and listing fee recorded at another value, as information", () => {
     const base = facts();
     const [opening] = base.shopOpenings;
     const [mythic, common] = base.recycles;
@@ -299,10 +483,15 @@ describe("values other than today's (economy.md §13.1)", () => {
       valueChanges({
         shopOpenings: [{ ...opening, price: 450 }],
         recycles: [mythic, { ...common, unitValue: 1 }],
+        listingFees: [
+          { listingId: "l1", price: 27_500, fee: 1_375 },
+          { listingId: "l2", price: 100, fee: 4 },
+        ],
       }),
     ).toEqual([
       `shop opening o1 sold at 450, today ${THEMED_PACK_PRICE}`,
       `recycle r2 at 1 a card, today ${RECYCLE_VALUE.common}`,
+      "listing l2 at a fee of 4, today 5",
     ]);
   });
 });

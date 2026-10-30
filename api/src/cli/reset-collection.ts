@@ -16,7 +16,9 @@ import { escapeUnprintable, quote } from "./quote.js";
  *   node api/dist/cli/reset-collection.js <login> --confirm                reset it, Karma to 0
  *   node api/dist/cli/reset-collection.js <login> --keep-karma --confirm   reset it, Karma kept
  *
- * Removes the account's openings and cards, recycled ones included, fills
+ * Cancels the account's market listings, removes its openings and cards
+ * (recycled, sold and bought ones included), fills
+
  * its pack allowance, sets its pity and Enchanted counters to zero and
  * records the reset's time; the Karma balance goes to 0 with one ledger row
  * unless `--keep-karma` (economy.md §8.10, §13.4); the login, password and
@@ -33,14 +35,17 @@ export function describeReset(result: CollectionResetResult): string {
   const login = quote(result.login);
   // The cards the player holds, and apart the recycled ones the reset deletes with them (economy.md §13.4).
   const recycled = result.recycledCards > 0 ? `, ${result.recycledCards} recycled cards` : "";
+  // The market listings it cancels (economy.md §8.10, §13.4), named only when there are some, as the recycled cards are.
   if (result.applied) {
+    const listings = result.listings > 0 ? ` ${result.listings} listings cancelled;` : "";
     const karma = result.keepKarma ? `balance ${result.balance} kept` : `balance ${result.balance} set to 0`;
-    return `Collection reset for ${login}: ${result.cards} cards${recycled} and ${result.openings} openings removed; packs full; counters reset; ${karma}.`;
+    return `Collection reset for ${login}: ${result.cards} cards${recycled} and ${result.openings} openings removed;${listings} packs full; counters reset; ${karma}.`;
   }
+  const listings = result.listings > 0 ? `, ${result.listings} listings` : "";
   const karma = result.keepKarma
     ? `balance ${result.balance} kept (--keep-karma)`
     : `balance ${result.balance} to 0`;
-  return `Would reset ${login}: ${result.cards} cards${recycled}, ${result.openings} openings; pity and Enchanted counters to zero; ${karma}.`;
+  return `Would reset ${login}: ${result.cards} cards${recycled}, ${result.openings} openings${listings}; pity and Enchanted counters to zero; ${karma}.`;
 }
 
 export interface ResetIo {
@@ -81,6 +86,7 @@ export async function main(
           cards: result.cards,
           recycledCards: result.recycledCards,
           openings: result.openings,
+          listings: result.listings,
           balance: result.balance,
           keepKarma: result.keepKarma,
         },

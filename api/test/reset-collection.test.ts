@@ -81,6 +81,7 @@ describe("reset-collection", () => {
       cards: 2 * PACK_SIZE,
       recycledCards: 0,
       openings: 2,
+      listings: 0,
       balance: 0,
       keepKarma: false,
       applied: false,
@@ -177,6 +178,7 @@ describe("reset-collection", () => {
         cards: 1,
         recycledCards: 0,
         openings: 1,
+        listings: 0,
         balance: 0,
         keepKarma: false,
       };
@@ -187,7 +189,15 @@ describe("reset-collection", () => {
     });
 
     it("counts the recycled cards apart from the held ones, and only when there are some (economy.md §13.4)", () => {
-      const counts = { accountId: "id", login: "p", cards: 8, openings: 2, balance: 5, keepKarma: false };
+      const counts = {
+        accountId: "id",
+        login: "p",
+        cards: 8,
+        openings: 2,
+        listings: 0,
+        balance: 5,
+        keepKarma: false,
+      };
       expect(describeReset({ ...counts, recycledCards: 2, applied: false })).toBe(
         'Would reset "p": 8 cards, 2 recycled cards, 2 openings; pity and Enchanted counters to zero; balance 5 to 0.',
       );
@@ -196,6 +206,25 @@ describe("reset-collection", () => {
       );
       expect(describeReset({ ...counts, recycledCards: 0, applied: false })).toBe(
         'Would reset "p": 8 cards, 2 openings; pity and Enchanted counters to zero; balance 5 to 0.',
+      );
+    });
+
+    it("names the market listings it cancels, and only when there are some (economy.md §8.10, §13.4)", () => {
+      const counts = {
+        accountId: "id",
+        login: "p",
+        cards: 8,
+        recycledCards: 0,
+        openings: 2,
+        listings: 3,
+        balance: 5,
+        keepKarma: false,
+      };
+      expect(describeReset({ ...counts, applied: false })).toBe(
+        'Would reset "p": 8 cards, 2 openings, 3 listings; pity and Enchanted counters to zero; balance 5 to 0.',
+      );
+      expect(describeReset({ ...counts, applied: true })).toBe(
+        'Collection reset for "p": 8 cards and 2 openings removed; 3 listings cancelled; packs full; counters reset; balance 5 set to 0.',
       );
     });
 

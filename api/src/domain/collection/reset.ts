@@ -1,8 +1,9 @@
-import { and, count, eq, isNotNull, isNull } from "drizzle-orm";
+import { and, count, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import type { Db, Queryable } from "../../db/client.js";
-import { accounts, cards, packOpenings } from "../../db/schema.js";
+import { accounts, cards, marketListings, packOpenings } from "../../db/schema.js";
 import { normalizeLogin } from "../accounts/logins.js";
 import { postEntry } from "../economy/ledger.js";
+import { liveListingCount } from "../market/listings.js";
 
 /** A reason the owner can act on; its message is the one line the command prints before exiting 1. */
 export class ResetCollectionError extends Error {
@@ -21,6 +22,8 @@ export interface CollectionResetResult {
   /** Cards already recycled: removed, but still rows, so the reset deletes them too. */
   recycledCards: number;
   openings: number;
+  /** Live market listings: a confirmed reset cancels them (economy.md §8.10). */
+  listings: number;
   /** The Karma balance before the reset. */
   balance: number;
   /** True with `--keep-karma`: the balance stays and no ledger row is written. */
@@ -60,7 +63,12 @@ async function holdings(
  * either wholly removed or wholly kept. The Karma rule is the owner's per
  * reset (economy.md §8.10): by default the balance goes to 0 with one
  * `owner_reset` row of minus the balance (none at 0), with `keepKarma` it
- * stays and nothing is written. Every confirmed reset, whichever the Karma
+ * stays and nothing is written. The account's live listings are cancelled
+ * first (a lapsed one is closed as expired, as everywhere), so nobody can
+ * buy one, and every card goes whatever its origin: an opening's with the
+ * opening, a bought one through 0006's `delete_bought_cards`, the listings keeping their history with
+ * no card. The lock order is the account, its listings, its cards. Every
+ * confirmed reset, whichever the Karma
  * rule, sets `last_reset_at` to its time (taken from `clock` once the lock
  * is held), which is how `audit-ledger` tells the recycles and shop debits
  * it emptied from forged ones (§13.1). The account's ledger, recycles and
@@ -83,9 +91,19 @@ export async function resetCollection(
     if (account === undefined)
       throw new ResetCollectionError(`No account has the login ${JSON.stringify(login)}`);
     const held = await holdings(tx, account.id);
+    const resetAt = options.clock?.() ?? new Date();
+    const listings = await liveListingCount(tx, account.id, resetAt);
     if (options.confirm) {
-      const resetAt = options.clock?.() ?? new Date();
+      await tx
+        .update(marketListings)
+        .set({
+          status: sql`case when ${marketListings.expiresAt} <= ${resetAt} then 'expired'::listing_status else 'cancelled'::listing_status end`,
+          closedAt: sql`least(${marketListings.expiresAt}, ${resetAt})`,
+        })
+        .where(and(eq(marketListings.sellerId, account.id), eq(marketListings.status, "active")));
       await tx.delete(packOpenings).where(eq(packOpenings.accountId, account.id));
+      // A bought card has no opening to go with (economy.md §7); the app role may delete no card itself (0006).
+      await tx.execute(sql`select delete_bought_cards(${account.id})`);
       await tx
         .update(accounts)
         .set({ packsAnchorAt: null, packsSinceMythic: 0, freePacksOpened: 0, lastResetAt: resetAt })
@@ -98,7 +116,9 @@ export async function resetCollection(
       accountId: account.id,
       login: account.login,
       ...held,
+      listings,
       balance: account.balance,
+
       keepKarma,
       applied: options.confirm,
     };
