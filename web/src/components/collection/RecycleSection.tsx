@@ -14,7 +14,7 @@ import {
   PANEL_HEADING,
   STATUS_BANNER,
 } from "../account/styles";
-import { activateOnce, ignoreRepeat } from "../packs/activation";
+import { openOnce, ignoreRepeat } from "../packs/activation";
 import { ERROR_LINE, SECONDARY_LINE } from "../packs/styles";
 
 interface SectionProps {
@@ -240,7 +240,7 @@ export function RecycleConfirmation({ entry, recycle, onBack, headingId, heading
         <button
           type="button"
           aria-disabled={blocked ? "true" : undefined}
-          onClick={blocked ? undefined : (event) => activateOnce(event, () => void recycle.confirm())}
+          onClick={blocked ? undefined : (event) => openOnce(event, () => void recycle.confirm())}
           onKeyDown={ignoreRepeat}
           className={`${BUTTON.primary} tabular-nums`}
         >

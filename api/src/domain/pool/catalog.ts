@@ -24,6 +24,8 @@ export interface CurrentSnapshot {
   id: number;
   info: SnapshotInfo;
   tierSizes: PerRarity;
+  /** Its anime entries: the `<entries>` of the landing page's lede. */
+  entries: number;
 }
 
 export async function currentSnapshot(db: Queryable): Promise<CurrentSnapshot | null> {
@@ -32,6 +34,7 @@ export async function currentSnapshot(db: Queryable): Promise<CurrentSnapshot | 
       id: poolSnapshots.id,
       takenAt: poolSnapshots.takenAt,
       characterCount: poolSnapshots.characterCount,
+      seriesCount: poolSnapshots.seriesCount,
       tierCounts: poolSnapshots.tierCounts,
     })
     .from(poolSnapshots)
@@ -43,6 +46,7 @@ export async function currentSnapshot(db: Queryable): Promise<CurrentSnapshot | 
     id: row.id,
     info: { version: row.id, takenAt: row.takenAt.toISOString(), characterCount: row.characterCount },
     tierSizes: perRarity((tier) => sizes.get(tier) ?? 0),
+    entries: row.seriesCount,
   };
 }
 
@@ -56,6 +60,22 @@ export async function tierPool(db: Queryable, snapshotId: number): Promise<TierP
   const byTier = new Map<Rarity, number[]>(RARITIES.map((tier) => [tier, []]));
   for (const row of rows) byTier.get(row.tier)?.push(row.id);
   return perRarity((tier) => byTier.get(tier) ?? []);
+}
+
+/**
+ * The last snapshot's tier lists, read once per snapshot: its rows never
+ * change once written, so a pool read for an id is good for as long as the
+ * process runs. One cache serves the packs and the demo.
+ */
+export class TierPoolCache {
+  private cached: { snapshotId: number; tiers: TierPool } | null = null;
+
+  async get(db: Queryable, snapshotId: number): Promise<TierPool> {
+    if (this.cached?.snapshotId !== snapshotId) {
+      this.cached = { snapshotId, tiers: await tierPool(db, snapshotId) };
+    }
+    return this.cached.tiers;
+  }
 }
 
 export interface DescribedCharacters {

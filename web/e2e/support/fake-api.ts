@@ -13,6 +13,9 @@ import {
   makeAllowance,
   makeCharacter,
   makeCollection,
+  makeDemo,
+  makeDemoCard,
+  makeDemoOpened,
   makeEntry,
   makePackOpened,
   makePacks,
@@ -30,7 +33,8 @@ import {
  * sends a request to `graphql.anilist.co` (collection-packs.md §8). A request the test did
  * not script is answered with a 500 envelope and fails the test in the fixture teardown,
  * so the UI cannot call something unexpected without the test noticing; the packs, collection,
- * wallet, shop and recycle routes have a stateful default (`FakeGame`) that a test can override.
+ * wallet, shop and recycle routes have a stateful default (`FakeGame`) that a test can override,
+ * and the landing page's demo answers the fixture facts and a fresh pack per opening.
  */
 
 // 1x1 transparent PNG so card images resolve without hitting AniList's CDN.
@@ -135,6 +139,8 @@ export class FakeGame {
   readonly purchases = new Map<string, ShopReceipt>();
   readonly recycles = new Map<string, RecycleReceipt>();
   private readonly rules = makeRules();
+  /** Demo packs dealt; each one's characters are new, so two reveals can be told apart. */
+  demos = 0;
 
   private allowance() {
     return makeAllowance({
@@ -179,6 +185,18 @@ export class FakeGame {
         this.pity -= 1;
         if (typeof requestId === "string") this.openings.set(requestId, this.opened);
         return { status: 201, json: this.pack(this.opened) };
+      }
+      case "GET /api/demo":
+        return { status: 200, json: makeDemo() };
+      case "POST /api/demo/open": {
+        this.demos += 1;
+        const cards = makeDemoOpened().cards.map((card) =>
+          makeDemoCard(card.slot, {
+            rarity: card.rarity,
+            character: makeCharacter(5_000 + this.demos * 10 + card.slot, { tier: card.rarity }),
+          }),
+        );
+        return { status: 200, json: makeDemoOpened(cards) };
       }
       case "GET /api/collection": {
         const entries = Array.from({ length: this.opened }, (_, i) => this.cards(i + 1))

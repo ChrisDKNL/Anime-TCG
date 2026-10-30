@@ -17,8 +17,15 @@ export interface RevealCard {
 export interface RevealPack {
   /** Changes with every opening, so a new pack's slots enter afresh. */
   id: string;
-  /** Plain copy, or markup with an AniList title in a `<bdi>` (a shop pack's `<title> pack`). */
+  /**
+   * The section's `h2`, which also names the list; null for the demo, which has none (navigation-and-landing.md
+   * §3.7). Plain copy, or markup with a title in a `<bdi>` (a shop pack's `<title> pack`).
+   */
   heading: ReactNode;
+  /** The list's name without a heading. */
+  label: string;
+  /** Words before the summary: the demo's `Demo pack: `. */
+  summaryLead: string;
   cards: readonly RevealCard[];
   franchises: readonly FranchiseRef[];
   /** The special-pack lines under the summary, in order (card-and-rarity.md §7.1). */
@@ -35,10 +42,10 @@ interface Props {
   showNew: boolean;
   /** An opening is in flight: the previous pack stays, marked busy, until the answer replaces it. */
   busy: boolean;
+  /** The section's margin: the packs page's `mt-10`, the landing page's `mt-6`, the Shop page's `mb-8`. */
+  spacing?: string;
   /** The heading as a focus target: the Shop page moves focus to it after a purchase (market-and-shop.md §3.3). */
   headingRef?: Ref<HTMLHeadingElement>;
-  /** The section's spacing on its page: below the pack control on `/packs`, above the themes on `/shop`. */
-  className?: string;
 }
 
 /** The empty slots before the first pack: a pack's five cards, so the first reveal moves nothing. */
@@ -58,13 +65,13 @@ export function Reveal({
   effects,
   showNew,
   busy,
+  spacing = "mt-10",
   headingRef,
-  className = "mt-10",
 }: Props) {
   const headingId = useId();
   if (pack === null) {
     return (
-      <section className={className}>
+      <section className={spacing}>
         <div aria-hidden="true" className={`mt-4 ${REVEAL_GRID}`}>
           {EMPTY_SLOTS.map((slot) => (
             <div key={slot}>
@@ -80,16 +87,18 @@ export function Reveal({
   const cards = [...pack.cards].sort((a, b) => a.slot - b.slot);
   const newCount = showNew ? cards.filter((card) => card.isNew === true).length : 0;
   return (
-    <section aria-labelledby={headingId} className={className}>
-      <h2
-        id={headingId}
-        ref={headingRef}
-        tabIndex={headingRef === undefined ? undefined : -1}
-        className="text-lg font-bold break-words text-zinc-100 focus:outline-none"
-      >
-        {pack.heading}
-      </h2>
-      <Summary rarities={cards.map((card) => card.rarity)} newCount={newCount} />
+    <section aria-labelledby={pack.heading === null ? undefined : headingId} className={spacing}>
+      {pack.heading !== null && (
+        <h2
+          id={headingId}
+          ref={headingRef}
+          tabIndex={headingRef === undefined ? undefined : -1}
+          className="text-lg font-bold break-words text-zinc-100 focus:outline-none"
+        >
+          {pack.heading}
+        </h2>
+      )}
+      <Summary lead={pack.summaryLead} rarities={cards.map((card) => card.rarity)} newCount={newCount} />
       {pack.lines.length > 0 && (
         <div className="mt-1 flex max-w-prose flex-col gap-1">
           {pack.lines.map((line) => (
@@ -99,7 +108,12 @@ export function Reveal({
           ))}
         </div>
       )}
-      <ul aria-labelledby={headingId} aria-busy={busy || undefined} className={`mt-4 ${REVEAL_GRID}`}>
+      <ul
+        aria-labelledby={pack.heading === null ? undefined : headingId}
+        aria-label={pack.heading === null ? pack.label : undefined}
+        aria-busy={busy || undefined}
+        className={`mt-4 ${REVEAL_GRID}`}
+      >
         {cards.map((card) => {
           const series = pack.franchises.find((f) => f.id === card.character.franchiseIds[0])?.title ?? null;
           return (
@@ -131,11 +145,20 @@ export function Reveal({
   );
 }
 
-/** `1 Epic, 1 Rare and 3 Common · 2 new`, each tier word in its tier's text colour (§6.2). */
-function Summary({ rarities, newCount }: { rarities: readonly Rarity[]; newCount: number }) {
+/** `1 Epic, 1 Rare and 3 Common · 2 new`, each tier word in its tier's text colour (§6.2), after the lead if any. */
+function Summary({
+  lead,
+  rarities,
+  newCount,
+}: {
+  lead: string;
+  rarities: readonly Rarity[];
+  newCount: number;
+}) {
   const parts = summaryParts(rarities);
   return (
     <p className="mt-1 text-sm text-zinc-300">
+      {lead}
       {parts.map(({ rarity, count }, i) => (
         <span key={rarity}>
           {listSeparator(i, parts.length)}

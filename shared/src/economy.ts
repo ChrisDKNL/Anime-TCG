@@ -13,6 +13,13 @@ export const PACK_SIZE = 5;
 export const PACK_INTERVAL_MINUTES = 10;
 /** Packs stored at most; a new account starts with this many. */
 export const PACK_CAP = 3;
+/**
+ * Demo packs one load of the landing page may open (navigation-and-landing.md
+ * §3.7 item 1.7, owner decision 3). The browser counts them, and a reload starts
+ * over, so this paces a visit; the demo route's per-address rate limit is the
+ * real bound.
+ */
+export const DEMO_PACKS_PER_VISIT = 10;
 
 /**
  * Karma, the one in-game currency (docs/design/economy.md §5). Integers

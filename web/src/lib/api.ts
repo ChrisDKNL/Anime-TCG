@@ -3,6 +3,8 @@ import type {
   ChangePasswordBody,
   CollectionResponse,
   DeleteBody,
+  DemoOpened,
+  DemoResponse,
   InviteBody,
   LoginBody,
   OpenPackBody,
@@ -207,4 +209,14 @@ export function buyShopPack(body: ShopBuyBody): Promise<ShopReceipt> {
 /** 201 for a recycle and 200 for a replay of `requestId` carry the same receipt. */
 export function recycleDuplicates(body: RecycleBody): Promise<RecycleReceipt> {
   return expectJson<RecycleReceipt>("POST", "/api/collection/recycle", body);
+}
+
+/** The landing page's facts: public, no session. */
+export function getDemo(): Promise<DemoResponse> {
+  return expectJson<DemoResponse>("GET", "/api/demo");
+}
+
+/** A demo pack, rolled and forgotten by the server; no body, so nothing in it can steer the roll. */
+export function openDemoPack(): Promise<DemoOpened> {
+  return expectJson<DemoOpened>("POST", "/api/demo/open");
 }

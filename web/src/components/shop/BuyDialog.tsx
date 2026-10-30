@@ -8,7 +8,7 @@ import { actionCopy, shopCopy } from "../../lib/economyCopy";
 import type { Outcome } from "../../lib/keyedAction";
 import { LoginText } from "../account/LoginText";
 import { ALERT_BANNER, BODY_TEXT, BUTTON, DIALOG, PANEL_HEADING } from "../account/styles";
-import { activateOnce, ignoreRepeat } from "../packs/activation";
+import { openOnce, ignoreRepeat } from "../packs/activation";
 import { ERROR_LINE, SECONDARY_LINE } from "../packs/styles";
 
 /** The line under the confirmation's buttons (market-and-shop.md §3.3 step 6); at most one shows. */
@@ -178,7 +178,7 @@ export function BuyDialog({ theme, balance, onBought, onGone, onClose }: Props) 
           <button
             type="button"
             aria-disabled={blocked ? "true" : undefined}
-            onClick={blocked ? undefined : (event) => activateOnce(event, () => void confirm())}
+            onClick={blocked ? undefined : (event) => openOnce(event, () => void confirm())}
             onKeyDown={ignoreRepeat}
             className={`${BUTTON.primary} tabular-nums`}
           >

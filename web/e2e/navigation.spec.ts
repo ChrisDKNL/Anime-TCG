@@ -234,13 +234,14 @@ test("the landing page: heading, How it plays and Join, with Register one step a
   await page.goto("/");
   await expect(h1(page, "Anime TCG")).toBeVisible();
   await expect(
-    page.getByText("Characters from the most popular anime on AniList, five to a pack."),
+    page.getByText("2,983 characters from the 100 most popular anime on AniList, five to a pack."),
   ).toBeVisible();
   await expect(page.getByRole("heading", { level: 2 })).toHaveText(["How it plays", "Join"]);
   await expect(page.getByRole("term")).toHaveText(["Packs", "Rarity", "Collection"]);
-  // No demo block before 1c's server pool (§9 decision 1): no button, no odds table, nothing called.
-  await expect(page.getByRole("button")).toHaveCount(0);
-  await expect(page.getByRole("table")).toHaveCount(0);
+  // The demo PR (§3.7): one button, the demo, and the odds table from the server; no pack opened unasked.
+  await expect(page.getByRole("main").getByRole("button")).toHaveText(["Open a demo pack"]);
+  await expect(page.getByRole("table", { name: "Pack odds" })).toBeVisible();
+  expect(api.count("POST /api/demo/open")).toBe(0);
   await page.getByRole("main").getByRole("link", { name: "Register" }).click();
   await expect(page).toHaveURL(/\/register$/);
   await expect(h1(page, "Register")).toBeFocused();

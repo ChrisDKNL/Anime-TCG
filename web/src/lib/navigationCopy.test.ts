@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { makeDemo, makeUnavailableDemo } from "../test/fixtures";
 import * as navigation from "./navigationCopy";
 import * as routes from "./routes";
 
@@ -57,8 +58,29 @@ function strings(value: unknown, path: string, out: Array<[string, string]>): Ar
 
 const pagePaths = [...Object.keys(routes.PUBLIC_PAGES), ...Object.keys(routes.ACCOUNT_PAGES)];
 
+const { landingCopy, demoCopy, landingText } = navigation;
+
+/** Every function of the landing copy, called with the server's figures, so its output is scanned too. */
+const landingFunctions: Array<[string, string]> = [
+  ["ledeWithFacts", landingCopy.ledeWithFacts(2_983, 100)],
+  ["packsRowWithFacts", landingCopy.packsRowWithFacts(600, 3)],
+  ["collectionRowWithFacts", landingCopy.collectionRowWithFacts(2_983)],
+  ["odds.figure", landingCopy.odds.figure(999_704, 1_000_000)],
+  ["odds.source", landingCopy.odds.source(2_983, "2026-10-29T08:00:00.000Z")],
+  ["demo.waitButton", demoCopy.waitButton(12)],
+  ["demo.announce", demoCopy.announce(["common", "common", "common", "uncommon", "mythic"])],
+  ...[makeDemo(), makeUnavailableDemo(), undefined].flatMap((facts, i) => {
+    const text = landingText(facts);
+    return [
+      [`landingText[${i}].lede`, text.lede] as [string, string],
+      ...text.rows.map((row): [string, string] => [`landingText[${i}].${row.term}`, row.text]),
+    ];
+  }),
+];
+
 const rendered: Array<[string, string]> = [
   ...strings(navigation, "navigation", []),
+  ...landingFunctions,
   ...strings(routes, "routes", []).filter(([path]) => /heading|guardLine|title|BOOT_TITLE/.test(path)),
   ...pagePaths.map((path): [string, string] => [`title ${path}`, routes.pageTitle(path)]),
 ];
@@ -89,9 +111,71 @@ describe("navigation copy (§8)", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("the landing page holds no number of its own: the facts come from the server in the demo PR", () => {
-    const landing = strings(navigation.landingCopy, "landing", []);
+  it("the landing page holds no number of its own: every number comes from the server's facts", () => {
+    const landing = [...strings(landingCopy, "landing", []), ...strings(demoCopy, "demo", [])];
     expect(landing.filter(([, text]) => /\d/.test(text))).toEqual([]);
+    expect(landingText(undefined).lede).not.toMatch(/\d/);
+    expect(landingText(undefined).rows.filter((row) => /\d/.test(row.text))).toEqual([]);
+  });
+
+  it("writes §8's landing strings with the server's figures", () => {
+    const text = landingText(makeDemo());
+    expect(text.lede).toBe("2,983 characters from the 100 most popular anime on AniList, five to a pack.");
+    expect(text.rows).toEqual([
+      { term: "Packs", text: "A new pack every 10 minutes, and up to 3 can pile up. Five cards each." },
+      {
+        term: "Rarity",
+        text: "Every character has one of six tiers, set by how many AniList users favourited them. Every pack uses the odds below.",
+      },
+      {
+        term: "Collection",
+        text: "See how much of each series you have, and how much of all 2,983 characters.",
+      },
+    ]);
+    expect(landingCopy.odds.source(2_983, "2026-10-29T08:00:00.000Z")).toBe(
+      "Drawn from 2,983 characters, as of 29 Oct 2026.",
+    );
+    expect(demoCopy.announce(["common", "common", "common", "uncommon", "rare"])).toBe(
+      "Demo pack: 1 Rare, 1 Uncommon and 3 Common.",
+    );
+    const { before, link, after } = demoCopy.keepCards;
+    expect(`${before}${link}${after}`).toBe("To keep cards, register with an invite code.");
+  });
+
+  it("without a pool keeps the allowance's numbers, which the answer still carries, and drops the rest", () => {
+    const text = landingText(makeUnavailableDemo());
+    expect(text.lede).toBe("Characters from the most popular anime on AniList, five to a pack.");
+    expect(text.rows.map((row) => row.text)).toEqual([
+      "A new pack every 10 minutes, and up to 3 can pile up. Five cards each.",
+      "Every character has one of six tiers, set by how many AniList users favourited them.",
+      "See how much of each series you have, and of the whole pool.",
+    ]);
+    expect(landingText(undefined).rows[0]?.text).toBe(
+      "A new pack on a timer, and a few can pile up. Five cards each.",
+    );
+  });
+
+  it.each([
+    [60, "1 minute"],
+    [600, "10 minutes"],
+    [3_540, "59 minutes"],
+    [3_600, "1 hour"],
+    [5_400, "90 minutes"],
+    [7_200, "2 hours"],
+  ])("writes an interval of %i s as `%s`", (seconds, expected) => {
+    expect(navigation.interval(seconds)).toBe(expected);
+  });
+
+  it("writes the odds as three significant digits, never rounded up", () => {
+    const figure = landingCopy.odds.figure;
+    expect([999_704, 1_000_000, 800_000, 27_500, 2_500, 500].map((part) => figure(part, 1_000_000))).toEqual([
+      "99.9%",
+      "100%",
+      "80%",
+      "2.75%",
+      "0.25%",
+      "0.05%",
+    ]);
   });
 
   it("writes the footer sentence around its AniList link", () => {

@@ -35,6 +35,8 @@ function toReveal({ receipt, theme }: Bought): RevealPack {
   return {
     id: receipt.pack.openingId,
     heading: <LoginText text={{ template: shopCopy.revealHeading, login: theme.title }} />,
+    label: shopCopy.revealHeading(theme.title),
+    summaryLead: "",
     cards: receipt.pack.cards,
     franchises: receipt.pack.franchises,
     // A shop pack is never Enchanted or pity-due; a Radiant one says so (card-and-rarity.md §7.2).
@@ -141,7 +143,7 @@ export function ShopPage() {
             showNew
             busy={false}
             headingRef={revealHeading}
-            className="mb-8"
+            spacing="mb-8"
           />
         )}
         {content}

@@ -8,6 +8,8 @@ import { envelope, makeAccount, mockFetch, urlOf, type MockHandler } from "./api
 import {
   makeAllowance,
   makeCollection,
+  makeDemo,
+  makeDemoOpened,
   makeEntry,
   makePackOpened,
   makePacks,
@@ -24,10 +26,13 @@ export const WALLET = "GET /api/wallet";
 export const SHOP = "GET /api/shop";
 export const BUY = "POST /api/shop/buy";
 export const RECYCLE = "POST /api/collection/recycle";
+export const DEMO = "GET /api/demo";
+export const DEMO_OPEN = "POST /api/demo/open";
 
 /**
  * The api of a signed-in account with a full allowance, an empty collection, a balance of 1,240 and one
- * theme; a purchase and a recycle answer with the fixture receipts.
+ * theme; a purchase and a recycle answer with the fixture receipts; the landing page's demo for a
+ * signed-out visit.
  */
 export function signedInRoutes(account = makeAccount()): Record<string, MockHandler> {
   return {
@@ -39,6 +44,8 @@ export function signedInRoutes(account = makeAccount()): Record<string, MockHand
     [SHOP]: { status: 200, body: makeShop() },
     [BUY]: { status: 201, body: makeShopReceipt() },
     [RECYCLE]: { status: 201, body: makeRecycleReceipt() },
+    [DEMO]: { status: 200, body: makeDemo() },
+    [DEMO_OPEN]: { status: 200, body: makeDemoOpened() },
   };
 }
 

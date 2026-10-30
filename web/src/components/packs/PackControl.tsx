@@ -3,7 +3,7 @@ import { useId, useRef, useState } from "react";
 import type { ControlShown, ControlView, CountdownView } from "../../lib/packControl";
 import { packControlCopy } from "../../lib/packsCopy";
 import { BUTTON } from "../account/styles";
-import { activateOnce, ignoreRepeat } from "./activation";
+import { ignoreRepeat, openOnce } from "./activation";
 import { OddsDialog } from "./OddsDialog";
 import { ERROR_LINE, SECONDARY_LINE, TEXT_BUTTON_SM } from "./styles";
 
@@ -73,7 +73,7 @@ function Control({
         type="button"
         aria-disabled={button.enabled ? undefined : "true"}
         aria-describedby={view.describedByCountdown ? countdownId : undefined}
-        onClick={button.enabled ? (event) => activateOnce(event, onOpen) : undefined}
+        onClick={button.enabled ? (event) => openOnce(event, onOpen) : undefined}
         onKeyDown={ignoreRepeat}
         className={`${BUTTON.primary} w-full tabular-nums sm:w-auto`}
       >

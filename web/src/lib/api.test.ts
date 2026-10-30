@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { envelope, makeAccount, mockFetch, noContent, rateLimited, sentBody } from "../test/api";
 import {
   makeCollection,
+  makeDemo,
+  makeDemoOpened,
   makePackOpened,
   makePacks,
   makeRecycleReceipt,
@@ -16,6 +18,7 @@ import {
   checkInvite,
   deleteAccount,
   getCollection,
+  getDemo,
   getPacks,
   getSession,
   getShop,
@@ -24,6 +27,7 @@ import {
   login,
   logout,
   NetworkError,
+  openDemoPack,
   openPack,
   register,
   readRetryAfter,
@@ -205,6 +209,29 @@ describe("api client", () => {
     const requestId = "0b8f3c1e-6a3d-4c55-9a47-2f0d8a6b1c11";
     await expect(openPack({ requestId })).resolves.toEqual(makePackOpened());
     expect(sentBody(fetchMock)).toEqual({ requestId });
+  });
+
+  it("GET /api/demo returns the facts; POST /api/demo/open sends no body at all and returns the cards", async () => {
+    const fetchMock = mockFetch({
+      "GET /api/demo": { status: 200, body: makeDemo() },
+      "POST /api/demo/open": { status: 200, body: makeDemoOpened() },
+    });
+    await expect(getDemo()).resolves.toEqual(makeDemo());
+    await expect(openDemoPack()).resolves.toEqual(makeDemoOpened());
+    const open = fetchMock.mock.calls[1]?.[1];
+    expect(open?.method).toBe("POST");
+    expect(open?.body).toBeUndefined();
+    expect(new Headers(open?.headers).get("content-type")).toBeNull();
+    expect(open?.credentials).toBe("same-origin");
+  });
+
+  it("a demo opening's 503 and 429 are api answers the landing page maps", async () => {
+    mockFetch({ "POST /api/demo/open": envelope(503, "pool_unavailable") });
+    await expect(openDemoPack()).rejects.toMatchObject({ status: 503, code: "pool_unavailable" });
+    mockFetch({
+      "POST /api/demo/open": { ...envelope(429, "rate_limited"), headers: { "Retry-After": "12" } },
+    });
+    await expect(openDemoPack()).rejects.toMatchObject({ code: "rate_limited", retryAfterSeconds: 12 });
   });
 
   it("no_pack_available carries the seconds to the next pack", async () => {

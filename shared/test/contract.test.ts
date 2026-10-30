@@ -5,6 +5,9 @@ import {
   CardVariant,
   CharacterPublic,
   CollectionEntry,
+  DemoCard,
+  DemoOpened,
+  DemoResponse,
   OpenedCard,
   PackAllowance,
   PackKind,
@@ -16,7 +19,7 @@ import {
   ShopBuyBody,
   SnapshotInfo,
 } from "../src/api.js";
-import { PACK_CAP, PACK_INTERVAL_MINUTES, PACK_SIZE } from "../src/economy.js";
+import { DEMO_PACKS_PER_VISIT, PACK_CAP, PACK_INTERVAL_MINUTES, PACK_SIZE } from "../src/economy.js";
 import { ERROR_CODES, ErrorEnvelope } from "../src/errors.js";
 import {
   ENCHANTED_INTERVAL,
@@ -91,10 +94,11 @@ describe("rarity constants (collection-packs.md §4.2, §5.4)", () => {
   });
 
   it("holds the owner's pack numbers", () => {
-    expect({ PACK_SIZE, PACK_INTERVAL_MINUTES, PACK_CAP }).toEqual({
+    expect({ PACK_SIZE, PACK_INTERVAL_MINUTES, PACK_CAP, DEMO_PACKS_PER_VISIT }).toEqual({
       PACK_SIZE: 5,
       PACK_INTERVAL_MINUTES: 10,
       PACK_CAP: 3,
+      DEMO_PACKS_PER_VISIT: 10,
     });
   });
 });
@@ -168,6 +172,46 @@ describe("1c contract", () => {
     expect(Object.keys(SnapshotInfo.properties)).toEqual(["version", "takenAt", "characterCount"]);
     expect(Value.Check(SnapshotInfo.properties.characterCount, 2_983)).toBe(true);
     expect(Value.Check(SnapshotInfo.properties.characterCount, 0)).toBe(false);
+  });
+});
+
+describe("demo contract (navigation-and-landing.md §3.8)", () => {
+  const character = {
+    id: 1,
+    name: "A",
+    nameNative: null,
+    imageUrl: "https://s4.anilist.co/a.png",
+    franchiseIds: [1],
+    tier: "rare",
+    rank: 7,
+    inCurrentSnapshot: true,
+  };
+  const card = (slot: number) => ({ slot, character, rarity: "rare" });
+
+  it("answers the facts with odds and pool both null without a snapshot, and the rules always", () => {
+    const facts = { odds: null, pool: null, allowance: { intervalSeconds: 600, cap: 3 }, perVisit: 10 };
+    expect(Value.Check(DemoResponse, facts)).toBe(true);
+    expect(Value.Check(DemoResponse, { ...facts, allowance: null })).toBe(false);
+    expect(Value.Check(DemoResponse, { ...facts, perVisit: 0 })).toBe(false);
+    expect(Value.Check(DemoResponse, { ...facts, pool: { characters: 2_983, entries: 100 } })).toBe(true);
+    expect(Value.Check(DemoResponse, { ...facts, pool: { characters: 0, entries: 100 } })).toBe(false);
+    expect(Value.Check(DemoResponse, { ...facts, allowance: { ...facts.allowance, available: 3 } })).toBe(
+      false,
+    );
+  });
+
+  it("deals five cards that carry no isNew, kind, variant or opening", () => {
+    const cards = [0, 1, 2, 3, 4].map(card);
+    expect(Object.keys(DemoCard.properties)).toEqual(["slot", "character", "rarity"]);
+    expect(Object.keys(DemoOpened.properties)).toEqual(["cards", "franchises"]);
+    expect(Value.Check(DemoOpened, { cards, franchises: [] })).toBe(true);
+    expect(Value.Check(DemoOpened, { cards: cards.slice(1), franchises: [] })).toBe(false);
+    expect(Value.Check(DemoOpened, { cards: [...cards, card(4)], franchises: [] })).toBe(false);
+    expect(
+      Value.Check(DemoOpened, { cards: [{ ...card(0), isNew: true }, ...cards.slice(1)], franchises: [] }),
+    ).toBe(false);
+    expect(Value.Check(DemoOpened, { cards, franchises: [], openingId: "x" })).toBe(false);
+    expect(Value.Check(DemoCard, card(PACK_SIZE))).toBe(false);
   });
 });
 
