@@ -17,6 +17,7 @@ import {
   test,
   type Answer,
 } from "./support/fake-api";
+import { RATE_LIMITED } from "./support/copy";
 
 /**
  * Test plan: the accounts UI in a real browser against a scripted api (docs/design/accounts.md).
@@ -80,7 +81,6 @@ const CHRIS = makeAccount();
 const LONG_LOGIN = "W".repeat(24);
 const BREATHER =
   "Five misses in a row. Take ten seconds, check the spelling of your login and whether caps lock is on, then try again.";
-const RATE_LIMITED = "That was a lot of tries in a short time. Give it a moment, then try again.";
 const UNREACHABLE = "Couldn't reach the game server. Check your connection and try again.";
 const UNREACHABLE_FORM = "Couldn't reach the game server. Nothing was changed. Try again.";
 const SESSION_ENDED = "You were logged out. Log in again to continue.";

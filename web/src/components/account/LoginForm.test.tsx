@@ -6,9 +6,9 @@ import { envelope, makeAccount, mockFetch, rateLimited, sentBody } from "../../t
 import { renderWithProviders } from "../../test/render";
 import { LoginForm } from "./LoginForm";
 import { fill } from "../../test/user";
+import { expectRateLimitedWait, RATE_LIMITED } from "../../test/waits";
 
 const account = makeAccount({ login: "Chris" });
-const RATE_LIMITED = "That was a lot of tries in a short time. Give it a moment, then try again.";
 
 function setup(
   routes: Parameters<typeof mockFetch>[0],
@@ -192,12 +192,8 @@ describe("LoginForm", () => {
       const { user, fetchMock } = setup({ "POST /api/session/login": rateLimited("5") });
       await fillAndSubmit(user);
 
-      const button = await screen.findByRole("button", { name: "Try again in 5 s" });
-      expect(button).toHaveAttribute("aria-disabled", "true");
-      expect(button).toHaveClass("tabular-nums");
-      expect(screen.getByText(RATE_LIMITED)).toHaveAttribute("role", "status");
+      expectRateLimitedWait(await screen.findByRole("button", { name: "Try again in 5 s" }));
       expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-      expect(screen.queryByText(/Couldn't reach the game server/)).not.toBeInTheDocument();
       expect(screen.getByLabelText("Login")).toHaveValue("chris");
       expect(screen.getByLabelText("Password")).toHaveValue("pw");
       expect(screen.getByLabelText("Password")).not.toBeDisabled();

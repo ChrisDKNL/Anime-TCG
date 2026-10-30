@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { RATE_LIMITED } from "../test/waits";
 import * as copy from "./copy";
 
 /** The words accounts.md §8 forbids (as stems where a suffix would hide them), matched case-insensitively. "caps lock" in the breather line is the spec's own copy and is not "locked". */
@@ -82,9 +83,7 @@ describe("copy", () => {
   });
 
   it("gives the rate limiter's wait its own status line: no miss count and no fixed length, the countdown says how long", () => {
-    expect(copy.common.rateLimited).toBe(
-      "That was a lot of tries in a short time. Give it a moment, then try again.",
-    );
+    expect(copy.common.rateLimited).toBe(RATE_LIMITED);
     expect(copy.common.rateLimited).not.toMatch(/\d|five|ten|second|miss/i);
   });
 

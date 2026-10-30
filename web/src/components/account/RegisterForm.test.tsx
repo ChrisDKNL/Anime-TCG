@@ -6,6 +6,7 @@ import { envelope, makeAccount, mockFetch, noContent, rateLimited, sentBody } fr
 import { renderWithProviders } from "../../test/render";
 import { RegisterForm } from "./RegisterForm";
 import { fill } from "../../test/user";
+import { expectRateLimitedWait, RATE_LIMITED } from "../../test/waits";
 
 const account = makeAccount({ login: "Chris" });
 
@@ -27,15 +28,6 @@ async function toStep2(user: ReturnType<typeof userEvent.setup>) {
 }
 
 const UNREACHABLE_FORM = "Couldn't reach the game server. Nothing was changed. Try again.";
-const RATE_LIMITED = "That was a lot of tries in a short time. Give it a moment, then try again.";
-
-/** The wait of accounts.md §4.4 on `button`, with the rate limiter's status line and no unreachable banner. */
-function expectRateLimitedWait(button: HTMLElement) {
-  expect(button).toHaveAttribute("aria-disabled", "true");
-  expect(button).toHaveClass("tabular-nums");
-  expect(screen.getByText(RATE_LIMITED)).toHaveAttribute("role", "status");
-  expect(screen.queryByText(UNREACHABLE_FORM)).not.toBeInTheDocument();
-}
 
 function liveRegion() {
   return screen.getAllByRole("status").find((el) => el.hasAttribute("aria-live"))!;
