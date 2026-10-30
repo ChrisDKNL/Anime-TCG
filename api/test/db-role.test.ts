@@ -25,7 +25,7 @@ import { clearAccountData, createTestApp, insertAccount, migrationsDatabaseUrl }
 
 /** Postgres `insufficient_privilege`; drizzle wraps the pg error as `cause`. */
 const PERMISSION_DENIED = "42501";
-/** Postgres `integrity_constraint_violation`, raised by 0005's `cards_removed_stays` trigger. */
+/** Postgres `integrity_constraint_violation`, raised by 0005's `cards_removed_stays` and `accounts_last_reset_forward` triggers. */
 const REMOVED_STAYS = "23000";
 
 /**
@@ -286,6 +286,61 @@ describe("app database role", () => {
     await expect(app.db.update(cards).set({ removedAt: null, rarity: "common" })).rejects.toMatchObject({
       cause: { code: PERMISSION_DENIED },
     });
+  });
+
+  it("keeps an account's last reset moving forward and never in the future, for the app role and the owner (0005, manager decision, 2026-10-30)", async () => {
+    const accountId = await insertAccount(app.db, "ResetClock");
+    const lastResetOf = async () =>
+      (await app.db.select({ at: accounts.lastResetAt }).from(accounts).where(eq(accounts.id, accountId)))[0]
+        ?.at;
+    const earlier = new Date(Date.now() - 60 * 60_000);
+    // From none to a time in the past, and to the same time again: both allowed.
+    await app.db.update(accounts).set({ lastResetAt: earlier }).where(eq(accounts.id, accountId));
+    await app.db.update(accounts).set({ lastResetAt: earlier }).where(eq(accounts.id, accountId));
+    const owner = createDb(migrationsDatabaseUrl());
+    try {
+      for (const db of [app.db, owner]) {
+        for (const [lastResetAt, message] of [
+          [new Date(earlier.getTime() - 60_000), /never moves back$/],
+          [null, /never moves back$/],
+          [new Date(Date.now() + 60_000), /is in the future$/],
+        ] as const) {
+          const refused: unknown = await db
+            .update(accounts)
+            .set({ lastResetAt })
+            .where(eq(accounts.id, accountId))
+            .then(
+              () => null,
+              (err: unknown) => err,
+            );
+          expect(refused).toMatchObject({ cause: { code: REMOVED_STAYS } });
+          expect((refused as { cause: Error }).cause.message).toMatch(message);
+        }
+      }
+      // A new account has never been reset, whoever inserts it.
+      const born: unknown = await owner
+        .insert(accounts)
+        .values({
+          login: "Reborn",
+          loginNormalized: "reborn",
+          passwordHash: "x",
+          inviteCodeHash: "fixture",
+          lastResetAt: earlier,
+        })
+        .then(
+          () => null,
+          (err: unknown) => err,
+        );
+      expect(born).toMatchObject({ cause: { code: REMOVED_STAYS } });
+      expect((born as { cause: Error }).cause.message).toMatch(/a new account has no last reset$/);
+    } finally {
+      await owner.$client.end();
+    }
+    expect(await lastResetOf()).toEqual(earlier);
+    // A real reset, on the server clock, still moves it on.
+    const before = Date.now();
+    await resetCollection(app.db, "ResetClock", { confirm: true });
+    expect((await lastResetOf())?.getTime()).toBeGreaterThanOrEqual(before);
   });
 
   it("keeps a removed card removed: its trigger refuses the app role and the owner alike (0005, manager decision, 2026-10-30)", async () => {

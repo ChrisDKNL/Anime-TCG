@@ -26,6 +26,7 @@ import {
   economyPool,
   entryOf,
   errorOf,
+  expectClockBehindDatabase,
   expectLedgerConsistent,
   forgeBalance,
   getShop,
@@ -33,6 +34,7 @@ import {
   ID,
   inComedy,
   ledgerOf,
+  pastClockStart,
   recycle,
   recycleBody,
 } from "./economy-support.js";
@@ -110,7 +112,7 @@ const TEST_TIMEOUT = 90_000;
 describe("economy, tester's hunt (economy.md §14)", { timeout: TEST_TIMEOUT }, () => {
   let app: App;
   let twin: App;
-  let now = new Date("2026-10-31T09:00:00.000Z");
+  let now = pastClockStart();
   const rng = scriptedRng();
   const made: string[] = [];
   const forged: string[] = [];
@@ -196,6 +198,7 @@ describe("economy, tester's hunt (economy.md §14)", { timeout: TEST_TIMEOUT }, 
     snapshots.push(snapshotId);
   }, TEST_TIMEOUT);
   afterAll(async () => {
+    expectClockBehindDatabase(now);
     await expectLedgerConsistent(app, forged);
     await deleteAccounts(app.db, made);
     await deleteSnapshots(snapshots);

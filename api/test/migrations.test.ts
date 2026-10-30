@@ -429,6 +429,18 @@ describe("migrations", () => {
           "CREATE TRIGGER cards_removed_stays BEFORE UPDATE ON public.cards FOR EACH ROW EXECUTE FUNCTION cards_keep_removed()",
       },
     ]);
+    const resetTriggers = await db.execute<{ tgname: string; tgenabled: string; definition: string }>(sql`
+      select tgname, tgenabled, pg_get_triggerdef(oid) as definition from pg_trigger
+      where tgrelid = 'accounts'::regclass and not tgisinternal
+    `);
+    expect(resetTriggers.rows).toEqual([
+      {
+        tgname: "accounts_last_reset_forward",
+        tgenabled: "O",
+        definition:
+          "CREATE TRIGGER accounts_last_reset_forward BEFORE INSERT OR UPDATE OF last_reset_at ON public.accounts FOR EACH ROW EXECUTE FUNCTION accounts_keep_last_reset()",
+      },
+    ]);
   });
 
   it("checks a card's slot against the pack size and a character's image against IMAGE_HOST (0004)", async () => {

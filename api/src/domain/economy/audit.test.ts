@@ -57,6 +57,7 @@ function facts(overrides: Partial<AccountFacts> = {}): AccountFacts {
     unclaimedCredits: 0,
     unclaimedShopDebits: [],
     unexplainedRemovals: 0,
+    cardsBeforeReset: [],
     escrowedCards: 0,
     ...overrides,
   };
@@ -255,6 +256,13 @@ describe("audit-ledger's checks (economy.md §7, §13.1)", () => {
       ).toEqual([
         "entry 3: shop_purchase without its opening, and no reset after it",
         "recycle r2 removed 0 cards, not 2, and no reset after it",
+      ]);
+    });
+
+    it("finds every card older than the last reset, one line each: a real reset leaves none", () => {
+      expect(auditAccount(facts({ lastResetAt: AFTER, cardsBeforeReset: ["c1", "c2"] }))).toEqual([
+        "card c1 predates the last reset",
+        "card c2 predates the last reset",
       ]);
     });
 

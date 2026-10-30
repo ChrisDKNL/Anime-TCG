@@ -15,7 +15,9 @@
 -- Last, a trigger keeps a removed card removed: once removed_at is set,
 -- neither it nor removed_by_recycle changes again, whoever runs the update
 -- (manager decision, 2026-10-30). A reset deletes the cards, so it is not
--- affected.
+-- affected. A second trigger keeps an account's last reset honest: it never
+-- moves back or to null, never lies more than 5 seconds past the database's
+-- now(), and a new account starts with none (manager decision, 2026-10-30).
 CREATE TYPE "public"."ledger_kind" AS ENUM('recycle_credit', 'shop_purchase', 'market_purchase', 'market_sale', 'market_fee', 'owner_reset');--> statement-breakpoint
 CREATE TYPE "public"."opening_source" AS ENUM('timer', 'shop');--> statement-breakpoint
 CREATE TABLE "ledger_entries" (
@@ -86,4 +88,24 @@ BEGIN
 END
 $$;--> statement-breakpoint
 CREATE TRIGGER "cards_removed_stays" BEFORE UPDATE ON "cards"
-  FOR EACH ROW EXECUTE FUNCTION "cards_keep_removed"();
+  FOR EACH ROW EXECUTE FUNCTION "cards_keep_removed"();--> statement-breakpoint
+CREATE FUNCTION "accounts_keep_last_reset"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF NEW."last_reset_at" IS NOT NULL THEN
+      RAISE EXCEPTION 'a new account has no last reset' USING ERRCODE = 'integrity_constraint_violation';
+    END IF;
+  ELSIF OLD."last_reset_at" IS NOT NULL
+      AND (NEW."last_reset_at" IS NULL OR NEW."last_reset_at" < OLD."last_reset_at") THEN
+    RAISE EXCEPTION 'account %: the last reset at % never moves back', OLD."id", OLD."last_reset_at"
+      USING ERRCODE = 'integrity_constraint_violation';
+  END IF;
+  IF NEW."last_reset_at" > now() + interval '5 seconds' THEN
+    RAISE EXCEPTION 'account %: a last reset at % is in the future', NEW."id", NEW."last_reset_at"
+      USING ERRCODE = 'integrity_constraint_violation';
+  END IF;
+  RETURN NEW;
+END
+$$;--> statement-breakpoint
+CREATE TRIGGER "accounts_last_reset_forward" BEFORE INSERT OR UPDATE OF "last_reset_at" ON "accounts"
+  FOR EACH ROW EXECUTE FUNCTION "accounts_keep_last_reset"();

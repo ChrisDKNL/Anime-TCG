@@ -15,7 +15,7 @@ import {
   THEMED_PACK_PRICE,
 } from "@anime-tcg/shared/economy";
 import { RADIANT_ODDS, RADIANT_SLOT_ODDS, SLOT_FLOOR, SLOT_ODDS } from "@anime-tcg/shared/rarity";
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { App } from "../src/app.js";
 import { main as auditMain } from "../src/cli/audit-ledger.js";
@@ -30,6 +30,7 @@ import {
   economyPool,
   entryOf,
   errorOf,
+  expectClockBehindDatabase,
   expectLedgerConsistent,
   forgeBalance,
   getShop,
@@ -37,6 +38,7 @@ import {
   ID,
   inComedy,
   ledgerOf,
+  pastClockStart,
   putBackPastTheTrigger,
   recycle,
   recycleBody,
@@ -62,7 +64,7 @@ const COMEDY = "genre-comedy";
 
 describe("economy routes (economy.md §8, §11.3, §14)", () => {
   let app: App;
-  let now = new Date("2026-10-30T12:00:00.000Z");
+  let now = pastClockStart();
   const rng = scriptedRng();
   const made: string[] = [];
   const forged: string[] = [];
@@ -110,6 +112,7 @@ describe("economy routes (economy.md §8, §11.3, §14)", () => {
     app = await createTestApp({ config: testConfig({ ACCOUNT_CAP: "1000" }), rng, clock: () => now });
   });
   afterAll(async () => {
+    expectClockBehindDatabase(now);
     await expectLedgerConsistent(app, forged);
     await deleteAccounts(app.db, made);
     await deleteSnapshots(snapshots);
@@ -714,6 +717,87 @@ describe("economy routes (economy.md §8, §11.3, §14)", () => {
             id: client.account.id,
             login: client.account.login,
             lines: [`recycle ${recycleId} removed 0 cards, not 1, and no reset after it`],
+          },
+        ]);
+      });
+
+      it("finds every card a future-dated last reset leaves in place, set past the trigger as the owner", async () => {
+        const client = await holder(ID.common(40), 2);
+        forged.push(client.account.id);
+        const owner = createDb(migrationsDatabaseUrl());
+        try {
+          await owner.transaction(async (tx) => {
+            await tx.execute(sql`alter table accounts disable trigger accounts_last_reset_forward`);
+            await tx
+              .update(accounts)
+              .set({ lastResetAt: new Date("2100-01-01T00:00:00.000Z") })
+              .where(eq(accounts.id, client.account.id));
+            await tx.execute(sql`alter table accounts enable trigger accounts_last_reset_forward`);
+          });
+        } finally {
+          await owner.$client.end();
+        }
+        const held = await app.db
+          .select({ id: cards.id })
+          .from(cards)
+          .where(eq(cards.accountId, client.account.id))
+          .orderBy(asc(cards.pulledAt), asc(cards.id));
+        expect(held).toHaveLength(2 * PACK_SIZE);
+        expect(await failuresOf(client.account.id)).toEqual([
+          {
+            id: client.account.id,
+            login: client.account.login,
+            lines: held.map((card) => `card ${card.id} predates the last reset`),
+          },
+        ]);
+      });
+
+      it("finds a forged recycle hidden behind a forged reset: the cards the reset should have deleted are still there", async () => {
+        const client = await holder(ID.common(42), 1);
+        forged.push(client.account.id);
+        // As the app role may: a credit, a recycle that names it and the balance, all dated before a reset that never ran.
+        const credit = RECYCLE_VALUE.mythic;
+        const minted = new Date(now.getTime() - MINUTE);
+        await app.db.transaction(async (tx) => {
+          const [entry] = await tx
+            .insert(ledgerEntries)
+            .values({
+              accountId: client.account.id,
+              seq: 1,
+              kind: "recycle_credit",
+              amount: credit,
+              balanceAfter: credit,
+              createdAt: minted,
+            })
+            .returning({ id: ledgerEntries.id });
+          if (entry === undefined) throw new Error("ledger insert returned no row");
+          await tx.insert(recycles).values({
+            accountId: client.account.id,
+            requestId: randomUUID(),
+            requestHash: "minted",
+            characterId: ID.mythic(4),
+            rarity: "mythic",
+            count: 1,
+            unitValue: credit,
+            ledgerEntryId: entry.id,
+            createdAt: minted,
+          });
+          await tx.update(accounts).set({ balance: credit }).where(eq(accounts.id, client.account.id));
+          // The latest last reset the trigger allows: the database's now.
+          await tx.execute(sql`update accounts set last_reset_at = now() where id = ${client.account.id}`);
+        });
+        const held = await app.db
+          .select({ id: cards.id })
+          .from(cards)
+          .where(eq(cards.accountId, client.account.id))
+          .orderBy(asc(cards.pulledAt), asc(cards.id));
+        expect(held).toHaveLength(PACK_SIZE);
+        // The recycle passes as older than the "reset"; the cards that reset would have deleted give it away.
+        expect(await failuresOf(client.account.id)).toEqual([
+          {
+            id: client.account.id,
+            login: client.account.login,
+            lines: held.map((card) => `card ${card.id} predates the last reset`),
           },
         ]);
       });

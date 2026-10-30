@@ -134,7 +134,25 @@ export async function expectLedgerConsistent(app: App, forged: readonly string[]
   expect(result.failures).toEqual([]);
 }
 
-/** Postgres `integrity_constraint_violation`, the code of 0005's `cards_removed_stays` trigger. */
+const HOUR = 3_600_000;
+
+/**
+ * Where a suite's fake clock starts: on the hour, 30 days behind the real
+ * one, so a suite's advances never carry it past the database's now(). The
+ * reset stamps `last_reset_at` from the same clock as every ledger row,
+ * recycle and opening, and 0005's `accounts_last_reset_forward` refuses a
+ * last reset more than 5 seconds after the database's now().
+ */
+export function pastClockStart(): Date {
+  return new Date(Math.floor(Date.now() / HOUR) * HOUR - 30 * 24 * HOUR);
+}
+
+/** The guard of `pastClockStart`: a suite whose clock ran ahead of the real one would test resets the database refuses. */
+export function expectClockBehindDatabase(now: Date): void {
+  expect(now.getTime()).toBeLessThanOrEqual(Date.now());
+}
+
+/** Postgres `integrity_constraint_violation`, the code of 0005's `cards_removed_stays` and `accounts_last_reset_forward` triggers. */
 export const REMOVED_STAYS = "23000";
 
 /**

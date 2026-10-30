@@ -60,7 +60,10 @@ export const accounts = pgTable(
      * When the owner last reset this account's collection (economy.md §7,
      * §8.10), set in the reset's transaction; null if it never was. A recycle
      * without its cards, or a shop debit without its opening, is explained by
-     * a reset only if it is no newer than this (§13.1).
+     * a reset only if it is no newer than this (§13.1). Migration 0005's
+     * trigger `accounts_last_reset_forward` keeps it null on a new account
+     * and refuses moving it back, to null, or past the database's now() plus
+     * 5 seconds.
      */
     lastResetAt: timestamp("last_reset_at", { withTimezone: true }),
   },

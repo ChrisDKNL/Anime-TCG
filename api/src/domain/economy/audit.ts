@@ -63,6 +63,8 @@ export interface AccountFacts {
   unclaimedShopDebits: AuditUnclaimedDebit[];
   /** Cards marked removed with nothing that removed them. */
   unexplainedRemovals: number;
+  /** Ids of the account's cards pulled, or from an opening made, before its last reset, which deletes every card. */
+  cardsBeforeReset: string[];
   escrowedCards: number;
 }
 
@@ -145,6 +147,8 @@ export function auditAccount(facts: AccountFacts): string[] {
   if (facts.unclaimedCredits > 0)
     problems.push(`${facts.unclaimedCredits} recycle credits without a recycle`);
   if (facts.unexplainedRemovals > 0) problems.push(`${facts.unexplainedRemovals} cards removed by nothing`);
+  // A reset deletes every card, so one older than it means the reset time is forged or the cards came back (manager decision, 2026-10-30).
+  for (const cardId of facts.cardsBeforeReset) problems.push(`card ${cardId} predates the last reset`);
   if (facts.escrowedCards > 0) problems.push(`${facts.escrowedCards} cards in escrow`);
   return problems;
 }
@@ -252,6 +256,15 @@ export async function auditLedger(db: Db): Promise<AuditResult> {
           and not exists (select 1 from pack_openings o where o.ledger_entry_id = e.id)
         order by e.account_id, e.seq
       `);
+      const beforeReset = await tx.execute<{ accountId: string; cardId: string }>(sql`
+        select c.account_id as "accountId", c.id as "cardId"
+        from cards c
+        join accounts a on a.id = c.account_id
+        left join pack_openings o on o.id = c.opening_id
+        where a.last_reset_at is not null
+          and (c.pulled_at < a.last_reset_at or o.opened_at < a.last_reset_at)
+        order by c.account_id, c.pulled_at, c.id
+      `);
       const counts = await tx.execute<{
         accountId: string;
         unclaimedCredits: number;
@@ -274,6 +287,7 @@ export async function auditLedger(db: Db): Promise<AuditResult> {
       const openingsOf = grouped(shopOpenings.rows);
       const recyclesOf = grouped(recycled.rows.map(withDates));
       const unclaimedDebitsOf = grouped(unclaimedDebits.rows.map(withDates));
+      const beforeResetOf = grouped(beforeReset.rows);
       const countsOf = new Map(counts.rows.map((row) => [row.accountId, row]));
       const failures: AuditAccountReport[] = [];
       const notes: AuditAccountReport[] = [];
@@ -287,6 +301,7 @@ export async function auditLedger(db: Db): Promise<AuditResult> {
           unclaimedCredits: tally?.unclaimedCredits ?? 0,
           unclaimedShopDebits: unclaimedDebitsOf.get(owner.id) ?? [],
           unexplainedRemovals: tally?.unexplainedRemovals ?? 0,
+          cardsBeforeReset: (beforeResetOf.get(owner.id) ?? []).map((row) => row.cardId),
           escrowedCards: tally?.escrowedCards ?? 0,
         };
         const problems = auditAccount(facts);
