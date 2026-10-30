@@ -61,12 +61,11 @@ export function ShopPage() {
     return balance < theme.price ? { kind: "tooLittle", balance } : null;
   };
 
-  /** The pack is held, then `/shop/open` is pushed; the purchase is read once, after the page change (§3.3 step 6). */
+  /** The dialog has held the pack; `/shop/open` is pushed and the purchase read once, after the page change (§3.3 step 6). */
   const onBought = async (receipt: ShopReceipt) => {
     if (confirming === null) return;
     const { theme } = confirming;
     setConfirming(null);
-    game.holdShopPack({ receipt, theme, poolSize: shop.data?.snapshot?.characterCount ?? null });
     await navigate({ to: "/shop/open" });
     announce(shopCopy.bought(theme.title, receipt.price, receipt.balance));
   };
@@ -132,6 +131,7 @@ export function ShopPage() {
           theme={confirming.theme}
           balance={balance}
           wait={wait}
+          poolSize={shop.data?.snapshot?.characterCount ?? null}
           onBought={(receipt) => void onBought(receipt)}
           onGone={onGone}
           onClose={onClose}

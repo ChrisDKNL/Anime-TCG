@@ -32,9 +32,10 @@ function toReveal({ receipt, theme }: ShopPack): RevealPack {
  */
 export function ShopOpenPage() {
   const game = useGame();
-  const { shopPack } = game.state;
-  // The purchase pushes this page with its pack held, so its first showing is always the one that lands here.
-  const entering = useEntrance(shopPack, true, game.shownShopPacks);
+  const { shopPack, shopPackLandedShowing } = game.state;
+  // A pack bought while `/shop` showed enters on the page change that follows; one that landed after the
+  // player left shows without it, even on its first showing through `See your latest shop pack` (§3.10 item 2).
+  const entering = useEntrance(shopPack, shopPackLandedShowing, game.shownShopPacks);
   if (shopPack === null) return <Navigate to="/shop" replace />;
 
   return (

@@ -144,11 +144,20 @@ describe("gameReducer", () => {
     if (theme === undefined) throw new Error("the shop fixture has a theme");
     const first = { receipt: makeShopReceipt(), theme, poolSize: 2_983 };
     const second = { receipt: makeShopReceipt(), theme, poolSize: null };
-    const state = run(initialGame(CHRIS), { type: "shopBought", ...owner, pack: first });
+    const state = run(initialGame(CHRIS), { type: "shopBought", ...owner, pack: first, landedShowing: true });
     expect(state.shopPack).toBe(first);
-    expect(run(state, { type: "shopBought", ...owner, pack: second }).shopPack).toBe(second);
-    expect(run(state, { type: "shopBought", accountId: CHRIS, session: 1, pack: second })).toBe(state);
-    expect(run(state, { type: "reset", accountId: CHRIS }).shopPack).toBeNull();
+    expect(state.shopPackLandedShowing).toBe(true);
+    // One that landed after /shop was left is held all the same, and enters nowhere.
+    const later = run(state, { type: "shopBought", ...owner, pack: second, landedShowing: false });
+    expect(later.shopPack).toBe(second);
+    expect(later.shopPackLandedShowing).toBe(false);
+    expect(
+      run(state, { type: "shopBought", accountId: CHRIS, session: 1, pack: second, landedShowing: true }),
+    ).toBe(state);
+    expect(run(state, { type: "reset", accountId: CHRIS })).toMatchObject({
+      shopPack: null,
+      shopPackLandedShowing: false,
+    });
   });
 
   it("drops an action of another account or an earlier session", () => {

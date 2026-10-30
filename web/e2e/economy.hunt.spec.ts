@@ -292,12 +292,13 @@ test.describe("double spend from the UI", () => {
     await expect(header(page).getByText("840 Karma")).toBeVisible();
     await expect(page.getByRole("link", { name: "Collection (5)" })).toBeVisible();
     // Back on the Shop: no reveal of the pack bought while away, no confirmation, and no second buy;
-    // the answer reached no page, so nothing moved to /shop/open and no pack is held for it.
+    // nothing moved to /shop/open, but the pack is held for it (market-and-shop.md §3.2 item 6).
     await page.goForward();
     await expect(h1(page, "Shop")).toBeFocused();
     await expect(theme(page)).toBeVisible();
     await expect(reveal(page)).toHaveCount(0);
-    await expect(page.getByRole("link", { name: "See your latest shop pack" })).toHaveCount(0);
+    await expect(page).toHaveURL(/\/shop$/);
+    await expect(page.getByRole("link", { name: "See your latest shop pack" })).toBeVisible();
     expect(api.count(BUY)).toBe(1);
   });
 });

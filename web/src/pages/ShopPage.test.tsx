@@ -557,6 +557,30 @@ describe("/shop/open (market-and-shop.md §3.3 step 6; navigation-and-landing.md
     expect(header().getByRole("link", { name: "Shop" })).toHaveAttribute("aria-current", "page");
   });
 
+  it("a purchase answered after /shop was left: held, no page change; the link shows it without the entrance", async () => {
+    const answer = held({ status: 201, body: makeShopReceipt() });
+    const { user, history, fetchMock } = await confirmBuy({ [BUY]: answer.handler });
+    await user.click(within(confirmation()).getByRole("button", { name: "Buy for 400 Karma" }));
+    await waitFor(() => expect(callsTo(fetchMock, BUY)).toHaveLength(1));
+    act(() => history.push("/collection"));
+    await pageHeading("Collection");
+    answer.release();
+    await waitFor(() => expect(header().getByText("840")).toBeInTheDocument());
+    expect(history.location.pathname).toBe("/collection");
+    expect(liveRegion()).not.toHaveTextContent("Bought");
+
+    act(() => history.push("/shop"));
+    await pageHeading("Shop");
+    const latest = await main().findByRole("link", { name: "See your latest shop pack" });
+    await user.click(latest);
+    await pageHeading("Shop pack");
+    const items = within(main().getByRole("list", { name: "Action pack" })).getAllByRole("listitem");
+    expect(items).toHaveLength(5);
+    // Its first showing, but it did not land while its page showed (§3.10 item 2).
+    for (const item of items) expect(item).not.toHaveClass("animate-card-enter");
+    expect(callsTo(fetchMock, BUY)).toHaveLength(1);
+  });
+
   it("an address typed after the first render, with nothing held: replaced by /shop, whose h1 takes focus", async () => {
     const { history } = await openShop();
     act(() => history.push("/shop/open"));

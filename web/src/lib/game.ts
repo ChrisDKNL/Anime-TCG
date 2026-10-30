@@ -101,8 +101,13 @@ export interface GameState {
   reveal: PackOpened | null;
   /** Whether the current cards landed while `/packs/open` was showing or about to: only then do they enter (§3.4 step 6). */
   revealLandedShowing: boolean;
-  /** The last pack bought in the shop, until the next one. */
+  /**
+   * The last pack bought in the shop, until the next one. A purchase's answer holds it whether or not
+   * `/shop` still shows (market-and-shop.md §3.2 item 6): only the page change waits for that.
+   */
   shopPack: ShopPack | null;
+  /** Whether it landed while `/shop` showed its confirmation, which then pushes `/shop/open`: only then does it enter. */
+  shopPackLandedShowing: boolean;
   /** The allowance of the last opening the server dealt (201 or 200). */
   opened: Held | null;
   /** The last 409: no pack was left, and the next one is `retryAfterSeconds` away. */
@@ -142,7 +147,7 @@ export type GameAction =
   | ({ type: "noAnswer" } & GameOwner)
   | ({ type: "overview"; action: ControlsAction } & GameOwner)
   | ({ type: "balance"; balance: HeldBalance } & GameOwner)
-  | ({ type: "shopBought"; pack: ShopPack } & GameOwner);
+  | ({ type: "shopBought"; pack: ShopPack; landedShowing: boolean } & GameOwner);
 
 export function initialGame(accountId: string | null, session = 0): GameState {
   return {
@@ -153,6 +158,7 @@ export function initialGame(accountId: string | null, session = 0): GameState {
     reveal: null,
     revealLandedShowing: false,
     shopPack: null,
+    shopPackLandedShowing: false,
     opened: null,
     noneLeft: null,
     unavailableSince: null,
@@ -207,7 +213,7 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
     case "noAnswer":
       return { ...state, opening: false, reveal: null, line: { kind: "noAnswer" } };
     case "shopBought":
-      return { ...state, shopPack: action.pack };
+      return { ...state, shopPack: action.pack, shopPackLandedShowing: action.landedShowing };
     case "overview":
       return { ...state, overview: controlsReducer(state.overview, action.action) };
     case "balance":

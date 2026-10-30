@@ -163,8 +163,12 @@ export interface Game {
    * rejects only on a bug in this client (not an api answer).
    */
   openPack: (row: Row, from: OpenedFrom) => Promise<void>;
-  /** Holds the pack a purchase dealt, for `/shop/open`, until the next purchase (market-and-shop.md §3.3 step 6). */
-  holdShopPack: (pack: ShopPack) => void;
+  /**
+   * Holds the pack a purchase dealt, for `/shop/open`, until the next purchase (market-and-shop.md §3.3
+   * step 6); `landedShowing` is whether `/shop` still showed its confirmation, so that the page change
+   * to `/shop/open` follows and the cards enter there.
+   */
+  holdShopPack: (pack: ShopPack, landedShowing: boolean) => void;
   /**
    * The shop packs `/shop/open` has already shown: the purchase pushes that page with its pack already
    * held, so only this tells its first showing, which runs the entrance, from a return to it.
@@ -383,8 +387,8 @@ export function useGameState({ account, shell, openingShowing, leaveOpening }: O
   );
 
   const holdShopPack = useCallback(
-    (pack: ShopPack) => {
-      if (owner !== null) dispatch({ type: "shopBought", ...owner, pack });
+    (pack: ShopPack, landedShowing: boolean) => {
+      if (owner !== null) dispatch({ type: "shopBought", ...owner, pack, landedShowing });
     },
     [owner],
   );

@@ -36,13 +36,15 @@ import {
  *   opening, and `See your latest pack` while it is in flight.
  * - Reduced motion: no entrance on any showing.
  * - `/shop/open`: a direct load and a trailing slash end on `/shop` (boot replace: no focus move); a
- *   purchase that answers after the player left `/shop` navigates nowhere.
+ *   purchase that answers after the player left `/shop` navigates nowhere, and is still held:
+ *   `See your latest shop pack` shows its cards, without the entrance on that first showing (a bug
+ *   the hunt found, fixed in #57: navigation-and-landing.md §3.10 items 1, 2 and 4, §3.13 step 2;
+ *   market-and-shop.md §3.2 item 6, §3.3 step 6).
  * - Copy (§8 Words): `/packs/open` and `/shop/open` hold no forbidden word, no exclamation mark.
  *
  * Not here: the signed-out guard and a plain reload (opening-pages.spec.ts), the 409 and the plain
  * lost answer from the `/packs` push (opening-pages.spec.ts, packs.hunt.spec.ts), the 429 on the push
- * (packs.hunt.spec.ts). A purchase answered after leaving `/shop` holding its pack is a bug, in
- * shop-pack-left-in-flight.bug.spec.ts.
+ * (packs.hunt.spec.ts).
  */
 
 const CHRIS = makeAccount({ cards: 0 });
@@ -510,6 +512,48 @@ test.describe("/shop/open", () => {
     await expect(page.getByRole("dialog")).toHaveCount(0);
     // The answer still applies: the header takes the receipt's balance.
     await expect(page.getByRole("banner")).toContainText("840");
+  });
+
+  /*
+   * Regression (tester, 2026-10-30): the balance and the collection took the answer, but the pack was
+   * dropped, because the confirmation held it only while it was mounted. After Back nothing held it, so
+   * the player never saw the five cards they spent 400 Karma on, except as entries in the collection.
+   */
+  test("a purchase answered after Back left /shop is still held: See your latest shop pack shows its cards", async ({
+    page,
+    api,
+  }) => {
+    const answer = deferred();
+    api.on("POST /api/shop/buy", async (call) => {
+      await answer.promise;
+      return api.game.reply(call.key, call.body)!;
+    });
+    await page.goto("/packs");
+    await nav(page).getByRole("link", { name: "Shop", exact: true }).click();
+    await expect(h1(page, "Shop")).toBeFocused();
+    await page.getByRole("article", { name: "Action" }).getByRole("button", { name: "Buy…" }).click();
+    await page
+      .getByRole("dialog", { name: "Buy the Action pack?" })
+      .getByRole("button", { name: "Buy for 400 Karma" })
+      .click();
+    await expect.poll(() => api.count("POST /api/shop/buy")).toBe(1);
+
+    await page.goBack();
+    await expect(h1(page, "Packs")).toBeFocused();
+    answer.release();
+    await expect(nav(page).getByRole("link", { name: "Collection (5)" })).toBeVisible();
+    await expect(page.getByRole("banner")).toContainText("840");
+
+    await nav(page).getByRole("link", { name: "Shop", exact: true }).click();
+    await expect(h1(page, "Shop")).toBeFocused();
+    const latest = main(page).getByRole("link", { name: "See your latest shop pack" });
+    await expect(latest).toBeVisible();
+    await latest.click();
+    await expect(h1(page, "Shop pack")).toBeFocused();
+    const list = page.getByRole("list", { name: "Action pack" });
+    await expect(list.getByRole("article")).toHaveCount(5);
+    // Its first showing is this one, but it did not land while the page showed: no entrance.
+    expect(await list.evaluate((element) => element.getAnimations({ subtree: true }).length)).toBe(0);
   });
 
   test("the words on /shop/open hold nothing §8 forbids", async ({ page }) => {

@@ -25,7 +25,9 @@ interface Props {
   balance: number;
   /** The page's 429 wait, which outlives this dialog. */
   wait: RateLimitWait;
-  /** 201, or 200 on a replay: the page closes the dialog and shows the pack. */
+  /** The rank chip's pool size from the shop answer, held with the pack. */
+  poolSize: number | null;
+  /** 201, or 200 on a replay, while the dialog is still open: the pack is already held; the page closes the dialog and shows it. */
   onBought: (receipt: ShopReceipt) => void;
   /** `theme_unavailable`: the page closes the dialog, refetches the shop and says so. */
   onGone: () => void;
@@ -41,10 +43,12 @@ interface Props {
  * shows the pack that was dealt instead of buying a second) and discarded on
  * every other answer and on `Cancel`. While a purchase is in flight the
  * button, `Cancel` and Escape do nothing, so the dialog cannot close on an
- * unknown outcome. The balance an answer carries reaches the header even if
- * the page was left meanwhile. It mounts per purchase, so it opens on mount.
+ * unknown outcome. The balance an answer carries reaches the header, and the
+ * pack it dealt is held for `/shop/open`, even if the page was left meanwhile
+ * (market-and-shop.md §3.2 item 6); only the page change waits for the dialog.
+ * It mounts per purchase, so it opens on mount.
  */
-export function BuyDialog({ theme, balance, wait, onBought, onGone, onClose }: Props) {
+export function BuyDialog({ theme, balance, wait, poolSize, onBought, onGone, onClose }: Props) {
   const game = useGame();
   const queryClient = useQueryClient();
   const ref = useRef<HTMLDialogElement>(null);
@@ -55,12 +59,14 @@ export function BuyDialog({ theme, balance, wait, onBought, onGone, onClose }: P
   const [noAnswer, setNoAnswer] = useState(false);
   const [line, setLine] = useState<Line>(null);
 
-  const { applyBalance, collectionQuery, walletQuery } = game;
+  const { applyBalance, holdShopPack, collectionQuery, walletQuery } = game;
   const send = useCallback(
     async (requestId: string) => {
       try {
         const receipt = await buyShopPack({ requestId, themeId: theme.id });
         applyBalance(receipt.balance);
+        // Held whether or not this dialog is still mounted; it enters only if the page change to `/shop/open` follows.
+        holdShopPack({ receipt, theme, poolSize }, mounted.current);
         void queryClient.invalidateQueries({ queryKey: collectionQuery.queryKey });
         return receipt;
       } catch (err) {
@@ -68,7 +74,7 @@ export function BuyDialog({ theme, balance, wait, onBought, onGone, onClose }: P
         throw err;
       }
     },
-    [applyBalance, queryClient, collectionQuery.queryKey, theme.id],
+    [applyBalance, holdShopPack, queryClient, collectionQuery.queryKey, theme, poolSize],
   );
   const action = useKeyedAction(send, wait);
 
