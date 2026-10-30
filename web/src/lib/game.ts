@@ -5,6 +5,7 @@ import {
   type ControlsAction,
   type OverviewControls,
 } from "./collectionView";
+import { MAX_WAIT_SECONDS } from "./failures";
 
 /**
  * The signed-in account's game state, held by the root layout so it survives
@@ -197,6 +198,18 @@ export function heldOdds(packs: PacksAnswer | undefined, state: GameState): Publ
   if (packs === undefined) return null;
   if (state.unavailableSince !== null && state.unavailableSince > packs.seq) return null;
   return packs.answer.odds;
+}
+
+/** The wait after a 429 without `Retry-After`: the window of `PACK_RATE_LIMIT` (packs-page.md §9, question 3). */
+export const RATE_LIMIT_FALLBACK_SECONDS = 60;
+/**
+ * How long a 429 keeps `Open pack` waiting, from its `Retry-After` (as
+ * `readRetryAfter` in `api.ts` reads it for every caller). The wait is capped
+ * at the account forms' `MAX_WAIT_SECONDS` (packs-page.md §4.1): a wait of
+ * hours reads as broken, and the next activation asks the server again anyway.
+ */
+export function rateLimitWaitSeconds(retryAfterSeconds: number | undefined): number {
+  return Math.min(retryAfterSeconds ?? RATE_LIMIT_FALLBACK_SECONDS, MAX_WAIT_SECONDS);
 }
 
 /** The pack control's row (§4.1), from the held allowance and whether cards are available. */

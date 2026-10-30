@@ -376,6 +376,31 @@ describe("/packs: opening", () => {
     expect(screen.queryByText(/short pause/)).not.toBeInTheDocument();
   });
 
+  it("429 with a Retry-After of a day: the wait counts down from the 3600 s cap", async () => {
+    vi.useFakeTimers({
+      shouldAdvanceTime: true,
+      toFake: ["setTimeout", "clearTimeout", "performance", "Date"],
+    });
+    renderApp(
+      { [OPEN]: { ...envelope(429, "rate_limited"), headers: { "Retry-After": "86400" } } },
+      account,
+      "/packs",
+    );
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime.bind(vi) });
+    await user.click(await openButton());
+    expect(await openButton("Try again in 3600 s")).toHaveAttribute("aria-disabled", "true");
+    act(() => {
+      vi.advanceTimersByTime(3_599_000);
+    });
+    expect(main().getByRole("button", { name: "Try again in 1 s" })).toBeInTheDocument();
+    act(() => {
+      vi.advanceTimersByTime(1_000);
+    });
+    // The 429 kept the key: the button comes back as Try again.
+    expect(main().getByRole("button", { name: "Try again" })).not.toHaveAttribute("aria-disabled");
+    expect(liveRegion()).toHaveTextContent("You can try again now.");
+  });
+
   it("a generic failure (500): the alert, the key discarded", async () => {
     const { fetchMock } = renderApp(
       { [OPEN]: sequence(envelope(500, "internal"), { status: 201, body: makePackOpened() }) },
@@ -523,6 +548,63 @@ describe("/packs: the countdown (§3.2)", () => {
     expect(await screen.findByText("1 of 3 packs ready")).toBeInTheDocument();
     expect(callsTo(fetchMock, PACKS)).toHaveLength(3);
     expect(screen.queryByText("Couldn't check for the next pack.")).not.toBeInTheDocument();
+  });
+
+  it("a zero-time check answered with an error envelope (500) is no answer: the line and Check again", async () => {
+    vi.useFakeTimers({ ...FAKE, toFake: [...FAKE.toFake] });
+    const { fetchMock } = renderApp(
+      {
+        [PACKS]: sequence(
+          packs({ available: 0, nextPackInSeconds: 1 }),
+          envelope(500, "internal"),
+          packs({ available: 1, nextPackInSeconds: 599 }),
+        ),
+      },
+      account,
+      "/packs",
+    );
+    expect(await screen.findByText("Next pack in 0:01")).toBeInTheDocument();
+    act(() => {
+      vi.advanceTimersByTime(1_000);
+    });
+    expect(await screen.findByText("Couldn't check for the next pack.")).toBeInTheDocument();
+    expect(screen.queryByText("Next pack in 0:00")).not.toBeInTheDocument();
+    // The server answered, so the unreachable banner does not show.
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(callsTo(fetchMock, PACKS)).toHaveLength(2);
+
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime.bind(vi) });
+    await user.click(main().getByRole("button", { name: "Check again" }));
+    expect(await screen.findByText("1 of 3 packs ready")).toBeInTheDocument();
+    expect(callsTo(fetchMock, PACKS)).toHaveLength(3);
+    expect(screen.queryByText("Couldn't check for the next pack.")).not.toBeInTheDocument();
+  });
+
+  it("a failed check belongs to the answer it failed after: an opening's 201 brings its countdown back", async () => {
+    vi.useFakeTimers({ ...FAKE, toFake: [...FAKE.toFake] });
+    renderApp(
+      {
+        [PACKS]: sequence(packs({ available: 1, nextPackInSeconds: 1 }), { status: 502, raw: "" }),
+        [OPEN]: {
+          status: 201,
+          body: makePackOpened({ allowance: { available: 1, nextPackInSeconds: 600 } }),
+        },
+      },
+      account,
+      "/packs",
+    );
+    expect(await screen.findByText("Next pack in 0:01")).toBeInTheDocument();
+    act(() => {
+      vi.advanceTimersByTime(1_000);
+    });
+    expect(await screen.findByText("Couldn't check for the next pack.")).toBeInTheDocument();
+
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime.bind(vi) });
+    await user.click(main().getByRole("button", { name: "Open pack" }));
+    await screen.findByRole("list", { name: "Your pack" });
+    expect(screen.getByText("Next pack in 10:00")).toBeInTheDocument();
+    expect(screen.queryByText("Couldn't check for the next pack.")).not.toBeInTheDocument();
+    expect(main().queryByRole("button", { name: "Check again" })).not.toBeInTheDocument();
   });
 
   it("no countdown runs and nothing is asked while another page shows; returning asks once", async () => {

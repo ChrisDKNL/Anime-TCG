@@ -14,7 +14,7 @@ export interface ControlInput {
   keyHeld: boolean;
   /** Seconds to the next pack, from the held answer's countdown. */
   countdown: number | null;
-  /** The countdown's zero-time `GET` got no answer. */
+  /** The countdown's zero-time `GET` got no answer or an error envelope, and no newer answer is held since. */
   checkFailed: boolean;
   /** Seconds left of a 429's wait; 0 or null when none runs. */
   wait: number | null;

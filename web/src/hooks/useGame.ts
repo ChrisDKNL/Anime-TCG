@@ -21,18 +21,18 @@ import {
   gameReducer,
   initialGame,
   nextGame,
+  rateLimitWaitSeconds,
   type GameOwner,
   type GameState,
   type PacksAnswer,
   type Row,
 } from "../lib/game";
 import type { ControlsAction } from "../lib/collectionView";
+import { rethrowUnlessKnown } from "../lib/failures";
 import { revealCopy } from "../lib/packsCopy";
 import type { ShellActions } from "./useShell";
 import { useSingleFlight } from "./useSingleFlight";
 
-/** The wait after a 429 without `Retry-After`: the window of `PACK_RATE_LIMIT` (packs-page.md §9, question 3). */
-const RATE_LIMIT_FALLBACK_SECONDS = 60;
 const SECOND_MS = 1000;
 
 /**
@@ -88,8 +88,11 @@ export interface Game {
   packsQuery: PacksQueryOptions;
   collectionQuery: CollectionQueryOptions;
   collection: UseQueryResult<CollectionResponse>;
-  /** Opens a pack; `row` is the control's row now, which a generic failure's line stays tied to. */
-  openPack: (row: Row) => void;
+  /**
+   * Opens a pack; `row` is the control's row now, which a generic failure's line stays tied to.
+   * Settles once the answer is applied, and rejects only on a bug in this client (not an api answer).
+   */
+  openPack: (row: Row) => Promise<void>;
   /** Changes the collection overview's controls (`state.overview`). */
   changeOverview: (action: ControlsAction) => void;
 }
@@ -132,8 +135,13 @@ export function useGameState({ account, shell, packsShowing }: Options): Game | 
   const [nextSeq] = useState(requestCounter);
   const current = useRef(owner);
   useEffect(() => {
+    const previous = current.current;
     current.current = owner;
-  }, [owner]);
+    if (previous === owner) return;
+    // A reset leaves nothing of the previous session's answers in the cache, not even until `gcTime`.
+    queryClient.removeQueries({ queryKey: packsKey(previous), exact: true });
+    queryClient.removeQueries({ queryKey: collectionKey(previous), exact: true });
+  }, [owner, queryClient]);
   const isCurrent = useCallback(
     (of: GameOwner) => current.current?.accountId === of.accountId && current.current.session === of.session,
     [],
@@ -166,7 +174,12 @@ export function useGameState({ account, shell, packsShowing }: Options): Game | 
         unreachable();
         return;
       }
-      if (!(err instanceof ApiError)) throw err;
+      if (!(err instanceof ApiError)) {
+        // A bug in this client, not an answer: the generic failure, so the button never stays on
+        // `Opening…`, and the error is rethrown so a test or the console sees it.
+        dispatch({ type: "failed", ...of, row });
+        throw err;
+      }
       switch (err.code) {
         case "unauthenticated":
           sessionEnded();
@@ -187,7 +200,7 @@ export function useGameState({ account, shell, packsShowing }: Options): Game | 
           dispatch({ type: "unavailable", ...of, seq });
           return;
         case "rate_limited": {
-          const seconds = err.retryAfterSeconds ?? RATE_LIMIT_FALLBACK_SECONDS;
+          const seconds = rateLimitWaitSeconds(err.retryAfterSeconds);
           dispatch({ type: "rateLimited", ...of, until: performance.now() + seconds * SECOND_MS });
           return;
         }
@@ -199,9 +212,9 @@ export function useGameState({ account, shell, packsShowing }: Options): Game | 
   );
 
   const open = useCallback(
-    (row: Row) => {
+    async (row: Row) => {
       if (owner === null) return;
-      void singleFlight(async () => {
+      await singleFlight(async () => {
         // A key held from an opening that got no answer is sent again, so the retry shows that pack.
         const requestId = key ?? crypto.randomUUID();
         dispatch({ type: "openStarted", ...owner, key: requestId });
@@ -224,6 +237,7 @@ export function useGameState({ account, shell, packsShowing }: Options): Game | 
           void queryClient.refetchQueries({ queryKey: collectionKey(owner) });
         } catch (err) {
           if (isCurrent(owner)) settleFailure(err, owner, seq, row);
+          else rethrowUnlessKnown(err);
         }
       });
     },

@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
-import { NetworkError } from "../lib/api";
 import { controlRow, heldAllowance, heldOdds, visibleLine, type Held } from "../lib/game";
 import { packControlView, type ControlView } from "../lib/packControl";
 import { packControlCopy } from "../lib/packsCopy";
@@ -32,18 +31,24 @@ export function usePacksPage() {
   const held = heldAllowance(packs.data, state);
   const odds = heldOdds(packs.data, state);
   const showLoading = useDelayedFlag(held === null && !packs.isError, LOADING_DELAY_MS);
-  const [checkFailed, setCheckFailed] = useState(false);
+  /**
+   * The held answer's `seq` when a zero-time check failed. The failure line belongs to that answer:
+   * any newer one (a `GET`, an opening's 201 or 200) replaces it, and its countdown shows again.
+   */
+  const [checkFailedAt, setCheckFailedAt] = useState<number | null>(null);
 
   const { refetch } = packs;
   /**
    * The countdown reached zero, or `Check again` after that check failed:
-   * exactly one `GET`, and no timer until it answers. When it brings the
+   * exactly one `GET`, and no timer until it answers. No answer or an error
+   * envelope (a 500) both show the failure line and `Check again`. When it brings the
    * first pack while the count was 0, the live region says so once (§7).
    */
   const checkNextPack = useCallback(async () => {
     const before = held;
     const result = await refetch();
-    setCheckFailed(result.error instanceof NetworkError);
+    // An error envelope is no answer to the question either: the page cannot tell when the pack comes.
+    setCheckFailedAt(before !== null && result.isError ? before.seq : null);
     const after = result.data;
     if (before === null || after === undefined || after.seq <= before.seq) return;
     const { available, cap } = after.answer.allowance;
@@ -68,14 +73,14 @@ export function usePacksPage() {
     opening: state.opening,
     keyHeld: state.key !== null,
     countdown,
-    checkFailed,
+    checkFailed: held !== null && held.seq === checkFailedAt,
     wait,
     line: held === null ? null : visibleLine(state, controlRow(held, odds), wait !== null && wait > 0),
   });
 
   const { openPack } = game;
   const open = useCallback(() => {
-    if (view.kind === "control" && view.button.enabled) openPack(view.row);
+    if (view.kind === "control" && view.button.enabled) void openPack(view.row);
   }, [view, openPack]);
 
   // A reveal that lands while the page shows runs its entrance; the one already there when it mounted does not.

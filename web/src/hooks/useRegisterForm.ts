@@ -1,11 +1,12 @@
 import type { AccountPublic } from "@anime-tcg/shared/api";
 import { useCallback, useState, type FormEvent } from "react";
 import { common, registerCopy } from "../lib/copy";
-import { toFailure, type Failure } from "../lib/failures";
+import { serverWait, toFailure, type Failure } from "../lib/failures";
 import { firstInvalid, OK, withMessage, type FieldState } from "../lib/fieldState";
 import { checkConfirmation, checkInviteCode, checkLogin, checkNewPassword } from "../lib/validation";
 import { useCheckInviteMutation, useRegisterMutation } from "./useAccountMutations";
 import { useFieldFocus } from "./useFieldFocus";
+import { useServerWait } from "./useServerWait";
 import { useSingleFlight } from "./useSingleFlight";
 
 export type RegisterField = "code" | "login" | "password" | "confirm";
@@ -31,6 +32,11 @@ export function useRegisterForm({ onRegistered }: Options) {
   const [capReached, setCapReached] = useState(false);
   const [unreachable, setUnreachable] = useState(false);
   const { focusField, fieldRef } = useFieldFocus<RegisterField>();
+  // The invite check and the create are separate rate-limited routes, so each step has its own wait.
+  const step1Wait = useServerWait();
+  const step2Wait = useServerWait();
+  const { begin: beginStep1Wait } = step1Wait;
+  const { begin: beginStep2Wait } = step2Wait;
   const checkInvite = useCheckInviteMutation();
   const registration = useRegisterMutation();
   const singleFlight = useSingleFlight();
@@ -52,6 +58,11 @@ export function useRegisterForm({ onRegistered }: Options) {
         setUnreachable(true);
         return;
       }
+      const wait = serverWait(failure);
+      if (wait !== null) {
+        beginStep1Wait(wait);
+        return;
+      }
       switch (failure.code) {
         case "invite_invalid":
         case "validation_failed":
@@ -64,13 +75,18 @@ export function useRegisterForm({ onRegistered }: Options) {
           setUnreachable(true);
       }
     },
-    [codeRejected],
+    [codeRejected, beginStep1Wait],
   );
 
   const applyStep2Failure = useCallback(
     (failure: Failure, login: string) => {
       if (failure.kind === "network") {
         setUnreachable(true);
+        return;
+      }
+      const wait = serverWait(failure);
+      if (wait !== null) {
+        beginStep2Wait(wait);
         return;
       }
       switch (failure.code) {
@@ -93,13 +109,15 @@ export function useRegisterForm({ onRegistered }: Options) {
           setUnreachable(true);
       }
     },
-    [codeRejected, focusField],
+    [codeRejected, focusField, beginStep2Wait],
   );
 
   const submitStep1 = (event: FormEvent) => {
     event.preventDefault();
     return singleFlight(async () => {
+      if (step1Wait.remaining !== null) return;
       setUnreachable(false);
+      step1Wait.clear();
       const code = checkInviteCode(values.code);
       if (code.issue !== null) {
         setFields({ ...ALL_OK, code: withMessage(registerCopy.emptyCode) });
@@ -120,7 +138,9 @@ export function useRegisterForm({ onRegistered }: Options) {
   const submitStep2 = (event: FormEvent) => {
     event.preventDefault();
     return singleFlight(async () => {
+      if (step2Wait.remaining !== null) return;
       setUnreachable(false);
+      step2Wait.clear();
       const login = checkLogin(values.login);
       const password = checkNewPassword(values.password);
       const confirmation = checkConfirmation(values.password, values.confirm);
@@ -173,6 +193,8 @@ export function useRegisterForm({ onRegistered }: Options) {
     fields,
     capReached,
     unreachable,
+    waitStatus: step === 1 ? step1Wait.statusLine : step2Wait.statusLine,
+    waitRemaining: step === 1 ? step1Wait.remaining : step2Wait.remaining,
     checking: checkInvite.isPending,
     submitting: registration.isPending,
     setValue,
