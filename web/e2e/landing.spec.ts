@@ -80,12 +80,13 @@ test("the page in order: h1, the button, the disclosure, How it plays, Pack odds
   await expect(page.getByText(DISCLOSURE)).toBeVisible();
 
   const steps = page.getByRole("region", { name: "How it plays" }).getByRole("listitem");
-  await expect(steps).toHaveCount(4);
+  await expect(steps).toHaveCount(5);
   await expect(steps.getByRole("heading", { level: 3 })).toHaveText([
     "Packs",
     "Rarity",
     "Collection",
     "Karma",
+    "Market",
   ]);
   await expect(steps.first()).toContainText("01");
   await expect(steps.first()).toContainText(

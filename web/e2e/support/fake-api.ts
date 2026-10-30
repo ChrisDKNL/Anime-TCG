@@ -2,13 +2,18 @@
 import { expect, test as base, type BrowserContext, type Page, type Route } from "@playwright/test";
 import type {
   AccountPublic,
+  ClosedListing,
   CollectionEntry,
+  Listing,
+  ListingSort,
+  PurchaseReceipt,
   Rarity,
   RecycleReceipt,
   SessionResponse,
   ShopReceipt,
+  WindowLeft,
 } from "@anime-tcg/shared/api";
-import type { ErrorCode } from "@anime-tcg/shared/errors";
+import type { ErrorCode, MarketLimit } from "@anime-tcg/shared/errors";
 import {
   makeAllowance,
   makeCharacter,
@@ -17,6 +22,7 @@ import {
   makeDemoCard,
   makeDemoOpened,
   makeEntry,
+  makeListingsPage,
   makePackOpened,
   makePacks,
   makeRules,
@@ -33,8 +39,8 @@ import {
  * sends a request to `graphql.anilist.co` (collection-packs.md §8). A request the test did
  * not script is answered with a 500 envelope and fails the test in the fixture teardown,
  * so the UI cannot call something unexpected without the test noticing; the packs, collection,
- * wallet, shop and recycle routes have a stateful default (`FakeGame`) that a test can override,
- * and the landing page's demo answers the fixture facts and a fresh pack per opening.
+ * wallet, shop, recycle and market routes have a stateful default (`FakeGame`) that a test can
+ * override, and the landing page's demo answers the fixture facts and a fresh pack per opening.
  */
 
 // 1x1 transparent PNG so card images resolve without hitting AniList's CDN.
@@ -77,9 +83,11 @@ export interface Answer {
 }
 
 export interface ApiCall {
-  /** `"METHOD /path"`, e.g. `"POST /api/session/login"`. */
+  /** `"METHOD /path"`, e.g. `"POST /api/session/login"`; the query string is not part of it. */
   key: string;
   body: unknown;
+  /** The query string, `?` included, or `""`. */
+  search: string;
 }
 
 /** An answer, a dropped connection, or a function of the call (which may wait, to hold a request in flight). */
@@ -98,6 +106,15 @@ export function envelope(status: number, code: ErrorCode, retryAfterSeconds?: nu
   const error =
     retryAfterSeconds === undefined ? { code, message: code } : { code, message: code, retryAfterSeconds };
   return { status, json: { error } };
+}
+
+/** `market_limit` as the api sends it: which limit, its seconds in the envelope and in `Retry-After`. */
+export function marketLimit(limit: MarketLimit, retryAfterSeconds: number): Answer {
+  return {
+    status: 409,
+    json: { error: { code: "market_limit", message: "market_limit", limit, retryAfterSeconds } },
+    headers: { "retry-after": String(retryAfterSeconds) },
+  };
 }
 
 /** A promise the test resolves itself: hold a request in flight, then let it answer. */
@@ -139,6 +156,18 @@ export class FakeGame {
   readonly purchases = new Map<string, ShopReceipt>();
   readonly recycles = new Map<string, RecycleReceipt>();
   private readonly rules = makeRules();
+  /**
+   * The market (economy.md §8.3 to §8.5): every listing, active or not, of every account; the
+   * caller's own are `mine`. Browse pages hold `pageSize` listings, and the cursor is the offset.
+   */
+  market: Listing[] = [];
+  pageSize = 50;
+  /** The caller's purchases and listings by `requestId`, for the replays. */
+  readonly bought = new Map<string, PurchaseReceipt>();
+  readonly listedBy = new Map<string, Listing>();
+  /** What the caller's window limits have left; a test sets `limit` to refuse every purchase with it. */
+  left: WindowLeft = { purchases: 100, spend: 55_000, proceeds: 55_000 };
+  limit: { limit: MarketLimit; retryAfterSeconds: number } | null = null;
   /** Demo packs dealt; each one's characters are new, so two reveals can be told apart. */
   demos = 0;
 
@@ -168,7 +197,7 @@ export class FakeGame {
     });
   }
 
-  reply(key: string, body?: unknown): Answer | undefined {
+  reply(key: string, body?: unknown, search = ""): Answer | undefined {
     switch (key) {
       case "GET /api/packs":
         return {
@@ -206,7 +235,10 @@ export class FakeGame {
         return { status: 200, json: makeCollection([...this.held, ...entries]) };
       }
       case "GET /api/wallet":
-        return { status: 200, json: makeWallet(this.balance) };
+        return {
+          status: 200,
+          json: { ...makeWallet(this.balance), activeListings: this.market.filter(isMineActive).length },
+        };
       case "GET /api/shop":
         return { status: 200, json: makeShop() };
       case "POST /api/shop/buy":
@@ -215,9 +247,178 @@ export class FakeGame {
         return this.recycle(
           body as { requestId: string; characterId: number; rarity: Rarity; count: number },
         );
+      case "GET /api/market/listings":
+        return this.browse(new URLSearchParams(search));
+      case "GET /api/market/mine":
+        return this.mine();
+      case "POST /api/market/listings":
+        return this.list(body as { requestId: string; characterId: number; rarity: Rarity; price: number });
       default:
-        return undefined;
+        return this.listingAction(key, body);
     }
+  }
+
+  private browse(query: URLSearchParams): Answer {
+    const sort = (query.get("sort") ?? "price_asc") as ListingSort;
+    const rarity = query.get("rarity");
+    const franchiseId = query.get("franchiseId");
+    const characterId = query.get("characterId");
+    const terms = (query.get("q") ?? "")
+      .toLowerCase()
+      .split(" ")
+      .filter((term) => term !== "");
+    const active = this.market.filter((listing) => listing.status === "active");
+    const matches = active
+      .filter(
+        (listing) =>
+          (rarity === null || listing.rarity === rarity) &&
+          (franchiseId === null || listing.character.franchiseIds.includes(Number(franchiseId))) &&
+          (characterId === null || listing.character.id === Number(characterId)) &&
+          terms.every((term) => listing.character.name.toLowerCase().includes(term)),
+      )
+      .sort((a, b) => {
+        if (sort === "newest")
+          return b.listedAt.localeCompare(a.listedAt) || a.listingId.localeCompare(b.listingId);
+        const order = sort === "price_asc" ? a.price - b.price : b.price - a.price;
+        return order || a.listingId.localeCompare(b.listingId);
+      });
+    const cursor = query.get("cursor");
+    const offset = cursor === null ? 0 : Number(cursor.slice(1));
+    const next = offset + this.pageSize;
+    const page = makeListingsPage(matches.slice(offset, next), {
+      nextCursor: next < matches.length ? `o${next}` : null,
+      first: cursor === null,
+    });
+    if (cursor === null) {
+      const ids = new Set(active.flatMap((listing) => listing.character.franchiseIds));
+      page.filterFranchiseIds = page.franchises.flatMap((franchise) =>
+        ids.has(franchise.id) ? [franchise.id] : [],
+      );
+    }
+    return { status: 200, json: page };
+  }
+
+  private mine(): Answer {
+    const closed: ClosedListing[] = this.market
+      .filter((listing) => listing.mine && listing.status !== "active")
+      .map((listing) => ({
+        ...listing,
+        proceeds: listing.status === "sold" ? listing.price - listing.fee : null,
+      }));
+    return {
+      status: 200,
+      json: {
+        active: this.market.filter(isMineActive),
+        closed,
+        purchases: [...this.bought.values()],
+        left: this.left,
+        franchises: makeListingsPage([]).franchises,
+      },
+    };
+  }
+
+  private list(body: { requestId: string; characterId: number; rarity: Rarity; price: number }): Answer {
+    const replayed = this.listedBy.get(body.requestId);
+    if (replayed !== undefined) return { status: 200, json: replayed };
+    if (body.price < this.rules.priceMin[body.rarity] || body.price > this.rules.priceMax[body.rarity]) {
+      return envelope(400, "price_out_of_bounds");
+    }
+    const index = this.held.findIndex(
+      (entry) => entry.character.id === body.characterId && entry.rarity === body.rarity,
+    );
+    const entry = this.held[index];
+    if (entry === undefined || entry.available < 1) return envelope(409, "not_enough_copies");
+    const listed = entry.listed + 1;
+    const available = entry.count - listed;
+    this.held[index] = { ...entry, listed, available, recyclable: Math.min(entry.count - 1, available) };
+    const listing: Listing = {
+      listingId: `9e8d7c6b-5a4f-4e3d-8c2b-${String(this.market.length + 1).padStart(12, "0")}`,
+      kind: "card",
+      character: entry.character,
+      rarity: entry.rarity,
+      variant: "standard",
+      price: body.price,
+      fee: Math.max(this.rules.feeMin, Math.ceil((body.price * this.rules.feeBps) / 10_000)),
+      listedAt: "2026-10-30T12:00:00.000Z",
+      expiresAt: "2026-11-06T12:00:00.000Z",
+      closedAt: null,
+      status: "active",
+      mine: true,
+    };
+    this.market.push(listing);
+    this.listedBy.set(body.requestId, listing);
+    return { status: 201, json: listing };
+  }
+
+  /** `POST /api/market/listings/{id}/buy` and `.../cancel`. */
+  private listingAction(key: string, body: unknown): Answer | undefined {
+    const match = /^POST \/api\/market\/listings\/([^/]+)\/(buy|cancel)$/.exec(key);
+    if (match === null) return undefined;
+    const [, listingId, action] = match;
+    const index = this.market.findIndex((listing) => listing.listingId === listingId);
+    if (action === "cancel") return this.cancel(index);
+    return this.buyListing(index, (body as { requestId: string }).requestId);
+  }
+
+  private buyListing(index: number, requestId: string): Answer {
+    const replayed = this.bought.get(requestId);
+    if (replayed !== undefined) return { status: 200, json: { ...replayed, balance: this.balance } };
+    const listing = this.market[index];
+    if (listing === undefined) return envelope(404, "listing_not_found");
+    if (listing.mine) return envelope(409, "own_listing");
+    if (listing.status !== "active") return envelope(409, "listing_unavailable");
+    if (this.limit !== null) return marketLimit(this.limit.limit, this.limit.retryAfterSeconds);
+    if (this.balance < listing.price) {
+      return {
+        status: 409,
+        json: { error: { code: "insufficient_funds", message: "insufficient_funds", balance: this.balance } },
+      };
+    }
+    this.balance -= listing.price;
+    this.market[index] = { ...listing, status: "sold", closedAt: "2026-10-30T12:30:00.000Z" };
+    this.held.push(makeEntry(listing.character, { rarity: listing.rarity }));
+    this.left = { ...this.left, purchases: this.left.purchases - 1, spend: this.left.spend - listing.price };
+    const receipt: PurchaseReceipt = {
+      purchaseId: `4c3b2a19-8f7e-4d6c-9b5a-${String(this.bought.size + 1).padStart(12, "0")}`,
+      boughtAt: "2026-10-30T12:30:00.000Z",
+      listingId: listing.listingId,
+      price: listing.price,
+      card: {
+        kind: "card",
+        character: listing.character,
+        rarity: listing.rarity,
+        variant: "standard",
+        isNew: true,
+      },
+      franchises: makeListingsPage([]).franchises,
+      balance: this.balance,
+    };
+    this.bought.set(requestId, receipt);
+    return { status: 201, json: receipt };
+  }
+
+  private cancel(index: number): Answer {
+    const listing = this.market[index];
+    if (listing === undefined || !listing.mine) return envelope(404, "listing_not_found");
+    if (listing.status === "sold") return envelope(409, "listing_unavailable");
+    if (listing.status !== "active") return { status: 200, json: listing };
+    const cancelled: Listing = { ...listing, status: "cancelled", closedAt: "2026-10-30T12:45:00.000Z" };
+    this.market[index] = cancelled;
+    const entryIndex = this.held.findIndex(
+      (entry) => entry.character.id === listing.character.id && entry.rarity === listing.rarity,
+    );
+    const entry = this.held[entryIndex];
+    if (entry !== undefined) {
+      const listed = Math.max(0, entry.listed - 1);
+      const available = entry.count - listed;
+      this.held[entryIndex] = {
+        ...entry,
+        listed,
+        available,
+        recyclable: Math.min(entry.count - 1, available),
+      };
+    }
+    return { status: 200, json: cancelled };
   }
 
   private buy({ requestId, themeId }: { requestId: string; themeId: string }): Answer {
@@ -262,6 +463,10 @@ export class FakeGame {
   }
 }
 
+function isMineActive(listing: Listing): boolean {
+  return listing.mine && listing.status === "active";
+}
+
 export class FakeApi {
   readonly calls: ApiCall[] = [];
   readonly unexpected: string[] = [];
@@ -283,19 +488,24 @@ export class FakeApi {
   }
 
   /** The test's script for `key`, else the game's default for it, else nothing (an unexpected call). */
-  private nextReply(key: string, body: unknown): Reply | undefined {
-    const queue = this.replies.get(key);
-    if (queue === undefined || queue.length === 0) return this.game.reply(key, body);
+  private nextReply(call: ApiCall): Reply | undefined {
+    const queue = this.replies.get(call.key);
+    if (queue === undefined || queue.length === 0) return this.game.reply(call.key, call.body, call.search);
     return queue.length > 1 ? queue.shift() : queue[0];
   }
 
   async handle(route: Route): Promise<void> {
     const request = route.request();
-    const key = `${request.method()} ${new URL(request.url()).pathname}`;
+    const url = new URL(request.url());
+    const key = `${request.method()} ${url.pathname}`;
     const raw = request.postData();
-    const call: ApiCall = { key, body: raw === null ? undefined : (JSON.parse(raw) as unknown) };
+    const call: ApiCall = {
+      key,
+      body: raw === null ? undefined : (JSON.parse(raw) as unknown),
+      search: url.search,
+    };
     this.calls.push(call);
-    const reply = this.nextReply(key, call.body);
+    const reply = this.nextReply(call);
     if (reply === undefined) {
       this.unexpected.push(key);
       await route.fulfill(envelope(500, "internal"));
