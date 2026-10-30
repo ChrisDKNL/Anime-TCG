@@ -6,6 +6,9 @@ import {
   heldAllowance,
   heldOdds,
   initialGame,
+  MAX_RATE_LIMIT_WAIT_SECONDS,
+  RATE_LIMIT_FALLBACK_SECONDS,
+  rateLimitWaitSeconds,
   visibleLine,
   type GameAction,
   type GameState,
@@ -165,6 +168,27 @@ describe("heldOdds", () => {
     const state = run(initialGame(CHRIS), { type: "unavailable", ...owner, seq: 4 });
     expect(heldOdds(packsAnswer(3), state)).toBeNull();
     expect(heldOdds(packsAnswer(5), state)).toEqual(makeOdds());
+  });
+});
+
+describe("rateLimitWaitSeconds", () => {
+  it("waits as long as Retry-After says, up to the cap", () => {
+    expect(rateLimitWaitSeconds(1)).toBe(1);
+    expect(rateLimitWaitSeconds(42)).toBe(42);
+    expect(rateLimitWaitSeconds(3599)).toBe(3599);
+    expect(rateLimitWaitSeconds(3600)).toBe(3600);
+  });
+
+  it("caps a longer Retry-After at 3600 s, however large", () => {
+    expect(MAX_RATE_LIMIT_WAIT_SECONDS).toBe(3600);
+    expect(rateLimitWaitSeconds(3601)).toBe(3600);
+    expect(rateLimitWaitSeconds(86_400)).toBe(3600);
+    expect(rateLimitWaitSeconds(Infinity)).toBe(3600);
+  });
+
+  it("without Retry-After waits the rate limit's 60 s window", () => {
+    expect(RATE_LIMIT_FALLBACK_SECONDS).toBe(60);
+    expect(rateLimitWaitSeconds(undefined)).toBe(60);
   });
 });
 

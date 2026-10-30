@@ -21,6 +21,7 @@ import {
   gameReducer,
   initialGame,
   nextGame,
+  rateLimitWaitSeconds,
   type GameOwner,
   type GameState,
   type PacksAnswer,
@@ -32,8 +33,6 @@ import { revealCopy } from "../lib/packsCopy";
 import type { ShellActions } from "./useShell";
 import { useSingleFlight } from "./useSingleFlight";
 
-/** The wait after a 429 without `Retry-After`: the window of `PACK_RATE_LIMIT` (packs-page.md §9, question 3). */
-const RATE_LIMIT_FALLBACK_SECONDS = 60;
 const SECOND_MS = 1000;
 
 /**
@@ -195,7 +194,7 @@ export function useGameState({ account, shell, packsShowing }: Options): Game | 
           dispatch({ type: "unavailable", ...of, seq });
           return;
         case "rate_limited": {
-          const seconds = err.retryAfterSeconds ?? RATE_LIMIT_FALLBACK_SECONDS;
+          const seconds = rateLimitWaitSeconds(err.retryAfterSeconds);
           dispatch({ type: "rateLimited", ...of, until: performance.now() + seconds * SECOND_MS });
           return;
         }

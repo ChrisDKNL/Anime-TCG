@@ -195,6 +195,20 @@ export function heldOdds(packs: PacksAnswer | undefined, state: GameState): Publ
   return packs.answer.odds;
 }
 
+/** The wait after a 429 without `Retry-After`: the window of `PACK_RATE_LIMIT` (packs-page.md §9, question 3). */
+export const RATE_LIMIT_FALLBACK_SECONDS = 60;
+/**
+ * The longest 429 wait the page counts down, whatever `Retry-After` names, as
+ * the account forms cap theirs: a wait of hours reads as broken, and the next
+ * activation asks the server again anyway.
+ */
+export const MAX_RATE_LIMIT_WAIT_SECONDS = 3600;
+
+/** How long a 429 keeps `Open pack` waiting, from its `Retry-After` (in whole seconds, at least 1, if sent). */
+export function rateLimitWaitSeconds(retryAfterSeconds: number | undefined): number {
+  return Math.min(retryAfterSeconds ?? RATE_LIMIT_FALLBACK_SECONDS, MAX_RATE_LIMIT_WAIT_SECONDS);
+}
+
 /** The pack control's row (§4.1), from the held allowance and whether cards are available. */
 export type Row = "unavailable" | "atCap" | "ready" | "waiting";
 

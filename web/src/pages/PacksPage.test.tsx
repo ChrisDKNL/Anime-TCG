@@ -376,6 +376,31 @@ describe("/packs: opening", () => {
     expect(screen.queryByText(/short pause/)).not.toBeInTheDocument();
   });
 
+  it("429 with a Retry-After of a day: the wait counts down from the 3600 s cap", async () => {
+    vi.useFakeTimers({
+      shouldAdvanceTime: true,
+      toFake: ["setTimeout", "clearTimeout", "performance", "Date"],
+    });
+    renderApp(
+      { [OPEN]: { ...envelope(429, "rate_limited"), headers: { "Retry-After": "86400" } } },
+      account,
+      "/packs",
+    );
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime.bind(vi) });
+    await user.click(await openButton());
+    expect(await openButton("Try again in 3600 s")).toHaveAttribute("aria-disabled", "true");
+    act(() => {
+      vi.advanceTimersByTime(3_599_000);
+    });
+    expect(main().getByRole("button", { name: "Try again in 1 s" })).toBeInTheDocument();
+    act(() => {
+      vi.advanceTimersByTime(1_000);
+    });
+    // The 429 kept the key: the button comes back as Try again.
+    expect(main().getByRole("button", { name: "Try again" })).not.toHaveAttribute("aria-disabled");
+    expect(liveRegion()).toHaveTextContent("You can try again now.");
+  });
+
   it("a generic failure (500): the alert, the key discarded", async () => {
     const { fetchMock } = renderApp(
       { [OPEN]: sequence(envelope(500, "internal"), { status: 201, body: makePackOpened() }) },
