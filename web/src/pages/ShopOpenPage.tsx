@@ -5,6 +5,7 @@ import { LINK_BUTTON } from "../components/layout/styles";
 import { Reveal, type RevealPack } from "../components/packs/Reveal";
 import { useEntrance } from "../hooks/useEntrance";
 import { useGame } from "../hooks/useGame";
+import { isolate } from "../lib/bidi";
 import { shopCopy } from "../lib/economyCopy";
 import type { ShopPack } from "../lib/game";
 import { pageHeading } from "../lib/routes";
@@ -13,7 +14,7 @@ function toReveal({ receipt, theme }: ShopPack): RevealPack {
   return {
     id: receipt.pack.openingId,
     heading: <LoginText text={{ template: shopCopy.revealHeading, login: theme.title }} />,
-    label: shopCopy.revealHeading(theme.title),
+    label: shopCopy.revealHeading(isolate(theme.title)),
     summaryLead: "",
     cards: receipt.pack.cards,
     franchises: receipt.pack.franchises,
