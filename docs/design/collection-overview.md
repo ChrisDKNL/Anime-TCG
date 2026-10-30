@@ -449,7 +449,7 @@ Names, native names, franchise titles, native titles and image URLs come from An
 4. One-line renderings (tile name and series, the series line in the stats, a Series view row's title from `sm`) use `truncate` and carry `title` with the full string. The dialog heading, series lines, `Also in`, confirmation headings and bodies, the result heading and the no-match message wrap with `break-words` (`overflow-wrap: anywhere`), so a 200-character name without spaces stays inside the dialog.
 5. Series option labels are cut at 60 grapheme clusters (`Intl.Segmenter`) followed by `…`. The full title still matches a search.
 6. Tile text lines clip vertically (`overflow-hidden` with `leading-tight`), so a stack of combining marks cannot paint over the tile below.
-7. `imageUrl` is only ever an `<img src>`. An image the browser cannot load, or that the CSP (C8) refuses, shows the `No image` box. Card art is never a link.
+7. `imageUrl` is only ever an `<img src>`. An image the browser cannot load, or that the CSP (C8) refuses, shows the `No image` box. A new address, as a refetch after a snapshot update brings, resets the art: the new image is asked for and shows on the placeholder until it loads. The address that failed is not tried again while the card shows it (manager decision, 2026-10-30). Card art is never a link.
 8. Normalisation (§3.3) is for matching only. Everything on screen is the original string.
 9. The price field accepts digits only after trimming; the value sent is the parsed integer, never the raw text.
 

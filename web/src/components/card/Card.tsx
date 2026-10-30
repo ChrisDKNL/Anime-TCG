@@ -145,7 +145,6 @@ export function Card({
   size = "small",
   standalone = true,
 }: Props) {
-  const [art, setArt] = useState<ArtState>("loading");
   const glow = effects === "none" ? "" : GLOW[rarity];
   const sized = SIZE[size];
   const Root = standalone ? "article" : "span";
@@ -173,22 +172,8 @@ export function Card({
           </span>
         </span>
         <span className={`relative block min-h-0 flex-1 overflow-hidden card-art-placeholder ${sized.art}`}>
-          {art === "failed" ? (
-            <span
-              className={`absolute inset-0 flex items-center justify-center text-card-ink-subtle ${sized.noImage}`}
-            >
-              {cardCopy.noImage}
-            </span>
-          ) : (
-            <img
-              src={character.imageUrl}
-              alt=""
-              loading="lazy"
-              onLoad={() => setArt("loaded")}
-              onError={() => setArt("failed")}
-              className={`h-full w-full object-cover object-top ${art === "loaded" ? "" : "invisible"}`}
-            />
-          )}
+          {/* A new address is a new image: the art starts over, while the same address never retries (collection-overview.md §5.6 rule 7). */}
+          <CardArt key={character.imageUrl} url={character.imageUrl} noImage={sized.noImage} />
           {character.rank !== null && (
             <span
               className={`absolute bg-card-chip py-px font-mono leading-tight text-card-ink-subtle tabular-nums ${sized.rank}`}
@@ -207,5 +192,31 @@ export function Card({
         </span>
       </span>
     </Root>
+  );
+}
+
+/**
+ * The art (card-and-rarity.md §3.3): hidden on the placeholder until it
+ * loads, and `No image` when the browser cannot load it. Its state belongs
+ * to one address, so the card keys it by `url`.
+ */
+function CardArt({ url, noImage }: { url: string; noImage: string }) {
+  const [art, setArt] = useState<ArtState>("loading");
+  if (art === "failed") {
+    return (
+      <span className={`absolute inset-0 flex items-center justify-center text-card-ink-subtle ${noImage}`}>
+        {cardCopy.noImage}
+      </span>
+    );
+  }
+  return (
+    <img
+      src={url}
+      alt=""
+      loading="lazy"
+      onLoad={() => setArt("loaded")}
+      onError={() => setArt("failed")}
+      className={`h-full w-full object-cover object-top ${art === "loaded" ? "" : "invisible"}`}
+    />
   );
 }

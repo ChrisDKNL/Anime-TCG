@@ -126,6 +126,38 @@ describe("Card (card-and-rarity.md)", () => {
     expect(card.querySelector("img")).toBeNull();
   });
 
+  it("starts the art over at a new image address, and never retries the address that failed (collection-overview.md §5.6 rule 7)", () => {
+    const OLD = "https://s4.anilist.co/file/anilistcdn/character/large/old.png";
+    const NEW = "https://s4.anilist.co/file/anilistcdn/character/large/new.png";
+    const card = (imageUrl: string) => (
+      <Card
+        character={makeCharacter(1_234, { name: "Frieren", imageUrl })}
+        rarity="rare"
+        series={null}
+        poolSize={null}
+        effects="full"
+      />
+    );
+    const { rerender } = render(card(OLD));
+    const article = screen.getByRole("article");
+    fireEvent.error(article.querySelector("img")!);
+    expect(within(article).getByText("No image")).toBeInTheDocument();
+
+    // The same address again, as a refetch that changed something else brings it: no retry.
+    rerender(card(OLD));
+    expect(within(article).getByText("No image")).toBeInTheDocument();
+    expect(article.querySelector("img")).toBeNull();
+
+    // A new address: the art is asked for again, on the placeholder until it loads.
+    rerender(card(NEW));
+    const art = article.querySelector("img");
+    expect(art).toHaveAttribute("src", NEW);
+    expect(art).toHaveClass("invisible");
+    expect(within(article).queryByText("No image")).not.toBeInTheDocument();
+    fireEvent.load(art!);
+    expect(art).not.toHaveClass("invisible");
+  });
+
   it('keeps the full name and series in `title` for the truncated lines, isolated, each in a `dir="auto"` element', () => {
     const card = renderCard("common");
     const name = within(card).getByText("Frieren");
