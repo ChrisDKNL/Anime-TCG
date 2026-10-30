@@ -1,8 +1,11 @@
-import type { PackAllowance } from "@anime-tcg/shared/api";
+import type { AllowanceRules, PackAllowance } from "@anime-tcg/shared/api";
 import { PACK_CAP, PACK_INTERVAL_MINUTES } from "@anime-tcg/shared/economy";
 
 const INTERVAL_MS = PACK_INTERVAL_MINUTES * 60_000;
 const FULL_MS = PACK_CAP * INTERVAL_MS;
+
+/** The rules every account's allowance runs on, as the landing page states them (navigation-and-landing.md §3.8). */
+export const ALLOWANCE_RULES: AllowanceRules = { intervalSeconds: INTERVAL_MS / 1000, cap: PACK_CAP };
 
 /** A null anchor is a full allowance: the clock reads as if the last pack arrived `PACK_CAP` intervals ago. */
 function effectiveAnchor(anchor: Date | null, now: Date): number {
@@ -22,7 +25,7 @@ export function allowanceAt(anchor: Date | null, now: Date): PackAllowance {
     available === PACK_CAP
       ? null
       : Math.max(1, Math.ceil((from + (available + 1) * INTERVAL_MS - now.getTime()) / 1000));
-  return { available, cap: PACK_CAP, intervalSeconds: INTERVAL_MS / 1000, nextPackInSeconds };
+  return { available, ...ALLOWANCE_RULES, nextPackInSeconds };
 }
 
 /**

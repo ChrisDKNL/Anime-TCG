@@ -131,6 +131,27 @@ describe("planPack: §5.4.3's precedence, every row", () => {
     expect(tablesOf(planPack(due, "shop", scripted([NOT_RADIANT])))).toEqual([...SLOT_ODDS]);
     expect(planPack(due, "shop", scripted([RADIANT]))).toMatchObject({ kind: "radiant", pity: false });
   });
+
+  // navigation-and-landing.md §3.8 item 3: no account, so no counters; never Enchanted or pity-due, Radiant as every pack.
+  it.each([
+    ["no counters", fresh],
+    ["counters that would make a free pack Enchanted", { packsSinceMythic: 0, freePacksOpened: 9 }],
+    ["counters that would make a free pack pity-due", { packsSinceMythic: 299, freePacksOpened: 0 }],
+    ["counters that would make it both", { packsSinceMythic: 10_000, freePacksOpened: 19 }],
+  ])("a demo pack with %s is a standard pack of the five slot tables", (_label, counters) => {
+    const rng = scripted([NOT_RADIANT]);
+    const plan = planPack(counters, "demo", rng);
+    expect(plan).toMatchObject({ kind: "standard", pity: false });
+    expect(tablesOf(plan)).toEqual([...SLOT_ODDS]);
+    expect(rng.calls).toEqual([[0, ODDS_SCALE]]);
+  });
+
+  it("a demo pack is Radiant on a Radiant roll, exactly as a free pack", () => {
+    expect(planPack(fresh, "demo", scripted([RADIANT]))).toEqual(
+      planPack(fresh, "free", scripted([RADIANT])),
+    );
+    expect(planPack(fresh, "demo", scripted([RADIANT]))).toMatchObject({ kind: "radiant", pity: false });
+  });
 });
 
 describe("drawPack", () => {

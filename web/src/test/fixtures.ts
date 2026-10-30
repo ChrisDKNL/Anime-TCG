@@ -2,6 +2,9 @@ import type {
   CharacterPublic,
   CollectionEntry,
   CollectionResponse,
+  DemoCard,
+  DemoOpened,
+  DemoResponse,
   FranchiseRef,
   OpenedCard,
   PackAllowance,
@@ -163,4 +166,32 @@ export function makeCollection(entries: CollectionEntry[] = []): CollectionRespo
     franchises: FRANCHISES,
     entries,
   };
+}
+
+/** `GET /api/demo` with the first real snapshot's facts: 2 983 characters from 100 entries. */
+export function makeDemo(overrides: Partial<DemoResponse> = {}): DemoResponse {
+  return {
+    odds: makeOdds(),
+    pool: { characters: 2_983, entries: 100 },
+    allowance: { intervalSeconds: 600, cap: 3 },
+    perVisit: 10,
+    ...overrides,
+  };
+}
+
+/** `GET /api/demo` without a snapshot: the rules, no odds and no pool. */
+export function makeUnavailableDemo(): DemoResponse {
+  return makeDemo({ odds: null, pool: null });
+}
+
+export function makeDemoCard(slot: number, overrides: Partial<DemoCard> = {}): DemoCard {
+  const { kind: _kind, variant: _variant, isNew: _isNew, ...card } = makeOpenedCard(slot, overrides);
+  return card;
+}
+
+/** A demo pack: the fixture pack's tiers, without anything an account's pack carries. */
+export function makeDemoOpened(
+  cards: DemoCard[] = [0, 1, 2, 3, 4].map((slot) => makeDemoCard(slot)),
+): DemoOpened {
+  return { cards, franchises: FRANCHISES };
 }
