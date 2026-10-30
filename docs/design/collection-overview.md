@@ -177,21 +177,24 @@ Per screen, with the field that supplies it. ✓ means the server supplies it as
 
 **Cards view** (`GET /api/collection`, `CollectionResponse`, `collection-packs.md` §6.2 with `economy.md` §11.2's additions)
 
-| Need                                                         | Field                                                             | Status |
-| ------------------------------------------------------------ | ----------------------------------------------------------------- | ------ |
-| One tile per entry, keyed by character and rarity            | `entries[].character.id`, `entries[].rarity` (six tiers)          | ✓      |
-| Reserved kind and variant (ignored while each has one value) | `entries[].kind` (`"card"`), `entries[].variant` (`"standard"`)   | ✓      |
-| Name, native name, art                                       | `character.name`, `character.nameNative`, `character.imageUrl`    | ✓      |
-| Rank chip on the card, and the pool size it is out of        | `character.rank`, `snapshot.characterCount`                       | ✓      |
-| Franchises per character, primary first                      | `character.franchiseIds`                                          | ✓      |
-| Franchise titles for tile, search, filter, disambiguation    | `franchises[]`: `id`, `title`, `titleNative`, `startYear`         | ✓      |
-| Copies, listed, available                                    | `count`, `listed`, `available`                                    | ✓      |
-| Recyclable duplicates                                        | `recyclable` (`economy.md` §11.2)                                 | ✓      |
-| Sort and facts dates                                         | `firstObtainedAt`, `lastObtainedAt`                               | ✓      |
-| Current tier and snapshot membership                         | `character.tier`, `character.inCurrentSnapshot`                   | ✓      |
-| Totals line, header link label                               | `totals.cards`, `totals.duplicates`, `totals.byRarity` (six keys) | ✓      |
-| Pool completion                                              | `completion.pool.owned`, `.total`                                 | ✓      |
-| Series option labels and the filtered series line            | `completion.franchises[]` by `franchiseId`                        | ✓      |
+| Need                                                         | Field                                                             | Status                                    |
+| ------------------------------------------------------------ | ----------------------------------------------------------------- | ----------------------------------------- |
+| One tile per entry, keyed by character and rarity            | `entries[].character.id`, `entries[].rarity` (six tiers)          | ✓                                         |
+| Reserved kind and variant (ignored while each has one value) | `entries[].kind` (`"card"`), `entries[].variant` (`"standard"`)   | ✓                                         |
+| Name, native name, art                                       | `character.name`, `character.nameNative`, `character.imageUrl`    | ✓                                         |
+| Rank chip on the card, and the pool size it is out of        | `character.rank`, `snapshot.characterCount`                       | ✓                                         |
+| Franchises per character, primary first                      | `character.franchiseIds`                                          | ✓                                         |
+| Franchise titles for tile, search, filter, disambiguation    | `franchises[]`: `id`, `title`, `titleNative`, `startYear`         | ✓                                         |
+| Copies                                                       | `count`                                                           | ✓                                         |
+| Listed and available copies                                  | `listed`, `available`                                             | pending: economy PRs (`economy.md` §11.2) |
+| Recyclable duplicates                                        | `recyclable`                                                      | pending: economy PRs (`economy.md` §11.2) |
+| Sort and facts dates                                         | `firstObtainedAt`, `lastObtainedAt`                               | ✓                                         |
+| Current tier and snapshot membership                         | `character.tier`, `character.inCurrentSnapshot`                   | ✓                                         |
+| Totals line, header link label                               | `totals.cards`, `totals.duplicates`, `totals.byRarity` (six keys) | ✓                                         |
+| Pool completion                                              | `completion.pool.owned`, `.total`                                 | ✓                                         |
+| Series option labels and the filtered series line            | `completion.franchises[]` by `franchiseId`                        | ✓                                         |
+
+`listed`, `available` and `recyclable` are not in `CollectionEntry` as shipped in #28: they arrive with the economy PRs that add `economy.md` §11.2 to the contract, and the card dialog's facts, the tile's listed line and the List and Recycle sections that read them land with those PRs (manager decision, 2026-10-30).
 
 **Series view**: `completion.franchises[]` in the server's popularity order, every franchise of the current snapshot including 0-owned rows; titles through `franchises[]`; `snapshot.takenAt` for the source line (all ✓).
 
