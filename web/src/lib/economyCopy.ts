@@ -116,6 +116,10 @@ export const recycleCopy = {
   recycled: (count: number, name: string, credited: number, balance: number) =>
     `Recycled ${plural(count, "copy", "copies")} of ${name} for ${amount(credited)}. You have ${amount(balance)}.`,
   valueChanged: (value: number) => ` Each duplicate now recycles for ${amount(value)}.`,
-  // "balance" here only, so the name stays after a number or in a label (manager decision, 2026-10-30).
-  ceiling: "Your balance is at its ceiling, so nothing was recycled.",
+  /**
+   * `balance_limit` (manager decision, 2026-10-30). The spec's `That would take you past <max> Karma, …`
+   * needs `MAX_BALANCE` in the wallet's published rules, which `KarmaRules` does not carry yet, so the
+   * line names no number: the client computes none.
+   */
+  ceiling: `That would take you past the most ${CURRENCY_NAME} you can hold, so nothing was recycled.`,
 } as const;

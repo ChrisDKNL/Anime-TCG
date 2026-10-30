@@ -253,7 +253,7 @@ describe("Recycle for Karma: the confirmation and its answers (§3.6 steps 4 to 
     const { user } = await confirmRecycle({ [RECYCLE]: envelope(409, "balance_limit") });
     await user.click(confirmButton());
     expect(await within(dialog()).findByRole("alert")).toHaveTextContent(
-      "Your balance is at its ceiling, so nothing was recycled.",
+      "That would take you past the most Karma you can hold, so nothing was recycled.",
     );
     expect(confirmButton()).toHaveAttribute("aria-disabled", "true");
   });

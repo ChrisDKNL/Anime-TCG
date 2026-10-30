@@ -264,7 +264,7 @@ test.describe("Recycle for Karma in the card dialog", () => {
     await dialog.getByRole("button", { name: "Recycle…" }).click();
     await dialog.getByRole("button", { name: "Recycle for 80 Karma" }).click();
     await expect(dialog.getByRole("alert")).toHaveText(
-      "Your balance is at its ceiling, so nothing was recycled.",
+      "That would take you past the most Karma you can hold, so nothing was recycled.",
     );
     await expect(dialog.getByRole("button", { name: "Recycle for 80 Karma" })).toHaveAttribute(
       "aria-disabled",
