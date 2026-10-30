@@ -1,6 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useState } from "react";
-import { NetworkError } from "../lib/api";
 import { controlRow, heldAllowance, heldOdds, visibleLine, type Held } from "../lib/game";
 import { packControlView, type ControlView } from "../lib/packControl";
 import { packControlCopy } from "../lib/packsCopy";
@@ -41,13 +40,15 @@ export function usePacksPage() {
   const { refetch } = packs;
   /**
    * The countdown reached zero, or `Check again` after that check failed:
-   * exactly one `GET`, and no timer until it answers. When it brings the
+   * exactly one `GET`, and no timer until it answers. No answer or an error
+   * envelope (a 500) both show the failure line and `Check again`. When it brings the
    * first pack while the count was 0, the live region says so once (§7).
    */
   const checkNextPack = useCallback(async () => {
     const before = held;
     const result = await refetch();
-    setCheckFailedAt(before !== null && result.error instanceof NetworkError ? before.seq : null);
+    // An error envelope is no answer to the question either: the page cannot tell when the pack comes.
+    setCheckFailedAt(before !== null && result.isError ? before.seq : null);
     const after = result.data;
     if (before === null || after === undefined || after.seq <= before.seq) return;
     const { available, cap } = after.answer.allowance;
