@@ -475,6 +475,49 @@ describe("the card dialog (§3.4, §3.7, §4.5)", () => {
     expect(tileNames()[2]).toBe("Old Hero");
   });
 
+  it("an entry that goes with focus inside the details: focus moves to `You no longer have this card.` (§3.7, §4.5)", async () => {
+    const data = makeOverviewCollection();
+    const ids = [200, 201, 202, 203, 204, 205, 206];
+    data.franchises.push(
+      ...ids.map((id) => ({ id, title: `Saga ${id}`, titleNative: null, startYear: 2000 })),
+    );
+    data.entries[0] = makeEntry(makeCharacter(1, { name: "Spike Spiegel", franchiseIds: [100, ...ids] }), {
+      rarity: "epic",
+    });
+    const fewer = structuredClone(data);
+    fewer.entries = fewer.entries.filter((entry) => entry.character.id !== 1);
+    const { user, queryClient } = await openCollection(
+      sequence({ status: 200, body: data }, { status: 200, body: fewer }),
+    );
+    await user.click(within(grid()).getByRole("button", { name: /Spike/ }));
+    const dialog = screen.getByRole("dialog", { name: "Spike Spiegel" });
+    within(dialog).getByRole("button", { name: "and 2 more" }).focus();
+    await queryClient.refetchQueries({ queryKey: ["collection"] });
+    const gone = await within(dialog).findByText(
+      "You no longer have this card.",
+      {},
+      { timeout: ASYNC_TIMEOUT },
+    );
+    expect(gone).toHaveAttribute("tabindex", "-1");
+    expect(gone).toHaveFocus();
+    // The next Tab goes on to the Close under it.
+    await user.tab();
+    expect(within(dialog).getAllByRole("button", { name: "Close" }).at(-1)).toHaveFocus();
+  });
+
+  it("an entry that goes with focus on the top Close: focus stays there", async () => {
+    const fewer = makeOverviewCollection();
+    fewer.entries = fewer.entries.filter((entry) => entry.character.id !== 3);
+    const { user, queryClient } = await openCollection(sequence(overview, { status: 200, body: fewer }));
+    await user.click(within(grid()).getByRole("button", { name: /Gon/ }));
+    const dialog = screen.getByRole("dialog");
+    const close = within(dialog).getByRole("button", { name: "Close" });
+    close.focus();
+    await queryClient.refetchQueries({ queryKey: ["collection"] });
+    await within(dialog).findByText("You no longer have this card.", {}, { timeout: ASYNC_TIMEOUT });
+    expect(close).toHaveFocus();
+  });
+
   it("closing on a page that got shorter focuses the last tile", async () => {
     const onlyOne = makeOverviewCollection();
     onlyOne.entries = onlyOne.entries.filter((entry) => entry.character.id === 1);

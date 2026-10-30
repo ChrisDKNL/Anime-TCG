@@ -104,6 +104,8 @@ test("BUG: focus inside the dialog's details falls to <body> when a refetch remo
     tag: expect.not.stringMatching(/^BODY$/),
     inside: true,
   });
+  // §3.7 step 4 (manager decision, 2026-10-30): the message that replaced the details has it.
+  await expect(openDialog(page).getByText("You no longer have this card.")).toBeFocused();
 });
 
 test("BUG: a tile whose art failed keeps `No image` after a refetch brings a new image address", async ({

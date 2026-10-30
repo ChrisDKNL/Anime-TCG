@@ -34,7 +34,9 @@ interface Props {
  */
 export function CardDialog({ indexed, names, poolSize, onClose }: Props) {
   const ref = useRef<HTMLDialogElement>(null);
+  const goneRef = useRef<HTMLParagraphElement>(null);
   const headingId = useId();
+  const gone = indexed === null;
 
   useLayoutEffect(() => {
     const dialog = ref.current;
@@ -42,6 +44,15 @@ export function CardDialog({ indexed, names, poolSize, onClose }: Props) {
     dialog.showModal();
     dialog.focus();
   }, []);
+
+  // §3.7, §4.5: when the entry goes with focus inside the details, the focused control went with
+  // them; focus moves to the message that replaced them, never to <body>. Focus on the dialog
+  // itself or on the top Close stays where it is.
+  useLayoutEffect(() => {
+    const dialog = ref.current;
+    if (!gone || dialog === null || dialog.contains(document.activeElement)) return;
+    goneRef.current?.focus();
+  }, [gone]);
 
   const close = () => ref.current?.close();
 
@@ -54,7 +65,7 @@ export function CardDialog({ indexed, names, poolSize, onClose }: Props) {
       </div>
       {indexed === null ? (
         <div className="flex flex-col items-start gap-4">
-          <p id={headingId} className="text-sm text-zinc-300">
+          <p id={headingId} ref={goneRef} tabIndex={-1} className="text-sm text-zinc-300 focus:outline-none">
             {dialogCopy.gone}
           </p>
           <button type="button" onClick={close} className={BUTTON.secondary}>
