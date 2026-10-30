@@ -34,7 +34,7 @@ Terms: **allowance**, the server's `PackAllowance` (`available`, `cap`, `interva
 ### 3.1 Arriving on `/packs`
 
 1. `navigation-and-landing.md` §3.6 sets the title `Packs · Anime TCG` and moves focus to the `h1` `Packs`, except on a load or reload. The `h1` is rendered from the start, in every state.
-2. Each time the page is shown, it sends one `GET /api/packs`. A held answer from earlier in the session shows at once, and the new answer replaces it silently. With no held answer, the control area is blank for the first 300 ms, then shows the loading state (§4.1).
+2. Each time the page is shown, it sends one `GET /api/packs`. A held answer from earlier in the session shows at once, and the new answer replaces it silently. With no held answer, the control area is blank for the first 300 ms, then shows the loading state (§4.1). **Except while an opening is in flight** (manager decision, 2026-10-30): `/packs` or `/packs/open` shown during a flight sends no `GET`, since the opening's answer carries the allowance and a `GET` sent after the opening could still be answered from before it on the server, showing the count from before the pack. This holds for `/packs/open` reached by the push of §3.3 step 2 too.
 3. `/packs` shows no reveal: the cards are on `/packs/open` (§3.7). While the signed-in layout holds a current opening with cards, the control block ends with the text link `See your latest pack`, which pushes `/packs/open`; the cards show there without their entrance.
 4. Branches on the answer:
    - `odds` not null: the control renders from `allowance` (§4.1, the ready, waiting and at-cap rows). The pity line and `Pack odds` show (§3.5).

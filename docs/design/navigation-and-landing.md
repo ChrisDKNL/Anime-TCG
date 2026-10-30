@@ -221,6 +221,10 @@ Owner, 2026-10-30: "Opening packs should also have their own route." `/packs` ke
 9. **Scroll**: an opening page starts at the top.
 10. **The demo is not an opening page.** It opens on `/demo` (§3.14), a public page that shows its button even with nothing held, so it has no replace rule.
 11. **Later option, out of scope**: an address per opening, `/packs/<id>` (§2).
+12. **Settled in the build** (manager decision, 2026-10-30):
+    - **An answer without cards leaves nothing held.** The opening it answered was the current opening (step 2), so after a 409, 503, 429, other envelope or no answer there are no cards to show: `See your latest pack` goes, and Back or Forward onto a `/packs/open` entry replaces it with `/packs` (step 3). A held key still makes `Try again` on `/packs` push `/packs/open`, which shows the replayed pack.
+    - **"Showing" includes the page being navigated to.** The push happens in the same task as the request, so a fast answer can arrive before `/packs/open` (or `/demo`) has mounted. Such an answer counts as landing on that page: it is announced, its cards enter, and an answer without cards replaces the page with `/packs`.
+    - **An entrance plays once per pack.** Cards that landed while their page was showing (or being navigated to) enter on their first showing only; Back, Forward and the `See your latest…` links show them without it. A shop pack's first showing is the push after its purchase.
 
 ### 3.14 The demo page (`/demo`, signed out)
 
@@ -242,6 +246,7 @@ Owner, 2026-10-30 (§9.2 question 2, option B): the landing demo opens on a publ
 10. **Signed in**: replaced to `/packs` (§3.3 step 7), on a load as on a navigation.
 11. **Header**: the signed-out header; no link is marked, since neither `Log in` nor `Register` is the page.
 12. **Leaving `/demo` during a flight**: the request finishes; its answer is handled as step 6.
+13. **Settled in the build** (manager decision, 2026-10-30): the 503 state and the failure line are held with the count, the wait and the cards (step 6), so `/` and `/demo` always show the same control: a 503 keeps the unavailable line in the button's place for the page load, and the failure line stays until the next try. When the last pack of the visit lands while `/` is showing (the visitor went back during the flight), the Join offer takes the focus the button had there, as it does on `/demo`; a page shown again after the last pack never moves focus to it (§3.7 item 1.7).
 
 ## 4. States
 
