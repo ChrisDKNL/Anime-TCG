@@ -8,7 +8,7 @@ const ready: Control = { kind: "button", label: { kind: "open" }, enabled: true,
 
 function renderControl(control: Control = ready) {
   const onOpen = vi.fn();
-  render(<DemoControl control={control} onOpen={onOpen} />);
+  render(<DemoControl control={control} finishedHere={false} onOpen={onOpen} />);
   return { onOpen, button: screen.getByRole("button") };
 }
 

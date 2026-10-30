@@ -24,8 +24,9 @@ import {
 /**
  * Test plan (tester's hunt): what the demo PR's own landing e2e does not reach, against the scripted
  * api (docs/design/navigation-and-landing.md §3.7, §3.8, §3.12 item 6, §6.2, §7, §8;
- * card-and-rarity.md §5.3; packs-page.md §3.3 step 2). The cap across a soft navigation is a bug and
- * has its own file, bug-demo-cap-resets-on-soft-navigation.spec.ts.
+ * card-and-rarity.md §5.3; packs-page.md §3.3 step 2). The cap across a soft navigation was a bug
+ * (tester, 2026-10-30) and is a regression test at the end of this file: the count and a 429's wait
+ * last for the page load (manager decision, 2026-10-30).
  *
  * - Join offer focus (§7 "Landing demo"): after the tenth pack the Join sentence has focus, the live
  *   region still reads the tenth summary, and `Register` is the next Tab stop.
@@ -452,4 +453,95 @@ test("three separate clicks while one demo opening is in flight send one POST", 
   await expect(demoList(page).getByRole("listitem")).toHaveCount(5);
   await expect(demoButton(page)).toBeFocused();
   expect(api.count("POST /api/demo/open")).toBe(1);
+});
+
+/**
+ * Regression (tester, 2026-10-30): the count of demo packs restarted on a soft navigation, because it
+ * lived in the landing page's own state. §3.7 item 1.7 caps the demo per page load, which is the
+ * document's lifetime (manager decision, 2026-10-30): following a link out of `/` and coming back
+ * with Back, Forward or the wordmark keeps the count, and any 429 wait; the cards are not kept (§3.7
+ * "Demo cards are not kept"), and a reload starts the count over.
+ */
+test.describe("the visit's count across a soft navigation (regression)", () => {
+  const KEEP = "To keep cards, register with an invite code.";
+  const h1 = (page: Page, name: string) => page.getByRole("heading", { level: 1, name, exact: true });
+
+  /** Opens `n` demo packs, waiting for each one's cards (the fake api deals new characters every time). */
+  async function openPacks(page: Page, api: { count: (key: string) => number }, n: number): Promise<void> {
+    for (let i = 0; i < n; i += 1) {
+      const before = api.count("POST /api/demo/open");
+      await demoButton(page).click();
+      await expect.poll(() => api.count("POST /api/demo/open")).toBe(before + 1);
+      await expect(demoList(page).getByRole("article").first()).toHaveAccessibleName(
+        new RegExp(`Character ${5_000 + (before + 1) * 10}\\b`),
+      );
+    }
+  }
+
+  test("a link out of `/` and Back: the cards are gone but the page load's count goes on (§3.7 item 1.7)", async ({
+    page,
+    api,
+  }) => {
+    await page.goto("/");
+    await openPacks(page, api, 4);
+    await main(page).getByText(KEEP).getByRole("link", { name: "register" }).click();
+    await expect(h1(page, "Register")).toBeFocused();
+    await page.goBack();
+    await expect(h1(page, "Anime TCG")).toBeVisible();
+    // Not kept (§3.7): the round trip discards the cards.
+    await expect(demoList(page)).toHaveCount(0);
+
+    // Six more is ten in this page load: the Join offer takes the button's place.
+    await openPacks(page, api, 6);
+    expect(api.count("POST /api/demo/open")).toBe(10);
+    await expect(main(page).getByText(JOIN).first()).toBeFocused();
+    await expect(demoButton(page)).toHaveCount(0);
+  });
+
+  test("after the tenth demo pack, Log in and Back, Forward and Back again: still the Join offer, no button", async ({
+    page,
+    api,
+  }) => {
+    await page.goto("/");
+    await openPacks(page, api, 10);
+    await expect(demoButton(page)).toHaveCount(0);
+    // The offer's own `Log in`, the first one in the page's main.
+    await main(page).getByRole("link", { name: "Log in" }).first().click();
+    await expect(h1(page, "Log in")).toBeFocused();
+    await page.goBack();
+    await expect(h1(page, "Anime TCG")).toBeVisible();
+    await expect(demoButton(page)).toHaveCount(0);
+    await page.goForward();
+    await expect(h1(page, "Log in")).toBeVisible();
+    await page.goBack();
+    await expect(h1(page, "Anime TCG")).toBeVisible();
+    await expect(demoButton(page)).toHaveCount(0);
+    expect(api.count("POST /api/demo/open")).toBe(10);
+
+    // A reload is a new page load: the count starts over (§3.7 item 1.7, accepted).
+    await page.reload();
+    await expect(demoButton(page)).toBeVisible();
+  });
+
+  test("a 429's wait goes on across a link out and Back, and a return finds the heading focused, not the offer", async ({
+    page,
+    api,
+  }) => {
+    api.on(
+      "POST /api/demo/open",
+      { ...envelope(429, "rate_limited"), headers: { "Retry-After": "30" } },
+      { status: 200, json: makeDemoOpened() },
+    );
+    await page.goto("/");
+    await demoButton(page).click();
+    await expect(demoButton(page, "Try again in 30 s")).toHaveAttribute("aria-disabled", "true");
+    await main(page).getByRole("link", { name: "Log in" }).first().click();
+    await expect(h1(page, "Log in")).toBeFocused();
+    await page.goBack();
+    await expect(h1(page, "Anime TCG")).toBeFocused();
+    const waiting = main(page).getByRole("button", { name: /^Try again in \d+ s$/ });
+    await expect(waiting).toHaveAttribute("aria-disabled", "true");
+    await waiting.dispatchEvent("click");
+    expect(api.count("POST /api/demo/open")).toBe(1);
+  });
 });

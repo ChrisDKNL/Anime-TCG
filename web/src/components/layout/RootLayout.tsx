@@ -2,6 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Outlet, useRouter } from "@tanstack/react-router";
 import { useCallback } from "react";
 import { useAccountSession } from "../../hooks/useAccountSession";
+import { DemoVisitContext, useDemoVisitStore } from "../../hooks/useDemoVisit";
 import { FrameContext, type Frame } from "../../hooks/useFrame";
 import { GameContext, useGameState } from "../../hooks/useGame";
 import { DEMO_FACTS_KEY } from "../../hooks/useLandingDemo";
@@ -15,7 +16,8 @@ import { LiveRegion } from "../LiveRegion";
  * once the session check has answered and never again, so the live region,
  * the app-level banner and the signed-in account's game state outlive every
  * page change. The pages' own frames (public or signed in) render inside the
- * outlet.
+ * outlet. The landing demo's visit lives here too, so its count and wait last
+ * for the page load.
  */
 export function RootLayout() {
   const { session, retry } = useAccountSession();
@@ -33,6 +35,7 @@ export function RootLayout() {
   const account = session.status === "signedIn" ? session.account : null;
   const packsShowing = useCallback(() => router.state.location.pathname === "/packs", [router]);
   const game = useGameState({ account, shell: shell.context, packsShowing });
+  const demoVisit = useDemoVisitStore();
 
   /**
    * `Try again` repeats the session check; an answer that names a session leaves `/login` (§3.2 step 4).
@@ -57,7 +60,9 @@ export function RootLayout() {
     <ShellContext value={shell.context}>
       <FrameContext value={frame}>
         <GameContext value={game}>
-          <Outlet />
+          <DemoVisitContext value={demoVisit}>
+            <Outlet />
+          </DemoVisitContext>
         </GameContext>
       </FrameContext>
       {/* Outside the pages, so every sign-in, sign-out and page change writes into the same node (accounts.md §7). */}

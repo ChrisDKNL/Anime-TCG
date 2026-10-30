@@ -47,7 +47,7 @@ export function LandingPage() {
             className="text-3xl font-black tracking-tight text-zinc-100 focus:outline-none sm:text-4xl"
           />
           <p className="mt-3 max-w-xl text-base text-zinc-300 tabular-nums">{text.lede}</p>
-          <DemoControl control={control} onOpen={demo.open} />
+          <DemoControl control={control} finishedHere={demo.finishedHere} onOpen={demo.open} />
         </div>
         <Reveal
           pack={demo.pack === null ? null : toReveal(demo.pack.n, demo.pack.opened)}

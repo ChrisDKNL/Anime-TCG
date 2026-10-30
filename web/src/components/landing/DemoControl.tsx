@@ -7,6 +7,8 @@ import { JoinOffer } from "./JoinOffer";
 
 interface Props {
   control: Control;
+  /** The last pack of the visit just landed here: the Join offer takes the focus the button had. */
+  finishedHere: boolean;
   onOpen: () => void;
 }
 
@@ -19,11 +21,11 @@ interface Props {
  * has the pack button's guards: a double click or a held Enter opens one demo
  * pack, never two (manager decision, 2026-10-30).
  */
-export function DemoControl({ control, onOpen }: Props) {
+export function DemoControl({ control, finishedHere, onOpen }: Props) {
   if (control.kind === "done") {
     return (
       <div className="mt-6">
-        <JoinOffer takesFocus />
+        <JoinOffer takesFocus={finishedHere} />
       </div>
     );
   }

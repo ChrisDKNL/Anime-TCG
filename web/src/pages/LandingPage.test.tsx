@@ -276,6 +276,61 @@ describe("opening demo packs", () => {
     expect(callsTo(fetchMock, DEMO_OPEN)).toHaveLength(1);
   });
 
+  it("the visit's count outlives a page change: a link out and Back keep it, the cards go (manager decision, 2026-10-30)", async () => {
+    const { fetchMock, history } = renderLanding({ [DEMO]: ok(makeDemo({ perVisit: 3 })) });
+    await screen.findByText(LEDE);
+    const user = userEvent.setup();
+    for (let i = 0; i < 2; i += 1) {
+      await user.click(await demoButton());
+      await waitFor(() => expect(callsTo(fetchMock, DEMO_OPEN)).toHaveLength(i + 1));
+    }
+    await demoList();
+    act(() => history.push("/register"));
+    await pageHeading("Register");
+    act(() => history.back());
+    expect(await demoButton()).toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Demo pack" })).not.toBeInTheDocument();
+    expect(screen.queryByText(KEEP)).not.toBeInTheDocument();
+    await user.click(await demoButton());
+    await demoList();
+    expect(main().queryByRole("button")).not.toBeInTheDocument();
+    await waitFor(() => expect(document.activeElement?.textContent).toBe(JOIN));
+
+    // A return to `/` finds the Join offer there: the page's heading keeps the focus a page change gives it.
+    act(() => history.push("/login"));
+    await pageHeading("Log in");
+    act(() => history.back());
+    const heading = await pageHeading("Anime TCG");
+    await waitFor(() => expect(heading).toHaveFocus());
+    expect(main().queryByRole("button")).not.toBeInTheDocument();
+    expect(callsTo(fetchMock, DEMO_OPEN)).toHaveLength(3);
+  });
+
+  it("the cap holds without the facts: ten packs and then the Join offer, the facts never answered", async () => {
+    const { fetchMock } = renderLanding({ [DEMO]: { status: 502, raw: "bad gateway" } });
+    const user = userEvent.setup();
+    for (let i = 0; i < 10; i += 1) {
+      await user.click(await demoButton());
+      await waitFor(() => expect(callsTo(fetchMock, DEMO_OPEN)).toHaveLength(i + 1));
+    }
+    await waitFor(() => expect(main().queryByRole("button")).not.toBeInTheDocument());
+    expect(callsTo(fetchMock, DEMO_OPEN)).toHaveLength(10);
+  });
+
+  it("a 429's wait outlives a page change: back on `/` the button still counts down", async () => {
+    const { history } = renderLanding({
+      [DEMO_OPEN]: { ...envelope(429, "rate_limited"), headers: { "Retry-After": "30" } },
+    });
+    await userEvent.setup().click(await demoButton());
+    expect(await demoButton("Try again in 30 s")).toHaveAttribute("aria-disabled", "true");
+    act(() => history.push("/login"));
+    await pageHeading("Log in");
+    act(() => history.back());
+    const waiting = await main().findByRole("button", { name: /^Try again in \d+ s$/ });
+    expect(waiting).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByText(WAIT)).toHaveAttribute("role", "status");
+  });
+
   it("a 503: the unavailable line in the button's place, the cards already shown stay", async () => {
     renderLanding({ [DEMO_OPEN]: sequence(ok(demoPack(2000)), envelope(503, "pool_unavailable")) });
     const user = userEvent.setup();
