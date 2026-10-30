@@ -144,7 +144,8 @@ export const revealCopy = {
   newMarker: "New",
   enchanted: (odds: PublishedOdds) =>
     `Every ${ordinal(odds.enchanted.every)} ${free(odds)}pack is Enchanted: its ${slotWord(odds.enchanted.slot + 1)} card is ${RARITY_LABEL[odds.enchanted.floor]} or better.`,
-  radiant: (odds: PublishedOdds) =>
+  /** Also a shop pack's, from its theme's own tables (market-and-shop.md §3.3 step 2). */
+  radiant: (odds: Pick<PublishedOdds, "scale" | "radiant" | "slots">) =>
     `About 1 pack in ${formatCount(Math.round(odds.scale / odds.radiant.chance))} is Radiant: ${sizeWord(odds.slots.length)} cards of ${RARITY_LABEL[lowestTier(odds.radiant.odds)]} or better, at least one of them ${RARITY_LABEL[odds.radiant.lastSlot]}.`,
   pityMythic: (odds: PublishedOdds) => `This Mythic came from the guarantee: ${pityRule(odds)}`,
   announce: (kind: PackKind, rarities: readonly Rarity[], k: number) =>
@@ -162,7 +163,7 @@ export function percent(part: number, scale: number): string {
 }
 
 /** `Cards 1 to 3: Common or better. Card 4: Uncommon or better. Card 5: Rare or better.` from the slot floors. */
-function slotRules(odds: PublishedOdds): string {
+function slotRules(odds: Pick<PublishedOdds, "slots">): string {
   const runs: Array<{ from: number; to: number; floor: Rarity }> = [];
   odds.slots.forEach((slot, i) => {
     const last = runs.at(-1);

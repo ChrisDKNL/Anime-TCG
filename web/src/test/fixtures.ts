@@ -3,6 +3,7 @@ import type {
   CollectionEntry,
   CollectionResponse,
   FranchiseRef,
+  KarmaRules,
   OpenedCard,
   PackAllowance,
   PackKind,
@@ -11,13 +12,19 @@ import type {
   PerRarity,
   PublishedOdds,
   Rarity,
+  RecycleReceipt,
+  ShopReceipt,
+  ShopResponse,
+  ThemeOffer,
+  Wallet,
 } from "@anime-tcg/shared/api";
 
 /**
- * Server answers for tests, in the shapes of `shared/src/api.ts`. The odds are
- * written out as numbers (the web code may not import the server's tables,
- * ESLint `no-restricted-imports`) and are the published figures of
- * collection-packs.md §5.4 for the first real snapshot's 2 983 characters.
+ * Server answers for tests, in the shapes of `shared/src/api.ts`. The odds and
+ * the Karma rules are written out as numbers (the web code may not import the
+ * server's tables, ESLint `no-restricted-imports`): the published figures of
+ * collection-packs.md §5.4 for the first real snapshot's 2 983 characters, and
+ * economy.md §5's parameters.
  */
 
 const perRarity = (values: readonly [number, number, number, number, number, number]): PerRarity => ({
@@ -162,5 +169,74 @@ export function makeCollection(entries: CollectionEntry[] = []): CollectionRespo
     completion: { pool: { owned: entries.length, total: 2_983 }, franchises: [] },
     franchises: FRANCHISES,
     entries,
+  };
+}
+
+/** economy.md §5's parameters as `GET /api/wallet` publishes them. */
+export function makeRules(overrides: Partial<KarmaRules> = {}): KarmaRules {
+  return {
+    referenceValues: perRarity([10, 23, 35, 160, 1_000, 11_000]),
+    recycleValues: perRarity([2, 5, 8, 40, 250, 2_750]),
+    priceMin: perRarity([5, 12, 18, 80, 500, 5_500]),
+    priceMax: perRarity([25, 57, 87, 400, 2_500, 27_500]),
+    feeBps: 500,
+    feeMin: 1,
+    listingTtlSeconds: 604_800,
+    maxListings: 50,
+    maxRecycleCount: 100,
+    themedPackPrice: 400,
+    window: { seconds: 604_800, purchases: 100, spend: 55_000, proceeds: 55_000, pair: 27_500 },
+    ...overrides,
+  };
+}
+
+export function makeWallet(balance = 1_240, rules: Partial<KarmaRules> = {}): Wallet {
+  return { balance, activeListings: 0, rules: makeRules(rules) };
+}
+
+/** A genre theme drawing from the three fixture series, at the free pack's odds and the shop's price. */
+export function makeTheme(id = "genre-action", overrides: Partial<ThemeOffer> = {}): ThemeOffer {
+  const odds = makeOdds();
+  return {
+    id,
+    title: "Action",
+    cards: 5,
+    franchiseIds: FRANCHISES.map((franchise) => franchise.id),
+    price: 400,
+    odds: {
+      scale: odds.scale,
+      perSlot: odds.slots,
+      perPack: odds.perPack,
+      tierSizes: perRarity([420, 300, 240, 140, 70, 25]),
+      radiant: odds.radiant,
+    },
+    ...overrides,
+  };
+}
+
+export function makeShop(
+  themes: ThemeOffer[] = [makeTheme()],
+  overrides: Partial<ShopResponse> = {},
+): ShopResponse {
+  return {
+    themes,
+    franchises: FRANCHISES,
+    snapshot: { version: 2, takenAt: "2026-10-29T08:00:00.000Z", characterCount: 2_983 },
+    ...overrides,
+  };
+}
+
+export function makeShopReceipt(overrides: Partial<ShopReceipt> = {}): ShopReceipt {
+  return { pack: makePackOpened(), themeId: "genre-action", price: 400, balance: 840, ...overrides };
+}
+
+export function makeRecycleReceipt(overrides: Partial<RecycleReceipt> = {}): RecycleReceipt {
+  return {
+    recycleId: "0b8a6c1e-2f3d-4e5f-8a9b-0c1d2e3f4a5b",
+    recycledAt: "2026-10-30T09:00:00.000Z",
+    recycled: { characterId: 1, rarity: "epic", count: 2 },
+    credited: 80,
+    balance: 1_320,
+    ...overrides,
   };
 }
