@@ -19,6 +19,7 @@ import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { App } from "../src/app.js";
 import { main as auditMain } from "../src/cli/audit-ledger.js";
+import { auditLedger } from "../src/domain/economy/audit.js";
 import { createDb } from "../src/db/client.js";
 import { accounts, cards, ledgerEntries, packOpenings, recycles } from "../src/db/schema.js";
 import { resetCollection } from "../src/domain/collection/reset.js";
@@ -36,6 +37,7 @@ import {
   ID,
   inComedy,
   ledgerOf,
+  putBackPastTheTrigger,
   recycle,
   recycleBody,
 } from "./economy-support.js";
@@ -575,12 +577,20 @@ describe("economy routes (economy.md §8, §11.3, §14)", () => {
     });
 
     describe("reset-collection's Karma rule (§8.10)", () => {
+      const clock = () => now;
+      const lastResetOf = async (accountId: string) =>
+        (
+          await app.db.select({ at: accounts.lastResetAt }).from(accounts).where(eq(accounts.id, accountId))
+        )[0]?.at;
+
       it("zeroes the balance with one owner_reset entry by default, and the dry run says so", async () => {
         const client = await earner();
-        const preview = await resetCollection(app.db, client.account.login, { confirm: false });
+        const preview = await resetCollection(app.db, client.account.login, { confirm: false, clock });
         expect(preview).toMatchObject({ balance: 2_750, keepKarma: false, applied: false });
         expect(await balanceOf(app, client.account.id)).toBe(2_750);
-        await resetCollection(app.db, client.account.login, { confirm: true });
+        expect(await lastResetOf(client.account.id)).toBeNull();
+        await resetCollection(app.db, client.account.login, { confirm: true, clock });
+        expect(await lastResetOf(client.account.id)).toEqual(now);
         expect(await balanceOf(app, client.account.id)).toBe(0);
         expect(await ledgerOf(app, client.account.id)).toEqual([
           { seq: 1, kind: "recycle_credit", amount: 2_750, balanceAfter: 2_750 },
@@ -595,13 +605,134 @@ describe("economy routes (economy.md §8, §11.3, §14)", () => {
 
       it("keeps the balance and writes no entry with --keep-karma, and writes none for a balance of 0", async () => {
         const client = await earner();
-        const kept = await resetCollection(app.db, client.account.login, { confirm: true, keepKarma: true });
+        const kept = await resetCollection(app.db, client.account.login, {
+          confirm: true,
+          keepKarma: true,
+          clock,
+        });
         expect(kept).toMatchObject({ balance: 2_750, keepKarma: true, applied: true });
         expect(await balanceOf(app, client.account.id)).toBe(2_750);
         expect(await ledgerOf(app, client.account.id)).toHaveLength(1);
         const empty = await player();
-        await resetCollection(app.db, empty.account.login, { confirm: true });
+        await resetCollection(app.db, empty.account.login, { confirm: true, clock });
         expect(await ledgerOf(app, empty.account.id)).toEqual([]);
+      });
+
+      it("records its time on every confirmed reset: the default, --keep-karma and at a balance of 0 (manager decision, 2026-10-30)", async () => {
+        const zeroed = await earner();
+        const kept = await earner();
+        const empty = await player();
+        const resets: [SignedInClient, boolean][] = [
+          [zeroed, false],
+          [kept, true],
+          [empty, false],
+        ];
+        for (const [client, keepKarma] of resets) {
+          now = new Date(now.getTime() + MINUTE);
+          await resetCollection(app.db, client.account.login, { confirm: true, keepKarma, clock });
+          expect(await lastResetOf(client.account.id)).toEqual(now);
+        }
+        // A second reset moves it on; a dry run leaves it.
+        const second = new Date(now.getTime() + MINUTE);
+        await resetCollection(app.db, empty.account.login, { confirm: true, clock: () => second });
+        expect(await lastResetOf(empty.account.id)).toEqual(second);
+        await resetCollection(app.db, empty.account.login, { confirm: false, clock: () => new Date(0) });
+        expect(await lastResetOf(empty.account.id)).toEqual(second);
+      });
+
+      it("counts the cards held and, apart, the recycled ones in the dry run (§13.4)", async () => {
+        // Two packs, one Mythic duplicate recycled: nine cards held, one recycled, both deleted by the reset.
+        const client = await earner();
+        expect(await resetCollection(app.db, client.account.login, { confirm: false, clock })).toMatchObject({
+          cards: 2 * PACK_SIZE - 1,
+          recycledCards: 1,
+          openings: 2,
+          applied: false,
+        });
+        const fresh = await player();
+        await deal(fresh, packWith(ID.mythic(1), "mythic"));
+        expect(await resetCollection(app.db, fresh.account.login, { confirm: false, clock })).toMatchObject({
+          cards: PACK_SIZE,
+          recycledCards: 0,
+          openings: 1,
+        });
+        expect(await resetCollection(app.db, client.account.login, { confirm: true, clock })).toMatchObject({
+          cards: 2 * PACK_SIZE - 1,
+          recycledCards: 1,
+          applied: true,
+        });
+        expect(await app.db.select().from(cards).where(eq(cards.accountId, client.account.id))).toEqual([]);
+      });
+    });
+
+    describe("audit-ledger and the last reset (§13.1, manager decision, 2026-10-30)", () => {
+      const clock = () => now;
+      const failuresOf = async (accountId: string) =>
+        (await auditLedger(app.db)).failures.filter((failure) => failure.id === accountId);
+      const recycleIdsOf = async (accountId: string) =>
+        (
+          await app.db
+            .select({ id: recycles.id })
+            .from(recycles)
+            .where(eq(recycles.accountId, accountId))
+            .orderBy(asc(recycles.createdAt))
+        ).map((row) => row.id);
+
+      it("is clean after a reset and on playing after it: old recycles without cards, old debits without openings", async () => {
+        const client = await earner();
+        expect((await buyPack(app, client.cookie, COMEDY)).statusCode).toBe(201);
+        await resetCollection(app.db, client.account.login, { confirm: true, keepKarma: true, clock });
+        expect(await failuresOf(client.account.id)).toEqual([]);
+
+        // Playing on: a new recycle with its cards, a new shop opening with its debit.
+        for (let i = 0; i < 2; i += 1) await deal(client, packWith(ID.mythic(1), "mythic", i));
+        const again = await recycle(app, client.cookie, recycleBody(ID.mythic(1), "mythic", 1));
+        expect(again.statusCode, again.body).toBe(201);
+        expect((await buyPack(app, client.cookie, COMEDY)).statusCode).toBe(201);
+        expect(await failuresOf(client.account.id)).toEqual([]);
+
+        // A second reset, the default one, empties those too, and the audit follows it.
+        now = new Date(now.getTime() + MINUTE);
+        await resetCollection(app.db, client.account.login, { confirm: true, clock });
+        expect(await balanceOf(app, client.account.id)).toBe(0);
+        expect(await failuresOf(client.account.id)).toEqual([]);
+      });
+
+      it("finds a recycle written after the last reset whose cards were put back", async () => {
+        const client = await earner();
+        await resetCollection(app.db, client.account.login, { confirm: true, keepKarma: true, clock });
+        for (let i = 0; i < 2; i += 1) await deal(client, packWith(ID.mythic(1), "mythic", i));
+        const res = await recycle(app, client.cookie, recycleBody(ID.mythic(1), "mythic", 1));
+        expect(res.statusCode, res.body).toBe(201);
+        const { recycleId } = res.json<RecycleReceipt>();
+        forged.push(client.account.id);
+        expect(await putBackPastTheTrigger(recycleId)).toBe(1);
+        // The recycle from before the reset still passes; the one after it does not.
+        expect(await recycleIdsOf(client.account.id)).toHaveLength(2);
+        expect(await failuresOf(client.account.id)).toEqual([
+          {
+            id: client.account.id,
+            login: client.account.login,
+            lines: [`recycle ${recycleId} removed 0 cards, not 1, and no reset after it`],
+          },
+        ]);
+      });
+
+      it("finds a shop opening deleted after the last reset, its debit left behind", async () => {
+        const client = await earner();
+        await resetCollection(app.db, client.account.login, { confirm: true, keepKarma: true, clock });
+        now = new Date(now.getTime() + MINUTE);
+        expect((await buyPack(app, client.cookie, COMEDY)).statusCode).toBe(201);
+        forged.push(client.account.id);
+        // The app role may delete an opening (the reset does), and its cards go with it.
+        await app.db.delete(packOpenings).where(eq(packOpenings.accountId, client.account.id));
+        expect(await failuresOf(client.account.id)).toEqual([
+          {
+            id: client.account.id,
+            login: client.account.login,
+            lines: ["entry 2: shop_purchase without its opening, and no reset after it"],
+          },
+        ]);
       });
     });
 
@@ -810,7 +941,11 @@ describe("economy routes (economy.md §8, §11.3, §14)", () => {
     it("leaves a timer pack's allowance clock to the timer: PACK_CAP packs after a reset, shop purchases or not", async () => {
       const client = await earner();
       expect((await buyPack(app, client.cookie, COMEDY)).statusCode).toBe(201);
-      await resetCollection(app.db, client.account.login, { confirm: true, keepKarma: true });
+      await resetCollection(app.db, client.account.login, {
+        confirm: true,
+        keepKarma: true,
+        clock: () => now,
+      });
       expect(
         body<{ allowance: { available: number } }>(await getPacks(app, client.cookie)).allowance.available,
       ).toBe(PACK_CAP);

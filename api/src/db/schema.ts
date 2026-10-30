@@ -56,6 +56,13 @@ export const accounts = pgTable(
      * row's lock, in the transaction of the ledger row that proves it.
      */
     balance: integer("balance").notNull().default(0),
+    /**
+     * When the owner last reset this account's collection (economy.md §7,
+     * §8.10), set in the reset's transaction; null if it never was. A recycle
+     * without its cards, or a shop debit without its opening, is explained by
+     * a reset only if it is no newer than this (§13.1).
+     */
+    lastResetAt: timestamp("last_reset_at", { withTimezone: true }),
   },
   (table) => [
     check(
@@ -446,7 +453,12 @@ export const cards = pgTable(
       .references(() => poolSnapshots.id),
     isNew: boolean("is_new").notNull(),
     pulledAt: timestamp("pulled_at", { withTimezone: true }).notNull(),
-    /** Null while held; set when the card is recycled (economy.md §7). The row stays, so the recycle can be audited. */
+    /**
+     * Null while held; set when the card is recycled (economy.md §7). The row
+     * stays, so the recycle can be audited, and once set neither this nor
+     * `removed_by_recycle` changes again: migration 0005's trigger
+     * `cards_removed_stays` refuses it, the app role included.
+     */
     removedAt: timestamp("removed_at", { withTimezone: true }),
     removedByRecycle: uuid("removed_by_recycle").references(() => recycles.id),
     /** Reserved for a game ante (items 5 and 6): always null in item 2, and nothing writes it. */

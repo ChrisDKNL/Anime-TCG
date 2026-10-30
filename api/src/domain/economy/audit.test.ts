@@ -4,6 +4,10 @@ import { describeAudit, describeNotes } from "../../cli/audit-ledger.js";
 import { type AccountFacts, type AuditEntry, auditAccount, valueChanges } from "./audit.js";
 
 const ID = "00000000-0000-4000-8000-000000000001";
+/** When the fixture's rows were written; a reset is placed before or after it. */
+const WRITTEN = new Date("2026-11-01T09:00:00.000Z");
+const BEFORE = new Date(WRITTEN.getTime() - 60_000);
+const AFTER = new Date(WRITTEN.getTime() + 60_000);
 
 function chain(...amounts: [AuditEntry["kind"], number][]): AuditEntry[] {
   let balance = 0;
@@ -19,6 +23,7 @@ function facts(overrides: Partial<AccountFacts> = {}): AccountFacts {
     id: ID,
     login: "Auditee",
     balance: 2_354,
+    lastResetAt: null,
     entries,
     shopOpenings: [
       { openingId: "o1", price: 400, entryAccountId: ID, entryKind: "shop_purchase", entryAmount: -400 },
@@ -34,6 +39,7 @@ function facts(overrides: Partial<AccountFacts> = {}): AccountFacts {
         entryAmount: 2_750,
         removedCards: 1,
         foreignCards: 0,
+        createdAt: WRITTEN,
       },
       {
         recycleId: "r2",
@@ -45,9 +51,11 @@ function facts(overrides: Partial<AccountFacts> = {}): AccountFacts {
         entryAmount: 4,
         removedCards: 2,
         foreignCards: 0,
+        createdAt: WRITTEN,
       },
     ],
     unclaimedCredits: 0,
+    unclaimedShopDebits: [],
     unexplainedRemovals: 0,
     escrowedCards: 0,
     ...overrides,
@@ -181,7 +189,7 @@ describe("audit-ledger's checks (economy.md §7, §13.1)", () => {
     ]);
   });
 
-  it("finds a recycle that removed the wrong number of cards or another entry's, and allows none after a reset", () => {
+  it("finds a recycle that removed the wrong number of cards or another entry's", () => {
     const [mythic, common] = facts().recycles;
     if (mythic === undefined || common === undefined) throw new Error("two recycles");
     expect(auditAccount(facts({ recycles: [mythic, { ...common, removedCards: 1 }] }))).toEqual([
@@ -193,16 +201,70 @@ describe("audit-ledger's checks (economy.md §7, §13.1)", () => {
     expect(auditAccount(facts({ recycles: [mythic, { ...common, foreignCards: 1 }] }))).toEqual([
       "recycle r2 removed 1 cards of another entry",
     ]);
-    expect(
-      auditAccount(
-        facts({
-          recycles: [
-            { ...mythic, removedCards: 0 },
-            { ...common, removedCards: 0 },
-          ],
-        }),
-      ),
-    ).toEqual([]);
+  });
+
+  describe("a recycle without its cards, a shop debit without its opening, and the last reset (manager decision, 2026-10-30)", () => {
+    const emptied = () => {
+      const [mythic, common] = facts().recycles;
+      if (mythic === undefined || common === undefined) throw new Error("two recycles");
+      return [
+        { ...mythic, removedCards: 0 },
+        { ...common, removedCards: 0 },
+      ];
+    };
+    const orphaned = { shopOpenings: [], unclaimedShopDebits: [{ seq: 2, createdAt: WRITTEN }] };
+
+    it("passes both when a reset came after the rows, or at the same instant", () => {
+      for (const lastResetAt of [AFTER, WRITTEN]) {
+        expect(auditAccount(facts({ lastResetAt, recycles: emptied(), ...orphaned }))).toEqual([]);
+      }
+    });
+
+    it("finds a recycle with no removed card on an account never reset, or reset before the recycle", () => {
+      for (const lastResetAt of [null, BEFORE]) {
+        expect(auditAccount(facts({ lastResetAt, recycles: emptied() }))).toEqual([
+          "recycle r1 removed 0 cards, not 1, and no reset after it",
+          "recycle r2 removed 0 cards, not 2, and no reset after it",
+        ]);
+      }
+    });
+
+    it("finds a shop debit whose opening is gone on an account never reset, or reset before the debit", () => {
+      for (const lastResetAt of [null, BEFORE]) {
+        expect(auditAccount(facts({ lastResetAt, ...orphaned }))).toEqual([
+          "entry 2: shop_purchase without its opening, and no reset after it",
+        ]);
+      }
+    });
+
+    it("judges each row by its own time: one before the reset passes, one after it fails", () => {
+      const [mythic, common] = emptied();
+      if (mythic === undefined || common === undefined) throw new Error("two recycles");
+      expect(
+        auditAccount(
+          facts({
+            lastResetAt: WRITTEN,
+            recycles: [mythic, { ...common, createdAt: AFTER }],
+            shopOpenings: [],
+            unclaimedShopDebits: [
+              { seq: 2, createdAt: BEFORE },
+              { seq: 3, createdAt: AFTER },
+            ],
+          }),
+        ),
+      ).toEqual([
+        "entry 3: shop_purchase without its opening, and no reset after it",
+        "recycle r2 removed 0 cards, not 2, and no reset after it",
+      ]);
+    });
+
+    it("still counts a recycle's cards after a reset: some but not all is a failure, whenever it was", () => {
+      const [mythic, common] = facts().recycles;
+      if (mythic === undefined || common === undefined) throw new Error("two recycles");
+      expect(
+        auditAccount(facts({ lastResetAt: AFTER, recycles: [mythic, { ...common, removedCards: 1 }] })),
+      ).toEqual(["recycle r2 removed 1 cards, not 2"]);
+    });
   });
 
   it("finds a credit no recycle claims, a card removed by nothing and a card in escrow", () => {

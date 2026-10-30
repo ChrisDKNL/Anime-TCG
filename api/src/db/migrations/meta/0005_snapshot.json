@@ -79,6 +79,12 @@
           "primaryKey": false,
           "notNull": true,
           "default": 0
+        },
+        "last_reset_at": {
+          "name": "last_reset_at",
+          "type": "timestamp with time zone",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {},

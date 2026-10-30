@@ -41,18 +41,26 @@ export type AuditRecycle = {
   removedCards: number;
   /** Cards it removed that are not a held-then-removed standard copy of its own entry. */
   foreignCards: number;
+  createdAt: Date;
 };
+
+/** A `shop_purchase` row no shop opening names: a reset deleted its opening, or something did that should not have. */
+export type AuditUnclaimedDebit = { seq: number; createdAt: Date };
 
 export interface AccountFacts {
   id: string;
   login: string;
   balance: number;
+  /** The account's last collection reset (`accounts.last_reset_at`); null if it never had one. */
+  lastResetAt: Date | null;
   /** Ordered by `seq`. */
   entries: AuditEntry[];
   shopOpenings: AuditShopOpening[];
   recycles: AuditRecycle[];
   /** `recycle_credit` rows no recycle names. */
   unclaimedCredits: number;
+  /** Ordered by `seq`. */
+  unclaimedShopDebits: AuditUnclaimedDebit[];
   /** Cards marked removed with nothing that removed them. */
   unexplainedRemovals: number;
   escrowedCards: number;
@@ -65,10 +73,17 @@ const UNBUILT_KINDS: ReadonlySet<LedgerKind> = new Set(["market_purchase", "mark
  * What is wrong with one account, as short phrases; empty when it is
  * consistent. Each recycle and shop opening is checked against the value
  * it recorded, never today's constants, so a later change of
- * `RECYCLE_VALUE` or `THEMED_PACK_PRICE` leaves an old row correct.
+ * `RECYCLE_VALUE` or `THEMED_PACK_PRICE` leaves an old row correct. A
+ * recycle without its cards and a shop debit without its opening are what
+ * a reset leaves, so they pass only when the account's last reset came at
+ * or after the row was written (manager decision, 2026-10-30).
  */
 export function auditAccount(facts: AccountFacts): string[] {
   const problems: string[] = [];
+  const { lastResetAt } = facts;
+  // At or after: the reset takes its time under the account lock, so a row committed before it is never newer.
+  const emptiedByReset = (createdAt: Date) =>
+    lastResetAt !== null && createdAt.getTime() <= lastResetAt.getTime();
   let previous = 0;
   let sum = 0;
   facts.entries.forEach((entry, index) => {
@@ -99,6 +114,10 @@ export function auditAccount(facts: AccountFacts): string[] {
       problems.push(`shop opening ${opening.openingId} without its debit of ${opening.price}`);
     }
   }
+  for (const debit of facts.unclaimedShopDebits) {
+    if (!emptiedByReset(debit.createdAt))
+      problems.push(`entry ${debit.seq}: shop_purchase without its opening, and no reset after it`);
+  }
 
   for (const recycle of facts.recycles) {
     const credit = recycle.count * recycle.unitValue;
@@ -109,11 +128,17 @@ export function auditAccount(facts: AccountFacts): string[] {
     ) {
       problems.push(`recycle ${recycle.recycleId} without its credit of ${credit}`);
     }
-    // An owner reset deletes every card, recycled ones included (§8.10), so a recycle's cards are all there or all gone.
-    if (recycle.removedCards !== recycle.count && recycle.removedCards !== 0)
+    // An owner reset deletes every card, recycled ones included (§8.10): all of a recycle's cards are there, or a reset took them.
+    if (recycle.removedCards === 0) {
+      if (!emptiedByReset(recycle.createdAt))
+        problems.push(
+          `recycle ${recycle.recycleId} removed 0 cards, not ${recycle.count}, and no reset after it`,
+        );
+    } else if (recycle.removedCards !== recycle.count) {
       problems.push(
         `recycle ${recycle.recycleId} removed ${recycle.removedCards} cards, not ${recycle.count}`,
       );
+    }
     if (recycle.foreignCards > 0)
       problems.push(`recycle ${recycle.recycleId} removed ${recycle.foreignCards} cards of another entry`);
   }
@@ -157,6 +182,18 @@ export interface AuditResult {
   notes: AuditAccountReport[];
 }
 
+/** A row as a raw query returns it: its account, and its `createdAt` as Postgres's text. */
+type RawRow<T extends { createdAt: Date }> = Omit<T, "createdAt"> & { accountId: string; createdAt: string };
+
+function withDates<T extends { createdAt: Date }>(
+  row: RawRow<T>,
+): Omit<T, "createdAt"> & {
+  accountId: string;
+  createdAt: Date;
+} {
+  return { ...row, createdAt: new Date(row.createdAt) };
+}
+
 function grouped<T extends { accountId: string }>(rows: readonly T[]): Map<string, T[]> {
   const byAccount = new Map<string, T[]>();
   for (const row of rows) byAccount.set(row.accountId, [...(byAccount.get(row.accountId) ?? []), row]);
@@ -172,7 +209,12 @@ export async function auditLedger(db: Db): Promise<AuditResult> {
   return db.transaction(
     async (tx) => {
       const owners = await tx
-        .select({ id: accounts.id, login: accounts.login, balance: accounts.balance })
+        .select({
+          id: accounts.id,
+          login: accounts.login,
+          balance: accounts.balance,
+          lastResetAt: accounts.lastResetAt,
+        })
         .from(accounts)
         .orderBy(asc(accounts.loginNormalized));
       const entries = await tx
@@ -192,14 +234,23 @@ export async function auditLedger(db: Db): Promise<AuditResult> {
         from pack_openings o left join ledger_entries e on e.id = o.ledger_entry_id
         where o.source = 'shop'
       `);
-      const recycled = await tx.execute<AuditRecycle & { accountId: string }>(sql`
+      // A raw query hands timestamps back as text (drizzle's node-postgres parsers); `withDates` makes them Dates.
+      const recycled = await tx.execute<RawRow<AuditRecycle>>(sql`
         select r.account_id as "accountId", r.id as "recycleId", r.rarity, r.count, r.unit_value as "unitValue",
                e.account_id as "entryAccountId", e.kind as "entryKind", e.amount as "entryAmount",
                (select count(*)::int from cards c where c.removed_by_recycle = r.id) as "removedCards",
                (select count(*)::int from cards c where c.removed_by_recycle = r.id
                  and (c.account_id <> r.account_id or c.character_id <> r.character_id
-                      or c.rarity <> r.rarity or c.variant <> 'standard' or c.removed_at is null)) as "foreignCards"
+                      or c.rarity <> r.rarity or c.variant <> 'standard' or c.removed_at is null)) as "foreignCards",
+               r.created_at as "createdAt"
         from recycles r join ledger_entries e on e.id = r.ledger_entry_id
+      `);
+      const unclaimedDebits = await tx.execute<RawRow<AuditUnclaimedDebit>>(sql`
+        select e.account_id as "accountId", e.seq, e.created_at as "createdAt"
+        from ledger_entries e
+        where e.kind = 'shop_purchase'
+          and not exists (select 1 from pack_openings o where o.ledger_entry_id = e.id)
+        order by e.account_id, e.seq
       `);
       const counts = await tx.execute<{
         accountId: string;
@@ -221,7 +272,8 @@ export async function auditLedger(db: Db): Promise<AuditResult> {
 
       const entriesOf = grouped(entries);
       const openingsOf = grouped(shopOpenings.rows);
-      const recyclesOf = grouped(recycled.rows);
+      const recyclesOf = grouped(recycled.rows.map(withDates));
+      const unclaimedDebitsOf = grouped(unclaimedDebits.rows.map(withDates));
       const countsOf = new Map(counts.rows.map((row) => [row.accountId, row]));
       const failures: AuditAccountReport[] = [];
       const notes: AuditAccountReport[] = [];
@@ -233,6 +285,7 @@ export async function auditLedger(db: Db): Promise<AuditResult> {
           shopOpenings: openingsOf.get(owner.id) ?? [],
           recycles: recyclesOf.get(owner.id) ?? [],
           unclaimedCredits: tally?.unclaimedCredits ?? 0,
+          unclaimedShopDebits: unclaimedDebitsOf.get(owner.id) ?? [],
           unexplainedRemovals: tally?.unexplainedRemovals ?? 0,
           escrowedCards: tally?.escrowedCards ?? 0,
         };

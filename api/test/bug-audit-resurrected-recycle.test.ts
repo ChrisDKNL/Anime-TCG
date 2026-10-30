@@ -6,7 +6,16 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { App } from "../src/app.js";
 import { accounts, cards, ledgerEntries, recycles } from "../src/db/schema.js";
 import { auditLedger } from "../src/domain/economy/audit.js";
-import { balanceOf, economyPool, entryOf, ID, recycle, recycleBody } from "./economy-support.js";
+import {
+  balanceOf,
+  economyPool,
+  entryOf,
+  ID,
+  putBackPastTheTrigger,
+  recycle,
+  recycleBody,
+  REMOVED_STAYS,
+} from "./economy-support.js";
 import {
   body,
   currentSnapshotId,
@@ -65,6 +74,14 @@ import { createTestApp, type SignedInClient, testConfig } from "./support.js";
  * tests fail today with `expected [] to have a length of 1`; they pass once
  * the audit reports such recycles. Not fixed here: the tester writes tests
  * only.
+ *
+ * FIXED (manager decision, 2026-10-30): `accounts.last_reset_at` records
+ * every reset, and the audit accepts a recycle without its cards only if it
+ * is no newer than the last reset; migration 0005's trigger
+ * `cards_removed_stays` keeps a removed card removed, so the app role's
+ * statement of the first test now fails. The first test asserts that, then
+ * gives the cards back past the trigger as the owner (as a doctored restore
+ * could) to show the audit still finds the recycle.
  */
 
 const MINUTE = 60_000;
@@ -119,11 +136,16 @@ describe(
         await auditLedger(app.db).then((r) => r.failures.filter((f) => f.id === client.account.id)),
       ).toEqual([]);
 
-      // One statement the app role is allowed to run (0005's column grant): both Mythics come back.
-      await app.db
-        .update(cards)
-        .set({ removedAt: null, removedByRecycle: null })
-        .where(eq(cards.removedByRecycle, recycleId));
+      // The statement 0005's column grant allows the app role is refused by its trigger now.
+      await expect(
+        app.db
+          .update(cards)
+          .set({ removedAt: null, removedByRecycle: null })
+          .where(eq(cards.removedByRecycle, recycleId)),
+      ).rejects.toMatchObject({ cause: { code: REMOVED_STAYS } });
+      expect(await entryOf(app, client.cookie, ID.mythic(2))).toMatchObject({ count: 1 });
+      // Past the trigger, as the owner: both Mythics come back.
+      expect(await putBackPastTheTrigger(recycleId)).toBe(2);
       expect(await entryOf(app, client.cookie, ID.mythic(2))).toMatchObject({ count: 3, recyclable: 2 });
       expect(await balanceOf(app, client.account.id)).toBe(2 * RECYCLE_VALUE.mythic);
       expect(
@@ -136,6 +158,9 @@ describe(
       const failures = (await auditLedger(app.db)).failures.filter((f) => f.id === client.account.id);
       // Fails today: the audit treats "no removed card" as "after a reset", and no reset happened.
       expect(failures).toHaveLength(1);
+      expect(failures[0]?.lines).toEqual([
+        `recycle ${recycleId} removed 0 cards, not 2, and no reset after it`,
+      ]);
     });
 
     it("reports a recycle that never removed a card: Karma minted from rows the app role may insert", async () => {
@@ -174,6 +199,9 @@ describe(
       const failures = (await auditLedger(app.db)).failures.filter((f) => f.id === minter.account.id);
       // Fails today: an account that never held a card, nor was ever reset, passes with 275 000 Karma.
       expect(failures).toHaveLength(1);
+      expect(failures[0]?.lines).toEqual([
+        expect.stringMatching(/^recycle [0-9a-f-]{36} removed 0 cards, not 100, and no reset after it$/),
+      ]);
     });
   },
 );

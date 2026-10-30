@@ -79,6 +79,7 @@ describe("reset-collection", () => {
       accountId: account.id,
       login: account.login,
       cards: 2 * PACK_SIZE,
+      recycledCards: 0,
       openings: 2,
       balance: 0,
       keepKarma: false,
@@ -174,6 +175,7 @@ describe("reset-collection", () => {
         accountId: "id",
         login: "a\u001b[2Jb\n\u009b2J\u202e",
         cards: 1,
+        recycledCards: 0,
         openings: 1,
         balance: 0,
         keepKarma: false,
@@ -182,6 +184,19 @@ describe("reset-collection", () => {
         'Would reset "a\\u001b[2Jb\\n\\u009b2J\\u202e": 1 cards, 1 openings; pity and Enchanted counters to zero; balance 0 to 0.',
       );
       expect(describeReset({ ...counts, applied: true })).toMatch(/^Collection reset for "a\\u001b\[2Jb/);
+    });
+
+    it("counts the recycled cards apart from the held ones, and only when there are some (economy.md §13.4)", () => {
+      const counts = { accountId: "id", login: "p", cards: 8, openings: 2, balance: 5, keepKarma: false };
+      expect(describeReset({ ...counts, recycledCards: 2, applied: false })).toBe(
+        'Would reset "p": 8 cards, 2 recycled cards, 2 openings; pity and Enchanted counters to zero; balance 5 to 0.',
+      );
+      expect(describeReset({ ...counts, recycledCards: 2, applied: true })).toBe(
+        'Collection reset for "p": 8 cards, 2 recycled cards and 2 openings removed; packs full; counters reset; balance 5 set to 0.',
+      );
+      expect(describeReset({ ...counts, recycledCards: 0, applied: false })).toBe(
+        'Would reset "p": 8 cards, 2 openings; pity and Enchanted counters to zero; balance 5 to 0.',
+      );
     });
 
     it("exits 1 with a one-line reason for an unknown login", async () => {

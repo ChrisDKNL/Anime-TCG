@@ -25,6 +25,8 @@ import { clearAccountData, createTestApp, insertAccount, migrationsDatabaseUrl }
 
 /** Postgres `insufficient_privilege`; drizzle wraps the pg error as `cause`. */
 const PERMISSION_DENIED = "42501";
+/** Postgres `integrity_constraint_violation`, raised by 0005's `cards_removed_stays` trigger. */
+const REMOVED_STAYS = "23000";
 
 /**
  * Spec §4.1: the pool behind every request is `anime_app`, which can read and
@@ -284,6 +286,53 @@ describe("app database role", () => {
     await expect(app.db.update(cards).set({ removedAt: null, rarity: "common" })).rejects.toMatchObject({
       cause: { code: PERMISSION_DENIED },
     });
+  });
+
+  it("keeps a removed card removed: its trigger refuses the app role and the owner alike (0005, manager decision, 2026-10-30)", async () => {
+    const accountId = await insertAccount(app.db, "StaysRemoved");
+    const cardId = await heldCard(accountId);
+    // The recycle's own write, held to removed, passes the trigger.
+    const { recycleId } = await seedRecycle(accountId, cardId);
+    const removed = async () =>
+      (
+        await app.db
+          .select({ removedAt: cards.removedAt, removedByRecycle: cards.removedByRecycle })
+          .from(cards)
+          .where(eq(cards.id, cardId))
+      )[0];
+    const before = await removed();
+    expect(before?.removedByRecycle).toBe(recycleId);
+    const otherAccount = await insertAccount(app.db, "StaysRemoved2");
+    const other = await seedRecycle(otherAccount, await heldCard(otherAccount));
+    const owner = createDb(migrationsDatabaseUrl());
+    try {
+      for (const db of [app.db, owner]) {
+        for (const change of [
+          { removedAt: null, removedByRecycle: null },
+          { removedAt: new Date(0) },
+          { removedByRecycle: other.recycleId },
+        ]) {
+          const refused: unknown = await db
+            .update(cards)
+            .set(change)
+            .where(eq(cards.id, cardId))
+            .then(
+              () => null,
+              (err: unknown) => err,
+            );
+          expect(refused).toMatchObject({ cause: { code: REMOVED_STAYS } });
+          expect((refused as { cause: Error }).cause.message).toMatch(/a removed card stays removed$/);
+        }
+      }
+      // A statement that leaves both columns as they are is no change, so it passes.
+      await app.db.execute(sql`update cards set removed_at = removed_at where id = ${cardId}`);
+    } finally {
+      await owner.$client.end();
+    }
+    expect(await removed()).toEqual(before);
+    // A reset deletes the cards, so the trigger never stands in its way.
+    await resetCollection(app.db, "StaysRemoved", { confirm: true });
+    expect(await app.db.select().from(cards).where(eq(cards.accountId, accountId))).toEqual([]);
   });
 
   it("still deletes an account with its ledger, its recycles and its recycled cards, by cascade (0005)", async () => {

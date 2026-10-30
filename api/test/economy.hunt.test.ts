@@ -712,7 +712,7 @@ describe("economy, tester's hunt (economy.md §14)", { timeout: TEST_TIMEOUT }, 
           const client = await holder(3, undefined, ID.mythic(10));
           await recycled(client, ID.mythic(10), "mythic", 1);
           const [, res] = await Promise.all([
-            resetCollection(app.db, client.account.login, { confirm: true }),
+            resetCollection(app.db, client.account.login, { confirm: true, clock: () => now }),
             recycle(twin, client.cookie, recycleBody(ID.mythic(10), "mythic", 1)),
           ]);
           expect([201, 409]).toContain(res.statusCode);
@@ -734,7 +734,11 @@ describe("economy, tester's hunt (economy.md §14)", { timeout: TEST_TIMEOUT }, 
       const client = await holder(2, undefined, ID.mythic(12));
       await recycled(client, ID.mythic(12), "mythic", 1);
       expect((await buyPack(app, client.cookie, COMEDY)).statusCode).toBe(201);
-      await resetCollection(app.db, client.account.login, { confirm: true, keepKarma: true });
+      await resetCollection(app.db, client.account.login, {
+        confirm: true,
+        keepKarma: true,
+        clock: () => now,
+      });
       expect(await balanceOf(app, client.account.id)).toBe(RECYCLE_VALUE.mythic - THEMED_PACK_PRICE);
       expect(await auditFailuresOf([client.account.id])).toEqual([]);
       for (let i = 0; i < 2; i += 1) await deal(client, pack(undefined, ID.mythic(12), i));
@@ -748,7 +752,7 @@ describe("economy, tester's hunt (economy.md §14)", { timeout: TEST_TIMEOUT }, 
         [4, "shop_purchase"],
       ]);
       // Then the default reset: one owner_reset of the whole balance.
-      await resetCollection(app.db, client.account.login, { confirm: true });
+      await resetCollection(app.db, client.account.login, { confirm: true, clock: () => now });
       expect((await ledgerOf(app, client.account.id)).at(-1)).toEqual({
         seq: 5,
         kind: "owner_reset",
@@ -769,6 +773,7 @@ describe("economy, tester's hunt (economy.md §14)", { timeout: TEST_TIMEOUT }, 
           stdout: { write: (text: string) => out.push(text) },
           stderr: { write: (text: string) => err.push(text) },
           logDestination: quiet,
+          clock: () => now,
         });
         return { code, stdout: out.join(""), stderr: err.join("") };
       };

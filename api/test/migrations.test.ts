@@ -325,7 +325,9 @@ describe("migrations", () => {
         `);
       },
       async (probe) => {
-        expect((await probe.query("select balance from accounts")).rows).toEqual([{ balance: 0 }]);
+        expect((await probe.query("select balance, last_reset_at from accounts")).rows).toEqual([
+          { balance: 0, last_reset_at: null },
+        ]);
         expect(
           (await probe.query("select source, theme_id, ledger_entry_id, price from pack_openings")).rows,
         ).toEqual([{ source: "timer", theme_id: null, ledger_entry_id: null, price: null }]);
@@ -399,6 +401,34 @@ describe("migrations", () => {
       /\(account_id, character_id, rarity, variant\) WHERE \(removed_at IS NULL\)$/,
     );
     expect(indexes.rows[1]?.indexdef).toMatch(/\(account_id, kind, created_at\)$/);
+  });
+
+  it("records each account's last reset and keeps a removed card removed by trigger (0005, manager decision, 2026-10-30)", async () => {
+    const column = await db.execute<{
+      is_nullable: string;
+      column_default: string | null;
+      data_type: string;
+    }>(
+      sql`
+        select is_nullable, column_default, data_type from information_schema.columns
+        where table_schema = 'public' and table_name = 'accounts' and column_name = 'last_reset_at'
+      `,
+    );
+    expect(column.rows).toEqual([
+      { is_nullable: "YES", column_default: null, data_type: "timestamp with time zone" },
+    ]);
+    const triggers = await db.execute<{ tgname: string; tgenabled: string; definition: string }>(sql`
+      select tgname, tgenabled, pg_get_triggerdef(oid) as definition from pg_trigger
+      where tgrelid = 'cards'::regclass and not tgisinternal
+    `);
+    expect(triggers.rows).toEqual([
+      {
+        tgname: "cards_removed_stays",
+        tgenabled: "O",
+        definition:
+          "CREATE TRIGGER cards_removed_stays BEFORE UPDATE ON public.cards FOR EACH ROW EXECUTE FUNCTION cards_keep_removed()",
+      },
+    ]);
   });
 
   it("checks a card's slot against the pack size and a character's image against IMAGE_HOST (0004)", async () => {

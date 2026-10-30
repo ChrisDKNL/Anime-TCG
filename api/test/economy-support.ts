@@ -1,14 +1,15 @@
 import { randomUUID } from "node:crypto";
 import type { CollectionEntry, CollectionResponse, Rarity } from "@anime-tcg/shared/api";
-import { desc, eq, inArray } from "drizzle-orm";
+import { desc, eq, inArray, sql } from "drizzle-orm";
 import type { LightMyRequestResponse } from "fastify";
 import { expect } from "vitest";
 import type { App } from "../src/app.js";
-import { accounts, ledgerEntries } from "../src/db/schema.js";
+import { createDb } from "../src/db/client.js";
+import { accounts, cards, ledgerEntries } from "../src/db/schema.js";
 import { auditLedger } from "../src/domain/economy/audit.js";
 import { type FixturePool, standardPool } from "./fixtures/pool.js";
 import { body, getCollection } from "./pool-support.js";
-import { send } from "./support.js";
+import { migrationsDatabaseUrl, send } from "./support.js";
 
 /**
  * Helpers of the economy's route tests (economy.md §14). The fixture pool is
@@ -131,4 +132,31 @@ export async function expectLedgerConsistent(app: App, forged: readonly string[]
   if (forged.length > 0) await app.db.delete(accounts).where(inArray(accounts.id, [...forged]));
   const result = await auditLedger(app.db);
   expect(result.failures).toEqual([]);
+}
+
+/** Postgres `integrity_constraint_violation`, the code of 0005's `cards_removed_stays` trigger. */
+export const REMOVED_STAYS = "23000";
+
+/**
+ * Gives a recycle's cards back, as no role may since 0005's trigger: the
+ * owner lifts the trigger for one transaction (no other session ever sees it
+ * lifted), as a restore of a doctored dump could, so a test can show that
+ * `audit-ledger` still finds the recycle. Returns how many cards came back.
+ */
+export async function putBackPastTheTrigger(recycleId: string): Promise<number> {
+  const owner = createDb(migrationsDatabaseUrl());
+  try {
+    return await owner.transaction(async (tx) => {
+      await tx.execute(sql`alter table cards disable trigger cards_removed_stays`);
+      const back = await tx
+        .update(cards)
+        .set({ removedAt: null, removedByRecycle: null })
+        .where(eq(cards.removedByRecycle, recycleId))
+        .returning({ id: cards.id });
+      await tx.execute(sql`alter table cards enable trigger cards_removed_stays`);
+      return back.length;
+    });
+  } finally {
+    await owner.$client.end();
+  }
 }

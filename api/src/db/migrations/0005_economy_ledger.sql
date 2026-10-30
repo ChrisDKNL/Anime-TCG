@@ -4,11 +4,18 @@
 -- account starts at 0 Karma, every 1c opening is a timer opening, and every
 -- 1c card is held. The market's tables and columns arrive with PR 3.
 -- Each recycle keeps its Karma per card and each shop opening its price, so
--- audit-ledger checks a row against the value of its own day.
+-- audit-ledger checks a row against the value of its own day. Each account
+-- keeps the time of its last collection reset, so the audit can tell a
+-- recycle whose cards a reset deleted from one whose cards were never
+-- removed or were put back (manager decision, 2026-10-30).
 -- Then the app role's rights (C11, after 0004's pattern): the ledger and the
 -- recycles are append-only for requests, so no UPDATE or DELETE on either;
 -- of a card it may change only the two columns a recycle writes. A cascade
 -- from an account still removes its rows: it runs with the owner's rights.
+-- Last, a trigger keeps a removed card removed: once removed_at is set,
+-- neither it nor removed_by_recycle changes again, whoever runs the update
+-- (manager decision, 2026-10-30). A reset deletes the cards, so it is not
+-- affected.
 CREATE TYPE "public"."ledger_kind" AS ENUM('recycle_credit', 'shop_purchase', 'market_purchase', 'market_sale', 'market_fee', 'owner_reset');--> statement-breakpoint
 CREATE TYPE "public"."opening_source" AS ENUM('timer', 'shop');--> statement-breakpoint
 CREATE TABLE "ledger_entries" (
@@ -44,6 +51,7 @@ CREATE TABLE "recycles" (
 --> statement-breakpoint
 DROP INDEX "cards_account_entry_idx";--> statement-breakpoint
 ALTER TABLE "accounts" ADD COLUMN "balance" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
+ALTER TABLE "accounts" ADD COLUMN "last_reset_at" timestamp with time zone;--> statement-breakpoint
 ALTER TABLE "cards" ADD COLUMN "removed_at" timestamp with time zone;--> statement-breakpoint
 ALTER TABLE "cards" ADD COLUMN "removed_by_recycle" uuid;--> statement-breakpoint
 ALTER TABLE "cards" ADD COLUMN "escrow_id" uuid;--> statement-breakpoint
@@ -66,4 +74,16 @@ ALTER TABLE "cards" ADD CONSTRAINT "cards_escrow_check" CHECK ("cards"."removed_
 ALTER TABLE "pack_openings" ADD CONSTRAINT "pack_openings_source_check" CHECK (("pack_openings"."source" = 'shop') = ("pack_openings"."theme_id" is not null) and ("pack_openings"."source" = 'shop') = ("pack_openings"."ledger_entry_id" is not null));--> statement-breakpoint
 ALTER TABLE "pack_openings" ADD CONSTRAINT "pack_openings_price_check" CHECK (("pack_openings"."source" = 'shop') = ("pack_openings"."price" is not null) and ("pack_openings"."price" is null or "pack_openings"."price" > 0));--> statement-breakpoint
 REVOKE UPDATE, DELETE ON "ledger_entries", "recycles" FROM "anime_app";--> statement-breakpoint
-GRANT UPDATE ("removed_at", "removed_by_recycle") ON "cards" TO "anime_app";
+GRANT UPDATE ("removed_at", "removed_by_recycle") ON "cards" TO "anime_app";--> statement-breakpoint
+CREATE FUNCTION "cards_keep_removed"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF OLD."removed_at" IS NOT NULL AND (NEW."removed_at" IS DISTINCT FROM OLD."removed_at"
+      OR NEW."removed_by_recycle" IS DISTINCT FROM OLD."removed_by_recycle") THEN
+    RAISE EXCEPTION 'card % was removed at %: a removed card stays removed', OLD."id", OLD."removed_at"
+      USING ERRCODE = 'integrity_constraint_violation';
+  END IF;
+  RETURN NEW;
+END
+$$;--> statement-breakpoint
+CREATE TRIGGER "cards_removed_stays" BEFORE UPDATE ON "cards"
+  FOR EACH ROW EXECUTE FUNCTION "cards_keep_removed"();
