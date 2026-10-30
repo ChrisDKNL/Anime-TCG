@@ -606,6 +606,17 @@ export type ListingParams = Static<typeof ListingParams>;
  */
 const QueryId = Type.String({ pattern: "^[1-9][0-9]{0,9}$" });
 
+/**
+ * A search text: 1 to 100 characters with no control character (`\p{Cc}`,
+ * U+0000 to U+001F and U+007F to U+009F). A name or title never holds one,
+ * and Postgres cannot take U+0000 as text at all (manager decision, 2026-10-30).
+ */
+const SearchText = Type.String({
+  minLength: 1,
+  maxLength: 100,
+  pattern: "^[^\\u0000-\\u001f\\u007f-\\u009f]*$",
+});
+
 export const ListingSort = Type.Union([
   Type.Literal("price_asc"),
   Type.Literal("price_desc"),
@@ -624,7 +635,7 @@ export const ListingsQuery = Type.Object(
     rarity: Type.Optional(Rarity),
     franchiseId: Type.Optional(QueryId),
     characterId: Type.Optional(QueryId),
-    q: Type.Optional(Type.String({ minLength: 1, maxLength: 100 })),
+    q: Type.Optional(SearchText),
     sort: Type.Optional(ListingSort),
     cursor: Type.Optional(Type.String({ minLength: 1, maxLength: 200, pattern: "^[A-Za-z0-9_-]+$" })),
   },

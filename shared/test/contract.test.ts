@@ -345,9 +345,20 @@ describe("market contract (economy.md §11, PR 3)", () => {
         { cursor: "a+b" },
         { q: "" },
         { q: "x".repeat(101) },
+        { q: "a" + String.fromCodePoint(0) + "b" },
+        { q: String.fromCodePoint(0x1f) },
+        { q: "tab" + String.fromCodePoint(9) },
+        { q: String.fromCodePoint(0x7f) },
+        { q: String.fromCodePoint(0x85) },
         { seller: "x" },
       ].map(query),
-    ).toEqual([false, false, false, false, false, false, false, false, false, false]);
+    ).toEqual(Array.from({ length: 15 }, () => false));
+    // Format characters, other scripts and combining marks are text, not control characters.
+    expect(
+      [String.fromCodePoint(0x202e), "進撃", `a${String.fromCodePoint(0x301)}`, "%_\\"].map((q) =>
+        query({ q }),
+      ),
+    ).toEqual([true, true, true, true]);
   });
 
   it("lets a receipt name no listing once the seller's account is gone", () => {
