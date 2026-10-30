@@ -326,6 +326,18 @@ describe("pages (§3.3, §5.3, §5.5)", () => {
     await waitFor(() => expect(results()).toHaveTextContent("70 results · page 2 of 2"));
   });
 
+  it("the clamped page is kept: a later, longer answer stays on it rather than going back", async () => {
+    const { user, queryClient } = await openCollection(
+      sequence(big, { status: 200, body: makeLargeCollection(70) }, big),
+    );
+    await user.selectOptions(screen.getByRole("combobox", { name: "Page" }), "3");
+    await queryClient.refetchQueries({ queryKey: ["collection"] });
+    await waitFor(() => expect(results()).toHaveTextContent("70 results · page 2 of 2"));
+    await queryClient.refetchQueries({ queryKey: ["collection"] });
+    await waitFor(() => expect(results()).toHaveTextContent("130 results · page 2 of 3"));
+    expect(screen.getByRole("combobox", { name: "Page" })).toHaveValue("2");
+  });
+
   it("no page controls with one page", async () => {
     await openCollection();
     expect(screen.queryByRole("navigation", { name: "Pages" })).not.toBeInTheDocument();

@@ -112,7 +112,7 @@ All four run in the browser over the entries the server returned. They are displ
 
 "Last obtained" (`lastObtainedAt`) moves an entry up when a new copy arrives from a pack, a recycle or a purchase, so the cards from the latest pack lead `Newest first`.
 
-**Pages**: 60 entries per page (§5.5). Page controls appear only with more than one page: `Previous`, a page select (`Page [3] of 34`), `Next`. A refetch keeps the page and clamps it if the page no longer exists.
+**Pages**: 60 entries per page (§5.5). Page controls appear only with more than one page: `Previous`, a page select (`Page [3] of 34`), `Next`. A refetch keeps the page and clamps it if the page no longer exists; the clamped page becomes the chosen one, so a later answer with more pages stays there rather than going back (manager decision, 2026-10-30).
 
 ### 3.4 Card dialog
 

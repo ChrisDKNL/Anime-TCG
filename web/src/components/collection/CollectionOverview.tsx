@@ -1,5 +1,5 @@
 import type { CollectionResponse } from "@anime-tcg/shared/api";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useCollectionOverview, type OverviewModel } from "../../hooks/useCollectionOverview";
 import { useResultsAnnouncement } from "../../hooks/useResultsAnnouncement";
 import { resultsCopy, seriesTitle } from "../../lib/collectionCopy";
@@ -52,6 +52,14 @@ export function CollectionOverview({ data, staleSince, controls, onChange }: Pro
   const [open, setOpen] = useState<OpenCard | null>(null);
   const emptyHeading = useRef<HTMLHeadingElement>(null);
   const empty = data.entries.length === 0;
+
+  // The page is the layout's and the results are this view's: when an answer leaves fewer pages
+  // than the chosen one, the clamped page on screen becomes the chosen one, so a later, longer
+  // answer does not jump back to the page the player had left (§3.3 "Pages").
+  const { page, pages } = model;
+  useEffect(() => {
+    if (page !== controls.page) onChange({ type: "clampPage", pages });
+  }, [page, pages, controls.page, onChange]);
 
   const focusAfter = (request: FocusRequest) => {
     pendingFocus.current = request;

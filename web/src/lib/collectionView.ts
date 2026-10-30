@@ -31,7 +31,7 @@ export interface OverviewControls {
   duplicatesOnly: boolean;
   sort: CardSort;
   seriesSort: SeriesSort;
-  /** From 1; the view clamps it to the pages there are (§3.3 "Pages"). */
+  /** From 1; clamped to the pages there are when a refetch leaves fewer (§3.3 "Pages"). */
   page: number;
 }
 
@@ -56,6 +56,8 @@ export type ControlsAction =
   | { type: "sort"; sort: CardSort }
   | { type: "seriesSort"; sort: SeriesSort }
   | { type: "page"; page: number }
+  /** A refetch left fewer pages than the chosen one: the page shown, clamped, becomes the chosen one (§3.3 "Pages"). */
+  | { type: "clampPage"; pages: number }
   | { type: "clearFilters" }
   /** The Series view's `Show cards` (§3.2 step 5). */
   | { type: "showSeries"; series: number };
@@ -93,6 +95,10 @@ export function controlsReducer(state: OverviewControls, action: ControlsAction)
       return { ...state, seriesSort: action.sort };
     case "page":
       return { ...state, page: action.page };
+    case "clampPage": {
+      const page = clampPage(state.page, action.pages);
+      return page === state.page ? state : { ...state, page };
+    }
     case "clearFilters":
       return { ...state, ...FILTER_DEFAULTS, page: 1 };
     case "showSeries":

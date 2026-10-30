@@ -47,6 +47,12 @@ describe("controlsReducer (collection-overview.md §3.3)", () => {
     expect(controlsReducer(onPage3, action).page).toBe(1);
   });
 
+  it("clampPage clamps the chosen page to the pages there are, and keeps the state when it fits", () => {
+    expect(controlsReducer(onPage3, { type: "clampPage", pages: 2 })).toEqual({ ...onPage3, page: 2 });
+    expect(controlsReducer(onPage3, { type: "clampPage", pages: 3 })).toBe(onPage3);
+    expect(controlsReducer(onPage3, { type: "clampPage", pages: 34 })).toBe(onPage3);
+  });
+
   it("paging, the view switch and the Series view's sort keep the page", () => {
     expect(controlsReducer(onPage3, { type: "page", page: 4 }).page).toBe(4);
     expect(controlsReducer(onPage3, { type: "tab", tab: "series" })).toMatchObject({
