@@ -18,6 +18,11 @@ describe("the browse cursor (economy.md §8.4)", () => {
     const cursor = encodeCursor({ sort: "newest", listedAt, id: ID });
     expect(decodeCursor(cursor, "newest")).toEqual({ sort: "newest", listedAt, id: ID });
     expect(() => decodeCursor(cursor, "price_asc")).toThrow(ApiError);
+    for (const listedAt of [new Date(0), new Date("9999-12-31T23:59:59.999Z")]) {
+      expect(decodeCursor(encodeCursor({ sort: "newest", listedAt, id: ID }), "newest")).toMatchObject({
+        listedAt,
+      });
+    }
     for (const price of [1, MAX_ENTRY_AMOUNT]) {
       expect(decodeCursor(encodeCursor({ sort: "price_desc", price, id: ID }), "price_desc")).toMatchObject({
         price,
@@ -45,6 +50,10 @@ describe("the browse cursor (economy.md §8.4)", () => {
       encoded(["newest", "yesterday", ID]),
       encoded(["newest", "2026-11-10T12:00:00Z", ID]),
       encoded(["newest", 5, ID]),
+      encoded(["newest", new Date(-1).toISOString(), ID]),
+      encoded(["newest", new Date(-8.64e15).toISOString(), ID]),
+      encoded(["newest", new Date(Date.UTC(10_000, 0, 1)).toISOString(), ID]),
+      encoded(["newest", new Date(8.64e15).toISOString(), ID]),
     ]) {
       // Each forgery is decoded for the sort it names, so it is refused for what it holds, not for a sort mismatch.
       const named = Buffer.from(text, "base64url").toString("utf8");

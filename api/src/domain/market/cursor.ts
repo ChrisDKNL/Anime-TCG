@@ -14,6 +14,14 @@ export type CursorPosition =
   | { sort: "price_asc" | "price_desc"; price: number; id: string }
   | { sort: "newest"; listedAt: Date; id: string };
 
+/**
+ * The times a listing can carry: from the epoch to the last millisecond of
+ * year 9999, well inside Postgres's `timestamptz`; JavaScript dates reach far
+ * beyond it either way, which the database refuses as an error.
+ */
+const EARLIEST_LISTING_MS = 0;
+const LATEST_LISTING_MS = Date.UTC(9999, 11, 31, 23, 59, 59, 999);
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/u;
 
 export function encodeCursor(position: CursorPosition): string {
@@ -43,7 +51,9 @@ export function decodeCursor(text: string, sort: ListingSort): CursorPosition {
   if (sort === "newest") {
     if (typeof key !== "string") throw invalidCursor();
     const listedAt = new Date(key);
-    if (Number.isNaN(listedAt.getTime()) || listedAt.toISOString() !== key) throw invalidCursor();
+    const ms = listedAt.getTime();
+    if (Number.isNaN(ms) || listedAt.toISOString() !== key) throw invalidCursor();
+    if (ms < EARLIEST_LISTING_MS || ms > LATEST_LISTING_MS) throw invalidCursor();
     return { sort, listedAt, id };
   }
   // No listing is ever priced outside 1..MAX_ENTRY_AMOUNT (its check), so no page can follow such a price.
