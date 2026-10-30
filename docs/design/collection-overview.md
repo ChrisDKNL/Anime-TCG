@@ -166,6 +166,7 @@ The rule (owner, 2026-10-29): a player recycles **duplicates** of an entry, neve
    - **Rate limited, any other answer, no answer, `unauthenticated`**: exactly as §3.5 step 9. `Try again` after no answer resends the same `requestId`, so a lost answer never recycles twice.
 8. `Cancel`, or Escape on the confirmation, returns to the details with the number kept.
 9. There is no fee, no balance check, no draw and no reveal: a recycle for Karma cannot fail for lack of Karma, and its outcome is known before it is sent.
+10. **Settled for `feat/economy-ui`** (manager decision, 2026-10-30): `Cancel` and Escape return focus to `Recycle…`; any answer that returns to the details (recycled, something changed) puts focus on the dialog's name heading; `Cancel` discards the `requestId` after a 429 as after no answer, so a changed number is never sent under an old key. Before the wallet's first answer, `Recycle…` is disabled with the stale reason. Closing the dialog, or leaving the page, from a confirmation is that confirmation's `Cancel`. The `On the market` fact and the tile's listed line read `listed`, which is 0 until `feat/market`, and land with `feat/market-ui`; the recycle confirmation already names listed copies kept.
 
 ### 3.7 Closing the dialog and where focus goes
 
