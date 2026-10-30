@@ -21,3 +21,10 @@ export const PACK_RATE_LIMIT = { max: 20, timeWindow: MINUTE_MS } as const;
  * limit bounds what a script costs a public route that reads the database.
  */
 export const DEMO_RATE_LIMIT = { max: 20, timeWindow: MINUTE_MS } as const;
+
+/**
+ * Every action that moves Karma or cards (economy.md §8.12): recycle and the
+ * shop purchase now, the market's later. Each replaces the global bucket for
+ * its route; the GETs keep the global one.
+ */
+export const CARD_ACTION_RATE_LIMIT = { max: 30, timeWindow: MINUTE_MS } as const;

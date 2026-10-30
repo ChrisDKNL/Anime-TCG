@@ -159,7 +159,22 @@ docker compose --env-file .env.production.local --profile production exec -T api
   node api/dist/cli/snapshot-pool.js               # build from the pages the dry run fetched, and activate
 ```
 
-It prints one line, for example `Snapshot 2 active: 100 entries in 77 franchises, 2983 characters (60 mythic, 179 legendary, 358 epic, 596 rare, 746 uncommon, 1044 common); 0 skipped; 2190 capped in 18 franchises; 31 changed tier, 12 dropped, 55 added; 291 AniList requests.`; `--dry-run` prints the same counts and the franchise list instead, each franchise with its kept characters and, when the cap trimmed it, how many it cut (`8. "ONE PIECE" (21): 1 entry, 60 characters (755 capped)`; titles are quoted the way the reset commands quote a login, so a control or format character AniList sends prints as `\uXXXX`), and writes no snapshot. `capped` counts the characters the cap left out of the pool; they are not errors and are not in `skipped`. The `snapshot built` log line on stderr carries the same counts and `cappedByFranchise` (franchise id to characters cut). Progress goes to stderr as JSON log lines every 25 requests.
+It prints a line of counts, for example `Snapshot 2 active: 100 entries in 77 franchises, 2983 characters (60 mythic, 179 legendary, 358 epic, 596 rare, 746 uncommon, 1044 common); 0 skipped; 2190 capped in 18 franchises; 31 changed tier, 12 dropped, 55 added; 291 AniList requests.`, then the Karma shop's genre themes the snapshot offers and every genre it does not, with why: for a genre too small, each tier that holds fewer than a pack's 5 characters (`docs/design/economy.md` §8.6). Genres are quoted the way titles are. On the real snapshot that reads:
+
+```
+Genre themes on offer: 13 of 17 genres:
+  "Action" (genre-action)
+  "Adventure" (genre-adventure)
+  ...
+  "Thriller" (genre-thriller)
+Genres not on offer:
+  "Ecchi": mythic 2 of 5
+  "Mecha": mythic 4 of 5
+  "Music": common 0 of 5, ...
+  "Sports": mythic 1 of 5
+```
+
+`--dry-run` prints the same counts and genre themes, then the franchise list, each franchise with its kept characters and, when the cap trimmed it, how many it cut (`8. "ONE PIECE" (21): 1 entry, 60 characters (755 capped)`; titles are quoted the way the reset commands quote a login, so a control or format character AniList sends prints as `\uXXXX`), and writes no snapshot. `capped` counts the characters the cap left out of the pool; they are not errors and are not in `skipped`. The `snapshot built` log line on stderr carries the same counts and `cappedByFranchise` (franchise id to characters cut). Progress goes to stderr as JSON log lines every 25 requests.
 
 - **Pace**: one request every 2.5 s (24 a minute, below AniList's degraded 30), never in parallel. Expect about 210 to 310 requests, 9 to 13 minutes. More than 1 000 needed, or more than 40 for the franchise relations, is refused (exit 1) rather than built from a partial answer.
 - **Resume**: every page is stored as it arrives. A 429 waits its `Retry-After` (60 s without one, 15 minutes at most); other failures back off 2, 4, 8, 16 and 32 s. After five retries of one request the command stops with exit code 2 (`Paused after 118 of about 240 requests; run again to resume.`); running it again continues from the first missing page. A fetch that began more than 24 hours ago is started over so a snapshot never mixes rankings from days apart; `--restart` starts over on demand. A dry run keeps the fetched pages, so the run after it sends no request.
@@ -184,12 +199,25 @@ There is no player-facing reset; the owner resets one account's collection:
 
 ```bash
 docker compose --env-file .env.production.local --profile production exec -T api-production \
-  node api/dist/cli/reset-collection.js <login>             # Would reset "<login>": 214 cards, 43 openings; pity and Enchanted counters to zero.
+  node api/dist/cli/reset-collection.js <login>             # Would reset "<login>": 212 cards, 2 recycled cards, 43 openings; pity and Enchanted counters to zero; balance 2750 to 0.
 docker compose --env-file .env.production.local --profile production exec -T api-production \
-  node api/dist/cli/reset-collection.js <login> --confirm   # Collection reset for "<login>": 214 cards and 43 openings removed; packs full; counters reset.
+  node api/dist/cli/reset-collection.js <login> --confirm   # Collection reset for "<login>": 212 cards, 2 recycled cards and 43 openings removed; packs full; counters reset; balance 2750 set to 0.
+docker compose --env-file .env.production.local --profile production exec -T api-production \
+  node api/dist/cli/reset-collection.js <login> --keep-karma --confirm   # ...; balance 2750 kept.
 ```
 
-Without `--confirm` it only counts. With it, the account's pack openings and their cards are deleted, its allowance is full again and both pack counters are 0 as on registration (the guarantee reads 300 free packs again and the next Enchanted pack is the 10th), in one transaction under the same account lock an opening takes, so an opening running at that moment is either removed whole or kept whole. The login, password, sessions and account id stay; a signed-in player sees the empty collection on the next fetch. The login is matched case-insensitively; an unknown one is exit code 1.
+Without `--confirm` it only counts: the cards the player holds, and apart the cards already recycled (shown only when there are some), which the reset deletes too. With it, the account's pack openings and their cards are deleted, its allowance is full again and both pack counters are 0 as on registration (the guarantee reads 300 free packs again and the next Enchanted pack is the 10th), in one transaction under the same account lock an opening takes, so an opening running at that moment is either removed whole or kept whole. The Karma balance is your choice per reset (`docs/design/economy.md` §8.10): by default it goes to 0 with one `owner_reset` ledger row of minus the balance (none when it is already 0); with `--keep-karma` it stays and nothing is written to the ledger. Either way the account's ledger and recycles stay as its history, and the reset's time is recorded on the account, which is how `audit-ledger` knows the recycles and shop purchases before it lost their cards and openings to the reset. The login, password, sessions and account id stay; a signed-in player sees the empty collection on the next fetch. The login is matched case-insensitively; an unknown one is exit code 1.
+
+### Audit the Karma ledger
+
+Run before every release and after any restore of the database (C16):
+
+```bash
+docker compose --env-file .env.production.local --profile production exec -T api-production \
+  node api/dist/cli/audit-ledger.js   # Ledger consistent: 10 accounts, 1234 entries.
+```
+
+Read-only, in one repeatable-read transaction, so it can run while the game does. It checks every account against `docs/design/economy.md` §7: the balance equals the sum of its ledger rows and the newest row's `balance_after`; `seq` runs 1, 2, 3 ... with no gap and each row's `balance_after` follows from the one before; every row has its kind's sign; every shop opening has its debit of the price it recorded; every recycle has its credit of count × the value per card it recorded and removed exactly that many cards of its own entry (or none, only if the account was reset after the recycle); every shop purchase has its opening (or none, only if the account was reset after the purchase); a reset account holds no card older than its last reset (`card <id> predates the last reset`); no credit lacks its recycle; no card is removed by nothing or held in escrow. A consistent ledger is one line on stdout and exit 0; otherwise one line per failing account on stderr (`Account "<login>" (<id>): <what is wrong>; ...`) and exit 1. A failure is a bug or a tampered database: stop and investigate before releasing. After a change of `RECYCLE_VALUE` or `THEMED_PACK_PRICE`, rows recorded at the old value are listed on stdout as `Note: Account "<login>" (<id>): ...` lines; they are expected and do not change the exit code. `DATABASE_URL` only.
 
 ## Rollback
 

@@ -23,5 +23,7 @@ if (typeof HTMLDialogElement.prototype.showModal !== "function") {
   };
 }
 
-// jsdom does not lay out or scroll; the router's scroll restoration calls this on every page change.
+// jsdom does not lay out or scroll; the router's scroll restoration calls this on every page change,
+// and the collection's pages scroll the results line into view.
 window.scrollTo = () => undefined;
+Element.prototype.scrollIntoView = function scrollIntoView() {};

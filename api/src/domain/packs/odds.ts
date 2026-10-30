@@ -1,4 +1,4 @@
-import type { PerRarity, PublishedOdds, SnapshotInfo } from "@anime-tcg/shared/api";
+import type { PerRarity, PublishedOdds, SlotOdds, SnapshotInfo } from "@anime-tcg/shared/api";
 import { PACK_SIZE } from "@anime-tcg/shared/economy";
 import {
   ENCHANTED_INTERVAL,
@@ -50,6 +50,27 @@ export function shareOfCards(tables: readonly OddsTable[], tier: Rarity): number
   return toPartsPerMillion(sum, BigInt(ODDS_SCALE) * BigInt(tables.length));
 }
 
+/** A standard pack's five slot tables with their floors, as every pack kind publishes them. */
+export function publishedSlots(): SlotOdds[] {
+  return SLOT_ODDS.map((table, slot) => {
+    const floor = SLOT_FLOOR[slot];
+    if (floor === undefined || SLOT_ODDS.length !== PACK_SIZE) {
+      throw new RangeError("there must be one slot floor and one slot table per card");
+    }
+    return { floor, odds: perRarity((tier) => table[tier]) };
+  });
+}
+
+/** The chance of at least one card of each tier in a standard pack, in parts per million. */
+export function publishedPerPack(): PerRarity {
+  return perRarity((tier) => atLeastOnePerPack(SLOT_ODDS, tier));
+}
+
+/** The Radiant rule as published: its chance of any pack, slots 1 to 4's table and the last slot's tier. */
+export function publishedRadiant(): PublishedOdds["radiant"] {
+  return { chance: RADIANT_ODDS, odds: perRarity((tier) => RADIANT_SLOT_ODDS[tier]), lastSlot: "mythic" };
+}
+
 /**
  * What `GET /api/packs` publishes (spec §5.4.8, §6.2): the integers the roll
  * applies, the special rules, the tier bands, and what the tables mean for a
@@ -58,26 +79,16 @@ export function shareOfCards(tables: readonly OddsTable[], tier: Rarity): number
 export function publishedOdds(tierSizes: PerRarity, snapshot: SnapshotInfo): PublishedOdds {
   return {
     scale: ODDS_SCALE,
-    slots: SLOT_ODDS.map((table, slot) => {
-      const floor = SLOT_FLOOR[slot];
-      if (floor === undefined || SLOT_ODDS.length !== PACK_SIZE) {
-        throw new RangeError("there must be one slot floor and one slot table per card");
-      }
-      return { floor, odds: perRarity((tier) => table[tier]) };
-    }),
+    slots: publishedSlots(),
     share: perRarity((tier) => shareOfCards(SLOT_ODDS, tier)),
-    perPack: perRarity((tier) => atLeastOnePerPack(SLOT_ODDS, tier)),
+    perPack: publishedPerPack(),
     enchanted: {
       every: ENCHANTED_INTERVAL,
       slot: LAST_SLOT,
       floor: floorOf(ENCHANTED_SLOT_ODDS),
       odds: perRarity((tier) => ENCHANTED_SLOT_ODDS[tier]),
     },
-    radiant: {
-      chance: RADIANT_ODDS,
-      odds: perRarity((tier) => RADIANT_SLOT_ODDS[tier]),
-      lastSlot: "mythic",
-    },
+    radiant: publishedRadiant(),
     pity: { packs: PITY_PACKS, freePacksOnly: true },
     bandScale: SHARE_SCALE,
     tierBands: perRarity((tier) => TIER_BAND[tier]),

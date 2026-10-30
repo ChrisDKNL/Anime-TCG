@@ -17,16 +17,8 @@ import {
 import { describe, expect, it } from "vitest";
 import { perRarity, tierCounts } from "../pool/tiers.js";
 import { atLeastOnePerPack, floorOf, publishedOdds, shareOfCards } from "./odds.js";
-import { LAST_SLOT, planPack, tierForRoll } from "./roll.js";
-
-/** A standard pack's five tables, an Enchanted pack's and a Radiant pack's (its last slot a certain Mythic), in slot order. */
-const PACK_TABLES = {
-  standard: SLOT_ODDS,
-  enchanted: SLOT_ODDS.map((table, slot) => (slot === LAST_SLOT ? ENCHANTED_SLOT_ODDS : table)),
-  radiant: SLOT_ODDS.map((_, slot) =>
-    slot === LAST_SLOT ? perRarity((tier) => (tier === "mythic" ? ODDS_SCALE : 0)) : RADIANT_SLOT_ODDS,
-  ),
-} satisfies Record<string, readonly OddsTable[]>;
+import { longRun, PACK_TABLES } from "./model.js";
+import { planPack, tierForRoll } from "./roll.js";
 
 const below = (floor: Rarity) => RARITIES.slice(0, RARITIES.indexOf(floor));
 const asRecord = (table: OddsTable) => perRarity((tier) => table[tier]);
@@ -233,93 +225,6 @@ describe("one given character's chance (§5.4.2)", () => {
     expect(((rates[1] ?? 0) / (rates[2] ?? 1)).toFixed(3)).toBe("1.198");
   });
 });
-
-/**
- * The long run of one account's free packs (§5.4.6), exactly: a run of
- * packs starts after a Mythic with `free_packs_opened mod 10` at some phase
- * and ends at the next Mythic (by pity at the latest), so the phases at the
- * starts of runs form a 10-state chain. Its stationary weights, times each
- * run's survival curve, give the long-run share of every state of the two
- * counters, and so every per-pack average.
- */
-function longRun() {
-  type PackFigures = {
-    cards: Record<Rarity, number>;
-    mythicPack: number;
-    pityPack: number;
-    enchanted: number;
-  };
-  const radiantChance = RADIANT_ODDS / ODDS_SCALE;
-  const expected = (tables: readonly OddsTable[]) =>
-    perRarity((tier) => tables.reduce((sum, table) => sum + table[tier] / ODDS_SCALE, 0));
-  const packAt = (sinceMythic: number, opened: number): PackFigures => {
-    const pity = sinceMythic === PITY_PACKS - 1;
-    const enchanted = (opened + 1) % ENCHANTED_INTERVAL === 0;
-    const plan = planPack(
-      { packsSinceMythic: sinceMythic, freePacksOpened: opened },
-      "free",
-      () => RADIANT_ODDS,
-    );
-    const tables = plan.slots.map((rule) =>
-      "roll" in rule ? rule.roll : perRarity((tier) => (tier === rule.forced ? ODDS_SCALE : 0)),
-    );
-    const normal = expected(tables);
-    const radiant = expected(PACK_TABLES.radiant);
-    const lastMythic = (tables.at(-1)?.mythic ?? 0) / ODDS_SCALE;
-    return {
-      cards: perRarity((tier) => radiantChance * radiant[tier] + (1 - radiantChance) * normal[tier]),
-      mythicPack: radiantChance + (1 - radiantChance) * lastMythic,
-      pityPack: pity ? 1 - radiantChance : 0,
-      enchanted: enchanted ? 1 : 0,
-    };
-  };
-
-  const runs = Array.from({ length: ENCHANTED_INTERVAL }, (_, phase) => {
-    let survival = 1;
-    const steps: { weight: number; pack: PackFigures }[] = [];
-    const nextPhase = Array<number>(ENCHANTED_INTERVAL).fill(0);
-    for (let k = 0; k < PITY_PACKS; k += 1) {
-      const pack = packAt(k, phase + k);
-      steps.push({ weight: survival, pack });
-      const to = (phase + k + 1) % ENCHANTED_INTERVAL;
-      nextPhase[to] = (nextPhase[to] ?? 0) + survival * pack.mythicPack;
-      survival *= 1 - pack.mythicPack;
-    }
-    return { steps, nextPhase };
-  });
-  let phases = Array<number>(ENCHANTED_INTERVAL).fill(1 / ENCHANTED_INTERVAL);
-  for (let round = 0; round < 2_000; round += 1) {
-    const next = Array<number>(ENCHANTED_INTERVAL).fill(0);
-    runs.forEach((run, from) =>
-      run.nextPhase.forEach((p, to) => (next[to] = (next[to] ?? 0) + (phases[from] ?? 0) * p)),
-    );
-    phases = next;
-  }
-
-  let packs = 0;
-  let mythicPacks = 0;
-  let pityPacks = 0;
-  let enchanted = 0;
-  const cards = perRarity(() => 0);
-  runs.forEach((run, phase) => {
-    for (const { weight, pack } of run.steps) {
-      const w = (phases[phase] ?? 0) * weight;
-      packs += w;
-      mythicPacks += w * pack.mythicPack;
-      pityPacks += w * pack.pityPack;
-      enchanted += w * pack.enchanted;
-      for (const tier of RARITIES) cards[tier] += w * pack.cards[tier];
-    }
-  });
-  return {
-    mythicPackShare: mythicPacks / packs,
-    mythicCardsPerPack: cards.mythic / packs,
-    pityShareOfMythicPacks: pityPacks / mythicPacks,
-    pityShareOfPacks: pityPacks / packs,
-    enchantedShare: enchanted / packs,
-    cardShare: perRarity((tier) => cards[tier] / packs / PACK_SIZE),
-  };
-}
 
 describe("the long run with every rule on (§5.4.6), from the Markov chain over the two counters", () => {
   const run = longRun();

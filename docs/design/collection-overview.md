@@ -75,22 +75,24 @@ All four run in the browser over the entries the server returned. They are displ
 
 **Search match rule** (`economy.md` §8.4 applies the same normalisation on the server for the market's search)
 
-1. The query and every searched field are normalised the same way, in this order: Unicode NFKC (folds full-width letters), lower-case, NFD, remove U+0300–U+036F (Latin accents), NFC, trim, collapse whitespace runs to one space. Kana voiced marks (U+3099, U+309A) are outside the removed range, so `か` does not match `が`.
+1. The query and every searched field are normalised the same way, in this order: Unicode NFKC (folds full-width letters), lower-case, NFD, remove U+0300–U+036F (Latin accents), NFC, trim, collapse whitespace runs to one space. Kana voiced marks (U+3099, U+309A) are outside the removed range, so `か` does not match `が`. Zero-width characters are kept too (manager decision, 2026-10-30): no step removes U+200B, U+200C, U+200D or U+2060, so a name that holds one matches only a query that holds it, as pasted from AniList; typing the visible letters does not find it. U+FEFF counts as whitespace in the trim and the collapse.
 2. The normalised query is split on spaces into terms. An empty query is no search.
 3. An entry matches when **every term** is a substring of **at least one** of: the character name, the character's native name, and the title and the native title of **each** of the character's franchises (`franchiseIds`, resolved through the response's `franchises`).
-4. Punctuation counts: `d. luffy` matches Monkey D. Luffy, `d luffy` does not. The field accepts at most 100 characters.
+4. Punctuation counts: it is kept, so `d.luffy` does not match Monkey D. Luffy (`monkey d. luffy` has no `d.luffy` in it), while `d. luffy` and `d luffy` do, each term on its own (step 3: `d` is in `d.`). The field accepts at most 100 characters.
 5. Each entry's normalised fields are computed once per collection answer, not per keystroke (§5.5).
 
-| Query         | Matches                                                         | Why                                    |
-| ------------- | --------------------------------------------------------------- | -------------------------------------- |
-| `spike`       | Spike Spiegel                                                   | substring of the name                  |
-| `bebop spike` | Spike Spiegel (Cowboy Bebop)                                    | each term is in some field             |
-| `titan`       | every character of Attack on Titan, whichever season they're in | the franchise title covers its seasons |
-| `pokemon`     | characters from "Pokémon"                                       | accents removed                        |
-| `ＬＵＦＦＹ`  | Monkey D. Luffy                                                 | NFKC folds full-width                  |
-| `進撃`        | characters from 進撃の巨人                                      | native franchise title                 |
-| `ルフィ`      | Monkey D. Luffy (native name モンキー・D・ルフィ)               | native character name                  |
-| `luffy zoro`  | nothing, unless one entry contains both terms across its fields | terms are AND, not OR                  |
+| Query         | Matches                                                         | Why                                        |
+| ------------- | --------------------------------------------------------------- | ------------------------------------------ |
+| `spike`       | Spike Spiegel                                                   | substring of the name                      |
+| `bebop spike` | Spike Spiegel (Cowboy Bebop)                                    | each term is in some field                 |
+| `titan`       | every character of Attack on Titan, whichever season they're in | the franchise title covers its seasons     |
+| `pokemon`     | characters from "Pokémon"                                       | accents removed                            |
+| `ＬＵＦＦＹ`  | Monkey D. Luffy                                                 | NFKC folds full-width                      |
+| `進撃`        | characters from 進撃の巨人                                      | native franchise title                     |
+| `ルフィ`      | Monkey D. Luffy (native name モンキー・D・ルフィ)               | native character name                      |
+| `luffy zoro`  | nothing, unless one entry contains both terms across its fields | terms are AND, not OR                      |
+| `d luffy`     | Monkey D. Luffy                                                 | each term is a substring: `d` is in `d.`   |
+| `d.luffy`     | nothing                                                         | punctuation counts: no field has `d.luffy` |
 
 **Filters**
 
@@ -110,7 +112,7 @@ All four run in the browser over the entries the server returned. They are displ
 
 "Last obtained" (`lastObtainedAt`) moves an entry up when a new copy arrives from a pack, a recycle or a purchase, so the cards from the latest pack lead `Newest first`.
 
-**Pages**: 60 entries per page (§5.5). Page controls appear only with more than one page: `Previous`, a page select (`Page [3] of 34`), `Next`. A refetch keeps the page and clamps it if the page no longer exists.
+**Pages**: 60 entries per page (§5.5). Page controls appear only with more than one page: `Previous`, a page select (`Page [3] of 34`), `Next`. A refetch keeps the page and clamps it if the page no longer exists; the clamped page becomes the chosen one, so a later answer with more pages stays there rather than going back (manager decision, 2026-10-30).
 
 ### 3.4 Card dialog
 
@@ -169,7 +171,8 @@ The rule (owner, 2026-10-29): a player recycles **duplicates** of an entry, neve
 
 1. The close button, or Escape on the details, closes the dialog. Escape on a confirmation returns to the details first.
 2. On close the grid reapplies its sort and filters to the server's numbers.
-3. Focus goes to the first of these that exists: the tile of the entry the dialog showed when it closed, if that tile is on the current page; the tile now at the opening tile's position on the page, or the last tile if the page got shorter; the results line, after the page is clamped.
+3. Focus goes to the first of these that exists: the tile of the entry the dialog showed when it closed, if that tile is on the current page; the tile now at the opening tile's position on the page, or the last tile if the page got shorter; the results line, after the page is clamped. When a refetch emptied the collection while the dialog was open, the empty state is under it and focus goes to its heading `No cards yet` (`tabindex="-1"`): like the results line, it says what is there now, and `Open a pack` is the next Tab stop (manager decision, 2026-10-30).
+4. While the dialog is open, a refetch can remove its entry (§4.5 "entry gone"). If focus was inside the details, the control that held it goes with them: focus moves to the message `You no longer have this card.`, a focus target (`tabindex="-1"`) and the first thing in the body under the close button, so a screen reader hears what replaced the details. It never falls to `<body>`. Focus on the dialog itself or on the close button stays where it is (manager decision, 2026-10-30).
 
 ### 3.8 What the UI needs from the server
 
@@ -177,21 +180,24 @@ Per screen, with the field that supplies it. ✓ means the server supplies it as
 
 **Cards view** (`GET /api/collection`, `CollectionResponse`, `collection-packs.md` §6.2 with `economy.md` §11.2's additions)
 
-| Need                                                         | Field                                                             | Status |
-| ------------------------------------------------------------ | ----------------------------------------------------------------- | ------ |
-| One tile per entry, keyed by character and rarity            | `entries[].character.id`, `entries[].rarity` (six tiers)          | ✓      |
-| Reserved kind and variant (ignored while each has one value) | `entries[].kind` (`"card"`), `entries[].variant` (`"standard"`)   | ✓      |
-| Name, native name, art                                       | `character.name`, `character.nameNative`, `character.imageUrl`    | ✓      |
-| Rank chip on the card, and the pool size it is out of        | `character.rank`, `snapshot.characterCount`                       | ✓      |
-| Franchises per character, primary first                      | `character.franchiseIds`                                          | ✓      |
-| Franchise titles for tile, search, filter, disambiguation    | `franchises[]`: `id`, `title`, `titleNative`, `startYear`         | ✓      |
-| Copies, listed, available                                    | `count`, `listed`, `available`                                    | ✓      |
-| Recyclable duplicates                                        | `recyclable` (`economy.md` §11.2)                                 | ✓      |
-| Sort and facts dates                                         | `firstObtainedAt`, `lastObtainedAt`                               | ✓      |
-| Current tier and snapshot membership                         | `character.tier`, `character.inCurrentSnapshot`                   | ✓      |
-| Totals line, header link label                               | `totals.cards`, `totals.duplicates`, `totals.byRarity` (six keys) | ✓      |
-| Pool completion                                              | `completion.pool.owned`, `.total`                                 | ✓      |
-| Series option labels and the filtered series line            | `completion.franchises[]` by `franchiseId`                        | ✓      |
+| Need                                                         | Field                                                             | Status                                    |
+| ------------------------------------------------------------ | ----------------------------------------------------------------- | ----------------------------------------- |
+| One tile per entry, keyed by character and rarity            | `entries[].character.id`, `entries[].rarity` (six tiers)          | ✓                                         |
+| Reserved kind and variant (ignored while each has one value) | `entries[].kind` (`"card"`), `entries[].variant` (`"standard"`)   | ✓                                         |
+| Name, native name, art                                       | `character.name`, `character.nameNative`, `character.imageUrl`    | ✓                                         |
+| Rank chip on the card, and the pool size it is out of        | `character.rank`, `snapshot.characterCount`                       | ✓                                         |
+| Franchises per character, primary first                      | `character.franchiseIds`                                          | ✓                                         |
+| Franchise titles for tile, search, filter, disambiguation    | `franchises[]`: `id`, `title`, `titleNative`, `startYear`         | ✓                                         |
+| Copies                                                       | `count`                                                           | ✓                                         |
+| Listed and available copies                                  | `listed`, `available`                                             | pending: economy PRs (`economy.md` §11.2) |
+| Recyclable duplicates                                        | `recyclable`                                                      | pending: economy PRs (`economy.md` §11.2) |
+| Sort and facts dates                                         | `firstObtainedAt`, `lastObtainedAt`                               | ✓                                         |
+| Current tier and snapshot membership                         | `character.tier`, `character.inCurrentSnapshot`                   | ✓                                         |
+| Totals line, header link label                               | `totals.cards`, `totals.duplicates`, `totals.byRarity` (six keys) | ✓                                         |
+| Pool completion                                              | `completion.pool.owned`, `.total`                                 | ✓                                         |
+| Series option labels and the filtered series line            | `completion.franchises[]` by `franchiseId`                        | ✓                                         |
+
+`listed`, `available` and `recyclable` are not in `CollectionEntry` as shipped in #28: they arrive with the economy PRs that add `economy.md` §11.2 to the contract, and the card dialog's facts, the tile's listed line and the List and Recycle sections that read them land with those PRs (manager decision, 2026-10-30).
 
 **Series view**: `completion.franchises[]` in the server's popularity order, every franchise of the current snapshot including 0-owned rows; titles through `franchises[]`; `snapshot.takenAt` for the source line (all ✓).
 
@@ -256,17 +262,18 @@ The UI reads every one of them from `GET /api/wallet`; none is written into a st
 
 ### 4.1 Collection view
 
-| State                             | User sees                                                                                                                                                                                                                            | User can do                                                         |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------- |
-| first load, within 300 ms         | Nothing in the main area                                                                                                                                                                                                             | Wait                                                                |
-| loading (after 300 ms)            | Stats skeleton (two bars), the view switch and toolbar rendered and disabled, 12 skeleton tiles; visually hidden `Loading your collection…` in a `role="status"`                                                                     | Wait                                                                |
-| empty                             | Heading `No cards yet` and `Open a pack`; no stats, no view switch, no toolbar                                                                                                                                                       | Open a pack (a link to `/packs`; focus goes to its `Packs` heading) |
-| loaded, Cards view                | Stats, view switch, toolbar, results line, grid, pages when there are more than 60 results                                                                                                                                           | Everything                                                          |
-| loaded, Series view               | Stats, view switch, the series sort, every series row, the source line                                                                                                                                                               | Sort, Show cards, switch back                                       |
-| refreshing (data held)            | The held data, unchanged; nothing marks the refetch                                                                                                                                                                                  | Everything                                                          |
-| stale (refetch failed, data held) | The held data; under the totals the note `Showing your collection as of <HH:MM>.` (the time the held data arrived); the app-level unreachable banner when the network is the cause; listing and recycling disabled with their reason | Browse, open cards, `Try again` in the banner                       |
-| error (nothing held)              | `Couldn't load your collection.` and `Try again` in place of stats and grid; the app-level unreachable banner as well when the network is the cause                                                                                  | Try again                                                           |
-| session ended                     | `accounts.md` §4.8                                                                                                                                                                                                                   | Log in                                                              |
+| State                                                | User sees                                                                                                                                                                                                                                                                                  | User can do                                                         |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------- |
+| first load, within 300 ms                            | Nothing in the main area                                                                                                                                                                                                                                                                   | Wait                                                                |
+| loading (after 300 ms)                               | Stats skeleton (two bars), the view switch and toolbar rendered and disabled, 12 skeleton tiles; visually hidden `Loading your collection…` in a `role="status"`                                                                                                                           | Wait                                                                |
+| empty                                                | Heading `No cards yet` and `Open a pack`; no stats, no view switch, no toolbar                                                                                                                                                                                                             | Open a pack (a link to `/packs`; focus goes to its `Packs` heading) |
+| loaded, Cards view                                   | Stats, view switch, toolbar, results line, grid, pages when there are more than 60 results                                                                                                                                                                                                 | Everything                                                          |
+| loaded, Series view                                  | Stats, view switch, the series sort, every series row, the source line                                                                                                                                                                                                                     | Sort, Show cards, switch back                                       |
+| loaded, no snapshot (`snapshot: null`, entries held) | As loaded, without the pool completion figure, its percentage and its bar: there is no pool to complete; the totals stay. The Series view is one line, `Series totals appear when the card pool is available.`, in place of its sort, rows and source line (manager decisions, 2026-10-30) | Everything                                                          |
+| refreshing (data held)                               | The held data, unchanged; nothing marks the refetch: the results line it changes is not announced, since only the player's changes (search, filters, sort, paging, `Clear filters`) send it to the live region (manager decision, 2026-10-30)                                              | Everything                                                          |
+| stale (refetch failed, data held)                    | The held data; under the totals the note `Showing your collection as of <HH:MM>.` (the time the held data arrived); the app-level unreachable banner when the network is the cause; listing and recycling disabled with their reason                                                       | Browse, open cards, `Try again` in the banner                       |
+| error (nothing held)                                 | `Couldn't load your collection.` and `Try again` in place of stats and grid; the app-level unreachable banner as well when the network is the cause                                                                                                                                        | Try again                                                           |
+| session ended                                        | `accounts.md` §4.8                                                                                                                                                                                                                                                                         | Log in                                                              |
 
 ### 4.2 Toolbar and results (Cards view)
 
@@ -303,15 +310,15 @@ The UI reads every one of them from `GET /api/wallet`; none is written into a st
 
 ### 4.5 Card dialog
 
-| State                        | User sees                                                                                                                         | User can do          |
-| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
-| open                         | Close button, art, name (heading), native name, series, `Also in`, facts, at most one note, List on the market, Recycle for Karma | List, recycle, close |
-| tier moved                   | Under the facts: `Packs now give <name> as <Tier>.`                                                                               | As open              |
-| out of pool                  | Under the facts: `No longer in packs. Doesn't count toward completion.`                                                           | As open              |
-| stale (collection or wallet) | `List…` and `Recycle…` disabled, reason `Listing and recycling wait until the game server answers.`                               | Close                |
-| entry changed by a refetch   | The facts show the server's new counts; reasons follow them                                                                       | As open              |
-| entry gone after a refetch   | Body replaced by `You no longer have this card.` and `Close`                                                                      | Close                |
-| session ended                | The dialog closes; `accounts.md` §4.8                                                                                             | Log in               |
+| State                        | User sees                                                                                                                                                                                                                              | User can do          |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
+| open                         | Close button, art, name (heading), native name, series, `Also in`, facts, at most one note, List on the market, Recycle for Karma                                                                                                      | List, recycle, close |
+| tier moved                   | Under the facts: `Packs now give <name> as <Tier>.`                                                                                                                                                                                    | As open              |
+| out of pool                  | Under the facts: `No longer in packs. Doesn't count toward completion.`                                                                                                                                                                | As open              |
+| stale (collection or wallet) | `List…` and `Recycle…` disabled, reason `Listing and recycling wait until the game server answers.`                                                                                                                                    | Close                |
+| entry changed by a refetch   | The facts show the server's new counts; reasons follow them                                                                                                                                                                            | As open              |
+| entry gone after a refetch   | Body replaced by `You no longer have this card.` and `Close`; focus inside the details moves to the message (§3.7 step 4). When the collection is now empty, the dialog stays open over the empty state (manager decision, 2026-10-30) | Close                |
+| session ended                | The dialog closes; `accounts.md` §4.8                                                                                                                                                                                                  | Log in               |
 
 ### 4.6 List on the market
 
@@ -391,11 +398,11 @@ Top to bottom inside `<main>`: stats, view switch, then the Cards view (toolbar,
 
 **Toolbar** (Cards view, `mt-4`), a visible label above each control; the rarity chips have their own row because six tiers do not fit a select's width:
 
-| Width          | Arrangement                                                                                                                                                         |
-| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| below 640 px   | Row 1: Search, full width. Row 2: Series and Sort, half each. Row 3: the rarity chips, wrapping (three lines at 320 px). Row 4: Duplicates only, then Clear filters |
-| 640–1023 px    | Row 1: Search, full width. Row 2: Series and Sort, half each. Row 3: the rarity chips, then Duplicates only and Clear filters, wrapping as one row                  |
-| 1024 px and up | Row 1, bottom-aligned: Search (grows, at least 14rem), Series (14rem), Sort (12rem). Row 2: the rarity chips, Duplicates only, Clear filters                        |
+| Width          | Arrangement                                                                                                                                                                                                                                                                                                                                                 |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| below 640 px   | Row 1: Search, full width. Row 2: Series and Sort, half each. Row 3: the rarity chips, wrapping, never more than three lines at 320 px: two with a narrow system font such as Windows' Segoe UI, three with a wider one such as the Linux font CI renders with (manager decision, 2026-10-30, measured on both). Row 4: Duplicates only, then Clear filters |
+| 640–1023 px    | Row 1: Search, full width. Row 2: Series and Sort, half each. Row 3: the rarity chips, then Duplicates only and Clear filters, wrapping as one row                                                                                                                                                                                                          |
+| 1024 px and up | Row 1, bottom-aligned: Search (grows, at least 14rem), Series (14rem), Sort (12rem). Row 2: the rarity chips, Duplicates only, Clear filters                                                                                                                                                                                                                |
 
 Select widths are fixed so the row does not shift when a long series title is chosen; the chosen title truncates inside the select. The chips keep their order (`All`, then lowest tier first) at every width; `gap-2`.
 
@@ -430,7 +437,8 @@ The pool is 2,983 characters (the first real snapshot after the franchise cap, `
 - **Why it stays fast.** Normalised search fields are built once per answer (§3.3 step 5), so a keystroke is a substring scan over at most a few thousand short strings: well under a frame. The Series view is under 100 rows.
 - **Why pagination.** What thousands of tiles cost is DOM and images. The grid shows **60 entries per page**. Every rendered tile is a real element, so Tab order, screen-reader browse mode and find-in-page work. At most 60 images load per page, lazily. "Page 2 of 34" is a position a player can get back to, and the page select reaches page 34 without 33 clicks. 60 fills whole rows at every column count (§5.1). It needs no dependency.
 - **Why not virtualisation.** It adds a dependency (a T2 review). It removes off-screen tiles, which breaks find-in-page and screen-reader browsing and can drop the focused tile. A responsive auto-fill grid also needs measured rows before it can be virtualised. At 60 tiles a page it buys nothing.
-- **When to revisit** (any one): a collection answer passes 1 MB (about 4,300 entries); `SNAPSHOT_CHARACTERS_MAX` is raised; the build PR's measurement of a keystroke over 3,000 fixture entries on the CI runner, with CPU throttled 4×, exceeds 16 ms. Then the read moves to server-side paging with search, filters and sort as request parameters, like the market's, and this section is rewritten. The build PR's unit test renders 3,000 fixture entries and asserts that at most 60 tiles are in the DOM.
+- **Measured, and kept (manager decision, 2026-10-30).** Client-side search and paging stay. Over 3,000 fixture entries (`makeLargeCollection`, the build PR's fixture): the search itself takes about 0.75 ms a keystroke (0.40 ms in Node on the owner's station, with the search fields built once per answer in 16 ms); from a keystroke to the new page of tiles painted, Chromium on the production build took 15 to 33 ms unthrottled (median 24 ms, 16 keystrokes) and 85 to 380 ms with the CPU throttled 4× (median about 190 ms). That time is mounting 60 cards, which server-side paging would not remove: a page from the server mounts the same 60 cards, after a round trip. The grid's update is deferred (`useDeferredValue`), so the field takes each keystroke at once and typing interrupts a render still in progress.
+- **When to revisit** (any one, manager decision, 2026-10-30; it replaces only the earlier 16 ms a keystroke at 4× throttling, which measured the mount rather than the search): the `GET /api/collection` answer exceeds 1 MB; `SNAPSHOT_CHARACTERS_MAX` is raised; a player's collection exceeds about 10,000 entries; the keystroke-to-results time on the production build exceeds 100 ms unthrottled. Then the read moves to server-side paging with search, filters and sort as request parameters, like the market's, and this section is rewritten. The build PR's unit test renders 3,000 fixture entries and asserts that at most 60 tiles are in the DOM.
 
 ### 5.6 Truncation and AniList text (T1)
 
@@ -442,7 +450,7 @@ Names, native names, franchise titles, native titles and image URLs come from An
 4. One-line renderings (tile name and series, the series line in the stats, a Series view row's title from `sm`) use `truncate` and carry `title` with the full string. The dialog heading, series lines, `Also in`, confirmation headings and bodies, the result heading and the no-match message wrap with `break-words` (`overflow-wrap: anywhere`), so a 200-character name without spaces stays inside the dialog.
 5. Series option labels are cut at 60 grapheme clusters (`Intl.Segmenter`) followed by `…`. The full title still matches a search.
 6. Tile text lines clip vertically (`overflow-hidden` with `leading-tight`), so a stack of combining marks cannot paint over the tile below.
-7. `imageUrl` is only ever an `<img src>`. An image the browser cannot load, or that the CSP (C8) refuses, shows the `No image` box. Card art is never a link.
+7. `imageUrl` is only ever an `<img src>`. An image the browser cannot load, or that the CSP (C8) refuses, shows the `No image` box. A new address, as a refetch after a snapshot update brings, resets the art: the new image is asked for and shows on the placeholder until it loads. The address that failed is not tried again while the card shows it (manager decision, 2026-10-30). Card art is never a link.
 8. Normalisation (§3.3) is for matching only. Everything on screen is the original string.
 9. The price field accepts digits only after trimming; the value sent is the parsed integer, never the raw text.
 
@@ -479,7 +487,7 @@ The tile is the card (`card-and-rarity.md` §3) at tile size, inside a button, w
 - Totals line: `text-xs text-zinc-400`, `flex flex-wrap gap-x-4 gap-y-1`; each tier word in `text-rarity-<tier>-text`, its number in `text-zinc-200 tabular-nums`.
 - Stale note: `text-xs text-zinc-400`.
 - View switch: `inline-flex gap-1 rounded-lg bg-zinc-900 p-1`; each button `rounded-md px-3 py-1.5 text-sm font-medium`, pressed `bg-zinc-700 text-white`, not pressed `text-zinc-400 hover:text-zinc-200`, the violet focus ring. The header links' look at a smaller radius.
-- **Rarity chips**: `rounded-md border px-2.5 py-2.5 sm:py-1.5 text-[11px] font-semibold tracking-wider uppercase`, the violet focus ring. A tier chip not pressed: `border-zinc-800 bg-transparent`, the word in `text-rarity-<tier>-text`, hover `border-rarity-<tier>/40`. Pressed: `border-rarity-<tier>/80 bg-rarity-<tier>/15`, the word in `text-rarity-<tier>-text`. Chips sit on `zinc-950` only (`card-and-rarity.md` §4.2). `All`: not pressed `border-zinc-800 text-zinc-300`, pressed `border-zinc-600 bg-zinc-800 text-zinc-100`. The fill is the pressed cue, so it does not rest on hue alone. No glow, no shadow; nothing moves when pressed.
+- **Rarity chips**: `rounded-md border px-2.5 py-2.5 sm:py-1.5 text-[11px] leading-[18px] font-semibold tracking-wider uppercase`, the violet focus ring. A tier chip not pressed: `border-zinc-800 bg-transparent`, the word in `text-rarity-<tier>-text`, hover `border-rarity-<tier>/40`. Pressed: `border-rarity-<tier>/80 bg-rarity-<tier>/15`, the word in `text-rarity-<tier>-text`. Chips sit on `zinc-950` only (`card-and-rarity.md` §4.2). `All`: not pressed `border-zinc-800 text-zinc-300`, pressed `border-zinc-600 bg-zinc-800 text-zinc-100`. The fill is the pressed cue, so it does not rest on hue alone. No glow, no shadow; nothing moves when pressed.
 - Toolbar labels: `text-xs text-zinc-400`, above the control. Not the accounts hint colour (`zinc-500`): these labels are the controls' names and must reach 4.5:1 on `zinc-950`.
 - Search, selects and the price field: the accounts `INPUT` classes (`rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100`, violet focus ring).
 - Duplicates only: a native checkbox `size-4 accent-violet-600` inside its label, `text-sm text-zinc-200`; the whole label is clickable.
@@ -553,7 +561,7 @@ No gradients, glows, glass (backdrop blur), drop shadows, hover lift or zoom, em
 
 - **Grid**: `<ul role="list" aria-labelledby="collection-results">`. The explicit role keeps list semantics in Safari, which drops them under `list-style: none`. DOM order is visual order, row by row, so Tab, browse mode and sight agree. Tile art is `alt=""`: the name is already in the button's name.
 - **Series list**: `<ul role="list">` of `<li>` rows; the title, then the figure as text (`3 of 12`); the bars are `aria-hidden="true"` because the figure carries the number. The pool bar is `aria-hidden` for the same reason.
-- **Results line**: a plain paragraph with `id="collection-results"` and `tabindex="-1"` (a focus target). Its text goes to the app live region 500 ms after the last change, never per keystroke.
+- **Results line**: a plain paragraph with `id="collection-results"` and `tabindex="-1"` (a focus target). Its text goes to the app live region 500 ms after the last change the player makes (search, filters, sort, paging, `Clear filters`), never per keystroke; a refetch that changes it says nothing (§4.1 "refreshing", manager decision, 2026-10-30).
 - **Pages**: `<nav aria-label="Pages">`. After a page change focus moves to the results line, which reads for example `2,014 results · page 2 of 34`.
 - **Dialog**: native `<dialog>` with `showModal()`, which gives the focus trap, Escape and the inert background. Initial focus is the dialog element (`tabindex="-1"`), as in Manage account. A confirmation focuses its heading (`tabindex="-1"`) and points `aria-describedby` at its body, so a screen reader reads the exact outcome before reaching the button. After a success that keeps the dialog open, focus goes to the dialog heading and the status line (`role="status"`) is read.
 - **Fee line and credit line**: not live regions (they change per keystroke); each is part of its field's description, and the confirmation repeats its numbers.
@@ -564,7 +572,7 @@ No gradients, glows, glass (backdrop blur), drop shadows, hover lift or zoom, em
 - **Keyboard path, end to end**: Tab to the `Collection (<N>)` link in the header, Enter; focus moves to the `Collection` heading. Tab through the view switch, Search, Series, Sort, the rarity chips, Duplicates only and Clear filters (when shown), then into the tiles. Enter opens the dialog. Tab to `Price`, type, Tab to `List…`, Enter. The confirmation heading has focus; Tab to `List for …`, Enter. The status line is read. Tab to `Duplicates`, then `Recycle…`, Enter, Tab to `Recycle for …`, Enter; the status line is read. Escape closes; focus returns per §3.7. In the Series view, Tab moves through the sort and the `Show cards` buttons only. No step needs a pointer.
 - **No arrow-key grid**: a page holds at most 60 tiles, one Tab stop each. A roving-tabindex grid would need the column count measured from the layout and adds a pattern screen-reader users must learn, for little gain at this size.
 - **Contrast**: everything that must be read is `zinc-400` or lighter, or a tier text colour (`--color-rarity-<tier>-text`), on `zinc-900` or `zinc-950` (and on a pressed chip's `/15` fill over `zinc-950`): all at least 4.5:1, as `card-and-rarity.md` §4.2 computes; the card's own text pairs are checked there too. This view uses no `zinc-500` text. Frames are decorative; rarity is always also the stars or the word (WCAG 1.4.1).
-- **Touch targets**: every control is at least 40 px tall on a phone, the chips and the `BUTTON.text` links included (`py-2.5` and `py-2` on a phone); tiles are far larger.
+- **Touch targets**: every control is at least 40 px tall on a phone, the chips and the `BUTTON.text` links included (`py-2.5` and `py-2` on a phone; the chips' 11 px text sits in an 18 px line box, since its inherited 1.5 line height made them 38.5 px); tiles are far larger.
 - **Reduced motion**: §6.5.
 
 ## 8. Copy
@@ -609,6 +617,7 @@ Exact strings. Placeholders: `<name>` the character name; `<series>` and `<title
 | Row title with a shared title | `<title>, <startYear>`                                                       |
 | Row button                    | `Show cards` (accessible name `Show cards from <title>`)                     |
 | Source line                   | `<S> series from the 100 most popular anime on AniList, as of <D Mon YYYY>.` |
+| No snapshot (§4.1)            | `Series totals appear when the card pool is available.`                      |
 
 **Toolbar**
 

@@ -681,9 +681,10 @@ const HOSTILE_PACK: PackOpened = {
 /**
  * In the page: for each card in `scope`, the element holding the name (found by its `title`, the
  * name between FSI and PDI) has exactly the name as its text, no child element and `dir="auto"`;
- * the series likewise; the article's label holds both, each isolated (collection-overview.md §5.6).
+ * the series likewise; the card's label (the article's in the reveal, the tile button's in the
+ * collection) holds both, each isolated (collection-overview.md §5.6).
  */
-async function expectCardsAsText(page: Page, scope: "Your pack" | "Your cards") {
+async function expectCardsAsText(page: Page, scope: string | RegExp) {
   const report = await page.getByRole("list", { name: scope }).evaluate((list, hostile) => {
     const isolated = (text: string) => `\u2068${text}\u2069`;
     return hostile.map(({ name, series }) => {
@@ -700,8 +701,8 @@ async function expectCardsAsText(page: Page, scope: "Your pack" | "Your cards") 
       return {
         name: asText(nameElement, name),
         series: asText(seriesElement, series),
-        label: Array.from(list.querySelectorAll("article")).some((article) => {
-          const label = article.getAttribute("aria-label") ?? "";
+        label: Array.from(list.querySelectorAll("article, button[aria-label]")).some((card) => {
+          const label = card.getAttribute("aria-label") ?? "";
           return label.includes(isolated(name)) && label.includes(isolated(series));
         }),
       };
@@ -723,12 +724,12 @@ async function expectNothingInjected(page: Page) {
 }
 
 /** At 320 px: no sideways scroll, and every card is as wide as the first (nothing widened its column). */
-async function expectContained(page: Page, scope: "Your pack" | "Your cards") {
+async function expectContained(page: Page, scope: string | RegExp) {
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(320);
   const widths = await page
     .getByRole("list", { name: scope })
-    .getByRole("article")
-    .evaluateAll((articles) => articles.map((article) => Math.round(article.getBoundingClientRect().width)));
+    .locator('[class*="card-frame-"]')
+    .evaluateAll((cards) => cards.map((card) => Math.round(card.getBoundingClientRect().width)));
   expect(new Set(widths).size).toBe(1);
 }
 
@@ -745,7 +746,7 @@ test.describe("hostile AniList text renders as text (§7 T1)", () => {
     await expectContained(page, "Your pack");
   });
 
-  test("in the collection, the Rarity filter included", async ({ page, api }) => {
+  test("in the collection, the rarity chips included", async ({ page, api }) => {
     api.on("GET /api/session", signedIn(CHRIS));
     api.on("GET /api/collection", {
       status: 200,
@@ -756,15 +757,17 @@ test.describe("hostile AniList text renders as text (§7 T1)", () => {
     });
     await page.setViewportSize({ width: 320, height: 800 });
     await page.goto("/collection");
-    await expect(page.getByRole("list", { name: "Your cards" }).getByRole("article")).toHaveCount(5);
-    await expectCardsAsText(page, "Your cards");
+    const cards = page.getByRole("list", { name: "5 results" }).getByRole("button");
+    await expect(cards).toHaveCount(5);
+    await expectCardsAsText(page, "5 results");
     await expectNothingInjected(page);
-    await expectContained(page, "Your cards");
-    // The filter and its no-match line name tiers only, never a character.
-    await page.getByLabel("Rarity").selectOption("mythic");
-    await expect(page.getByText("No Mythic cards in your collection.")).toBeVisible();
-    await page.getByLabel("Rarity").selectOption("all");
-    await expect(page.getByRole("list", { name: "Your cards" }).getByRole("article")).toHaveCount(5);
+    await expectContained(page, "5 results");
+    // The chips and the no-match line name tiers only, never a character.
+    const rarity = page.getByRole("group", { name: "Rarity" });
+    await rarity.getByRole("button", { name: "Mythic" }).click();
+    await expect(page.getByText("No cards match these filters.")).toBeVisible();
+    await rarity.getByRole("button", { name: "All" }).click();
+    await expect(cards).toHaveCount(5);
   });
 });
 
@@ -988,7 +991,7 @@ test.describe("`free` only as `free pack(s)`, only on /packs and in the odds dia
       await page.goto(path);
       await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
       if (path === "/collection") {
-        await expect(page.getByRole("list", { name: "Your cards" }).getByRole("article")).toHaveCount(5);
+        await expect(page.getByRole("list", { name: "5 results" }).getByRole("button")).toHaveCount(5);
       }
       seen.push(...(await pageStrings(page)));
     }
@@ -1028,7 +1031,7 @@ test("Back across a reload before the collection has answered: the top, and no j
     await expect(mainNav(page).getByRole("link", { name: `Collection (${pack * 5})` })).toBeVisible();
   }
   await mainNav(page).getByRole("link", { name: "Collection (20)" }).click();
-  await expect(page.getByRole("list", { name: "Your cards" }).getByRole("article")).toHaveCount(20);
+  await expect(page.getByRole("list", { name: "20 results" }).getByRole("button")).toHaveCount(20);
   await page.evaluate(
     () =>
       new Promise<void>((resolve) => {
@@ -1049,7 +1052,7 @@ test("Back across a reload before the collection has answered: the top, and no j
   await expect(h1(page, "Collection")).toBeFocused();
   expect(await page.evaluate(() => window.scrollY)).toBe(0);
   hold.release();
-  await expect(page.getByRole("list", { name: "Your cards" }).getByRole("article")).toHaveCount(20);
+  await expect(page.getByRole("list", { name: "20 results" }).getByRole("button")).toHaveCount(20);
   // Two frames after the grid lands, the page has still not moved.
   await page.evaluate(
     () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),

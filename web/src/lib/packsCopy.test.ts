@@ -1,10 +1,10 @@
 import type { PublishedOdds, Rarity } from "@anime-tcg/shared/api";
 import { describe, expect, it } from "vitest";
+import { FORBIDDEN_WORDS as FORBIDDEN, walkCopy } from "../test/copyWords";
 import { makeOdds } from "../test/fixtures";
 import {
   cardCopy,
   clock,
-  collectionCopy,
   oddsCopy,
   ordinal,
   packControlCopy,
@@ -20,46 +20,6 @@ import * as packs from "./packsCopy";
 const odds = makeOdds();
 const paidOnly: PublishedOdds = { ...odds, pity: { packs: 300, freePacksOnly: false } };
 
-/** navigation-and-landing.md §8 "Words", the accounts words and collection-overview.md §8's nudges. */
-const FORBIDDEN = [
-  /secure|verif|protect|safe|privat|attempt|locked|blocked/i,
-  /\bpay\b/i,
-  /\bpaid\b/i,
-  /\bcash\b/i,
-  /\bmoney\b/i,
-  /\bcoins?\b/i,
-  /\bearn/i,
-  /\bprofit/i,
-  /\bworth\b/i,
-  /\bvalue\b/i,
-  /\bbalance\b/i,
-  /\bwallet\b/i,
-  /\bstore\b/i,
-  /\bcheckout\b/i,
-  /\bpurchase/i,
-  /[$€£¥]/,
-  /!/,
-  /\bhurry\b/i,
-  /\bact now\b/i,
-  /\btoday only\b/i,
-  /\bending soon\b/i,
-  /\blast chance\b/i,
-  /\bdon't miss\b/i,
-  /\bonly \d+ left\b/i,
-  /\blimited\b/i,
-  /\blucky\b/i,
-  /\bjackpot\b/i,
-  /\bwin\b/i,
-  /\bprize\b/i,
-  /\byou could get\b/i,
-  /\btry your luck\b/i,
-  /\bone more\b/i,
-  /\banother\b/i,
-  /\bdeal\b/i,
-  /\bstreak/i,
-  /\balmost\b/i,
-  /\bsoon\b/i,
-];
 /** `free` only in the owner's phrase for the timer pack (packs-page.md §9, question 1). */
 const LOOSE_FREE = /\bfree\b(?! packs?\b)/i;
 
@@ -69,6 +29,7 @@ const PACK: Rarity[] = ["epic", "rare", "common", "common", "common"];
 /** Every function of the module, called with the arguments the page gives it. */
 const CALLS: Record<string, string[]> = {
   formatCount: [packs.formatCount(2_983)],
+  plural: [packs.plural(1, "copy", "copies"), packs.plural(2, "copy", "copies")],
   ordinal: [ordinal(1), ordinal(300)],
   slotWord: [slotWord(5)],
   sizeWord: [sizeWord(5)],
@@ -106,27 +67,9 @@ const CALLS: Record<string, string[]> = {
   "cardCopy.rank": [cardCopy.rank(12, 2_983), cardCopy.rank(12, null)],
   "cardCopy.rankSpoken": [cardCopy.rankSpoken(12, 2_983), cardCopy.rankSpoken(12, null)],
   "cardCopy.label": [cardCopy.label("Name", "epic", "Series"), cardCopy.label("Name", "epic", null)],
-  "collectionCopy.stale": [collectionCopy.stale(new Date(2026, 9, 29, 9, 5))],
-  "collectionCopy.duplicates": [0, 1, 2].map(collectionCopy.duplicates),
-  "collectionCopy.perTier": RARITIES.map((rarity) => collectionCopy.perTier(rarity, 2)),
-  "collectionCopy.noMatch": RARITIES.map(collectionCopy.noMatch),
-  "collectionCopy.copies": [collectionCopy.copies(2)],
-  "collectionCopy.copiesSpoken": [collectionCopy.copiesSpoken(2)],
 };
 
-/** The module's strings and the paths of its functions, however deeply nested. */
-function walk(value: unknown, path: string, strings: string[], functions: string[]): void {
-  if (typeof value === "string") strings.push(value);
-  else if (typeof value === "function") functions.push(path);
-  else if (typeof value === "object" && value !== null) {
-    for (const [key, child] of Object.entries(value))
-      walk(child, path === "" ? key : `${path}.${key}`, strings, functions);
-  }
-}
-
-const plain: string[] = [];
-const functions: string[] = [];
-walk(packs, "", plain, functions);
+const { strings: plain, functions } = walkCopy(packs);
 const rendered: Array<[string, string]> = [
   ...plain.map((text): [string, string] => ["string", text]),
   ...Object.entries(CALLS).flatMap(([path, texts]) => texts.map((text): [string, string] => [path, text])),
@@ -135,7 +78,7 @@ const rendered: Array<[string, string]> = [
 describe("packs copy words (packs-page.md §8)", () => {
   it("renders every string of the module and calls every function in it", () => {
     expect(functions.sort()).toEqual(Object.keys(CALLS).sort());
-    expect(plain.length).toBeGreaterThan(30);
+    expect(plain.length).toBeGreaterThan(20);
   });
 
   it("contains none of the words navigation-and-landing.md §8 forbids", () => {
@@ -355,24 +298,5 @@ describe("the card's text", () => {
     expect(cardCopy.label("\u202Egnp.exe", "mythic", "\u202Eseires")).toBe(
       "\u2068\u202Egnp.exe\u2069, Mythic, \u2068\u202Eseires\u2069",
     );
-  });
-});
-
-describe("the interim collection", () => {
-  it("counts duplicates and copies", () => {
-    expect(collectionCopy.duplicates(0)).toBe("No duplicates");
-    expect(collectionCopy.duplicates(1)).toBe("1 duplicate");
-    expect(collectionCopy.duplicates(1_204)).toBe("1,204 duplicates");
-    expect(collectionCopy.copies(3)).toBe("×3");
-    expect(collectionCopy.copiesSpoken(3)).toBe("3 copies");
-  });
-
-  it("names the tier in the per-tier totals and the no-match line", () => {
-    expect(collectionCopy.perTier("legendary", 2)).toBe("Legendary 2");
-    expect(collectionCopy.noMatch("mythic")).toBe("No Mythic cards in your collection.");
-  });
-
-  it("writes the stale time as HH:MM", () => {
-    expect(collectionCopy.stale(new Date(2026, 9, 29, 9, 5))).toBe("Showing your collection as of 09:05.");
   });
 });

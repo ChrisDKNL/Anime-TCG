@@ -165,6 +165,9 @@ describe("GET /api/collection (collection-packs.md §5.5)", () => {
         rarity: "mythic",
         variant: "standard",
         count: 2,
+        listed: 0,
+        available: 2,
+        recyclable: 1,
         firstObtainedAt: first.toISOString(),
         lastObtainedAt: second.toISOString(),
       });

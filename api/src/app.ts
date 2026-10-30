@@ -10,6 +10,7 @@ import type { ErrorEnvelope } from "@anime-tcg/shared/errors";
 import { cryptoRng, type Rng } from "./domain/packs/rng.js";
 import { accountsPlugin } from "./plugins/accounts.js";
 import { dbPlugin } from "./plugins/db.js";
+import { economyPlugin } from "./plugins/economy.js";
 import { errorsPlugin } from "./plugins/errors.js";
 import { createLogger, quieterOf } from "./plugins/logging.js";
 import { packsPlugin } from "./plugins/packs.js";
@@ -21,6 +22,8 @@ import { demoRoutes } from "./routes/demo/index.js";
 import { healthRoutes } from "./routes/health/index.js";
 import { packRoutes } from "./routes/packs/index.js";
 import { sessionRoutes } from "./routes/session/index.js";
+import { shopRoutes } from "./routes/shop/index.js";
+import { walletRoutes } from "./routes/wallet/index.js";
 
 export interface BuildAppOptions {
   config: Config;
@@ -109,6 +112,7 @@ export async function buildApp({
   await app.register(sessionPlugin, { config });
   await app.register(accountsPlugin, { config });
   await app.register(packsPlugin, { rng, clock });
+  await app.register(economyPlugin, { rng });
   await app.register(errorsPlugin);
   // Probed every 30 s by the image healthcheck: only failures are worth a line, unless the operator asked for less.
   await app.register(healthRoutes, { logLevel: quieterOf(config.LOG_LEVEL, "warn") });
@@ -117,6 +121,8 @@ export async function buildApp({
   await app.register(packRoutes, { prefix: "/api" });
   await app.register(collectionRoutes, { prefix: "/api" });
   await app.register(demoRoutes, { prefix: "/api" });
+  await app.register(walletRoutes, { prefix: "/api" });
+  await app.register(shopRoutes, { prefix: "/api" });
 
   return app;
 }

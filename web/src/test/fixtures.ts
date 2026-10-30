@@ -129,16 +129,21 @@ export function makePackOpened(options: PackOptions = {}): PackOpened {
   };
 }
 
+/** Nothing listed or escrowed unless told otherwise, so `available` is `count` and every copy but the last is recyclable. */
 export function makeEntry(
   character: CharacterPublic,
   overrides: Partial<CollectionEntry> = {},
 ): CollectionEntry {
+  const count = overrides.count ?? 1;
   return {
     kind: "card",
     character,
     rarity: character.tier ?? "common",
     variant: "standard",
-    count: 1,
+    count,
+    listed: 0,
+    available: count,
+    recyclable: count - 1,
     firstObtainedAt: "2026-10-29T09:00:00.000Z",
     lastObtainedAt: "2026-10-29T09:00:00.000Z",
     ...overrides,

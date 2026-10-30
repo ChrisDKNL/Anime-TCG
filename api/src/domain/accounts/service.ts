@@ -43,7 +43,7 @@ const accountColumns = {
   createdAt: accounts.createdAt,
   // Correlated, so it also works in the RETURNING of an insert or update of the row. Spelled out:
   // drizzle drops the table qualifier from interpolated columns here, which would compare cards with themselves.
-  cards: sql<number>`(select count(*)::int from "cards" where "cards"."account_id" = "accounts"."id")`,
+  cards: sql<number>`(select count(*)::int from "cards" where "cards"."account_id" = "accounts"."id" and "cards"."removed_at" is null)`,
 };
 const credentialColumns = { ...accountColumns, passwordHash: accounts.passwordHash };
 
