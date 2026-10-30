@@ -37,14 +37,32 @@ export interface ServerWait {
 /** A `rate_limited` answer without `Retry-After` waits this long (manager decision, 2026-10-30). */
 export const RATE_LIMITED_FALLBACK_SECONDS = 60;
 
-/** The server-enforced wait a failure asks for (accounts.md §3.4.3, §4.4), or `null` when it asks for none. */
+/**
+ * No wait is longer than this, whatever the server names (accounts.md §4.4-D):
+ * a countdown of hours reads as broken, and the next submit asks again anyway.
+ */
+export const MAX_WAIT_SECONDS = 3600;
+
+function bounded(seconds: number): number {
+  return Math.min(seconds, MAX_WAIT_SECONDS);
+}
+
+/**
+ * The server-enforced wait a failure asks for (accounts.md §3.4.3, §4.4), or
+ * `null` when it asks for none. Both sources of seconds (the envelope and
+ * `Retry-After`) meet here, so this is where the wait is capped.
+ */
 export function serverWait(failure: Failure): ServerWait | null {
   if (failure.kind !== "api") return null;
+  const { retryAfterSeconds } = failure;
   switch (failure.code) {
     case "too_many_failures":
-      return { reason: "misses", seconds: failure.retryAfterSeconds };
+      return {
+        reason: "misses",
+        seconds: retryAfterSeconds === undefined ? undefined : bounded(retryAfterSeconds),
+      };
     case "rate_limited":
-      return { reason: "rateLimited", seconds: failure.retryAfterSeconds ?? RATE_LIMITED_FALLBACK_SECONDS };
+      return { reason: "rateLimited", seconds: bounded(retryAfterSeconds ?? RATE_LIMITED_FALLBACK_SECONDS) };
     default:
       return null;
   }

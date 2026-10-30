@@ -227,6 +227,24 @@ describe("LoginForm", () => {
       expect(screen.getByRole("button", { name: "Log in" })).not.toHaveAttribute("aria-disabled");
     });
 
+    it("a Retry-After of a day counts down from the 3600 s cap", async () => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
+      const { user } = setup({ "POST /api/session/login": rateLimited("86400") });
+      await fillAndSubmit(user);
+      expectRateLimitedWait(await screen.findByRole("button", { name: "Try again in 3600 s" }));
+      act(() => {
+        vi.advanceTimersByTime(1000);
+      });
+      expect(screen.getByRole("button", { name: "Try again in 3599 s" })).toBeInTheDocument();
+    });
+
+    it("a Retry-After too large to count exactly waits 60 s, as if it were missing", async () => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
+      const { user } = setup({ "POST /api/session/login": rateLimited("9".repeat(400)) });
+      await fillAndSubmit(user);
+      expectRateLimitedWait(await screen.findByRole("button", { name: "Try again in 60 s" }));
+    });
+
     it("the next submit after the wait clears the status line and asks the server again", async () => {
       vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
       const { user, fetchMock } = setup({ "POST /api/session/login": rateLimited("1") });

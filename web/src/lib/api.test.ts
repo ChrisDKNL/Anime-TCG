@@ -116,6 +116,21 @@ describe("api client", () => {
     expect(err).toMatchObject({ retryAfterSeconds: 7 });
   });
 
+  it("reads a Retry-After too large to count exactly as no seconds, and passes a large exact one on", async () => {
+    mockFetch({ "POST /api/session/login": rateLimited("9".repeat(400)) });
+    const huge = await login({ login: "x", password: "y" }).catch((e: unknown) => e);
+    expect(huge).toMatchObject({ code: "rate_limited", retryAfterSeconds: undefined });
+
+    mockFetch({ "POST /api/session/login": rateLimited("86400") });
+    const day = await login({ login: "x", password: "y" }).catch((e: unknown) => e);
+    expect(day).toMatchObject({ code: "rate_limited", retryAfterSeconds: 86400 });
+  });
+
+  it("an envelope whose seconds do not count exactly is not the envelope", async () => {
+    mockFetch({ "POST /api/session/login": envelope(429, "too_many_failures", 1e300) });
+    await expect(login({ login: "x", password: "y" })).rejects.toBeInstanceOf(NetworkError);
+  });
+
   it("the envelope's own seconds win over the header", async () => {
     mockFetch({
       "POST /api/account/delete": {

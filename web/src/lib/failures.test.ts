@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { ApiError, NetworkError } from "./api";
-import { RATE_LIMITED_FALLBACK_SECONDS, rethrowUnlessKnown, serverWait, toFailure } from "./failures";
+import {
+  MAX_WAIT_SECONDS,
+  RATE_LIMITED_FALLBACK_SECONDS,
+  rethrowUnlessKnown,
+  serverWait,
+  toFailure,
+} from "./failures";
 
 describe("toFailure", () => {
   it("classifies the two failure families", () => {
@@ -50,6 +56,26 @@ describe("serverWait", () => {
       seconds: RATE_LIMITED_FALLBACK_SECONDS,
     });
     expect(RATE_LIMITED_FALLBACK_SECONDS).toBe(60);
+  });
+
+  it("caps every wait at 3600 s, from either source of seconds", () => {
+    expect(MAX_WAIT_SECONDS).toBe(3600);
+    expect(serverWait({ kind: "api", code: "rate_limited", retryAfterSeconds: 3600 })).toEqual({
+      reason: "rateLimited",
+      seconds: 3600,
+    });
+    expect(serverWait({ kind: "api", code: "rate_limited", retryAfterSeconds: 86400 })).toEqual({
+      reason: "rateLimited",
+      seconds: 3600,
+    });
+    expect(serverWait({ kind: "api", code: "too_many_failures", retryAfterSeconds: 1e300 })).toEqual({
+      reason: "misses",
+      seconds: 3600,
+    });
+    expect(serverWait({ kind: "api", code: "rate_limited", retryAfterSeconds: Infinity })).toEqual({
+      reason: "rateLimited",
+      seconds: 3600,
+    });
   });
 
   it("asks for no wait on any other outcome", () => {

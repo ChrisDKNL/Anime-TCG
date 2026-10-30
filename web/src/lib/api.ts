@@ -57,12 +57,15 @@ function isErrorCode(value: unknown): value is ErrorCode {
   return typeof value === "string" && (ERROR_CODES as readonly string[]).includes(value);
 }
 
+/** A whole number of seconds of at least 1 that counts exactly (`1e300` and `Infinity` do not). */
+function isWholeSeconds(value: unknown): value is number {
+  return Number.isSafeInteger(value) && Number(value) >= 1;
+}
+
 function isErrorEnvelope(value: unknown): value is ErrorEnvelope {
   if (!isRecord(value) || !isRecord(value.error)) return false;
   const { code, message, retryAfterSeconds } = value.error;
-  const retryOk =
-    retryAfterSeconds === undefined ||
-    (Number.isInteger(retryAfterSeconds) && Number(retryAfterSeconds) >= 1);
+  const retryOk = retryAfterSeconds === undefined || isWholeSeconds(retryAfterSeconds);
   return isErrorCode(code) && typeof message === "string" && retryOk;
 }
 
@@ -89,14 +92,14 @@ async function readJson(res: Response): Promise<unknown> {
 
 /**
  * `Retry-After` as whole seconds, or `undefined` when it is absent or not a
- * positive delta-seconds value. The api only sends delta-seconds, so the
- * HTTP-date form is not read.
+ * positive delta-seconds value that counts exactly (400 nines is `Infinity`).
+ * The api only sends delta-seconds, so the HTTP-date form is not read.
  */
 function readRetryAfter(headers: Headers): number | undefined {
   const value = headers.get("retry-after")?.trim();
   if (value === undefined || !/^\d+$/.test(value)) return undefined;
   const seconds = Number(value);
-  return seconds >= 1 ? seconds : undefined;
+  return isWholeSeconds(seconds) ? seconds : undefined;
 }
 
 function failure(res: Response, json: unknown): Error {
