@@ -1,6 +1,6 @@
 import { PACK_CAP } from "@anime-tcg/shared/economy";
 import { describe, expect, it } from "vitest";
-import { allowanceAt, anchorAfterOpening } from "./allowance.js";
+import { ALLOWANCE_RULES, allowanceAt, anchorAfterOpening } from "./allowance.js";
 
 const MINUTE = 60_000;
 const INTERVAL = 10 * MINUTE;
@@ -15,6 +15,11 @@ function openMany(anchor: Date | null, now: Date, count: number): Date | null {
 }
 
 describe("pack allowance (collection-packs.md §5.2)", () => {
+  it("states its rules, what the landing page shows, as every allowance carries them", () => {
+    expect(ALLOWANCE_RULES).toEqual({ intervalSeconds: 600, cap: PACK_CAP });
+    expect(allowanceAt(anchorAfterOpening(null, t0), t0)).toMatchObject(ALLOWANCE_RULES);
+  });
+
   it("starts a new account full", () => {
     expect(allowanceAt(null, t0)).toEqual({
       available: PACK_CAP,

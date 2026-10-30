@@ -86,6 +86,11 @@ describe("shared schemas refuse unknown fields", () => {
         "api.ts.FranchiseCompletion",
         "api.ts.CollectionTotals",
         "api.ts.CollectionResponse",
+        "api.ts.AllowanceRules",
+        "api.ts.PoolFacts",
+        "api.ts.DemoResponse",
+        "api.ts.DemoCard",
+        "api.ts.DemoOpened",
         "errors.ts.ErrorEnvelope",
       ]),
     );

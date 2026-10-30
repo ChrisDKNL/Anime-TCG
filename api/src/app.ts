@@ -17,6 +17,7 @@ import { securityPlugin } from "./plugins/security.js";
 import { sessionPlugin } from "./plugins/session.js";
 import { accountRoutes } from "./routes/accounts/index.js";
 import { collectionRoutes } from "./routes/collection/index.js";
+import { demoRoutes } from "./routes/demo/index.js";
 import { healthRoutes } from "./routes/health/index.js";
 import { packRoutes } from "./routes/packs/index.js";
 import { sessionRoutes } from "./routes/session/index.js";
@@ -115,6 +116,7 @@ export async function buildApp({
   await app.register(accountRoutes, { prefix: "/api" });
   await app.register(packRoutes, { prefix: "/api" });
   await app.register(collectionRoutes, { prefix: "/api" });
+  await app.register(demoRoutes, { prefix: "/api" });
 
   return app;
 }

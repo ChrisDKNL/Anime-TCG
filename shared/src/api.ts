@@ -344,3 +344,58 @@ export const CollectionResponse = Type.Object(
   { additionalProperties: false },
 );
 export type CollectionResponse = Static<typeof CollectionResponse>;
+
+/** The timer pack's rules, without any account's position in them: what the landing page states. */
+export const AllowanceRules = Type.Object(
+  { intervalSeconds: Type.Integer({ minimum: 1 }), cap: Type.Integer({ minimum: 1 }) },
+  { additionalProperties: false },
+);
+export type AllowanceRules = Static<typeof AllowanceRules>;
+
+/** The current snapshot's size: its characters and its anime entries. */
+export const PoolFacts = Type.Object(
+  { characters: Type.Integer({ minimum: 1 }), entries: Type.Integer({ minimum: 1 }) },
+  { additionalProperties: false },
+);
+export type PoolFacts = Static<typeof PoolFacts>;
+
+/**
+ * `GET /api/demo`, public (navigation-and-landing.md §3.8 item 1): the odds
+ * every pack uses and the pool's size, both null with no snapshot, the
+ * timer-pack rules, and how many demo packs one page load may open.
+ */
+export const DemoResponse = Type.Object(
+  {
+    odds: Type.Union([PublishedOdds, Type.Null()]),
+    pool: Type.Union([PoolFacts, Type.Null()]),
+    allowance: AllowanceRules,
+    perVisit: Type.Integer({ minimum: 1 }),
+  },
+  { additionalProperties: false },
+);
+export type DemoResponse = Static<typeof DemoResponse>;
+
+/** A demo card: no `isNew` (there is no collection to compare with) and nothing that names an opening. */
+export const DemoCard = Type.Object(
+  {
+    slot: Type.Integer({ minimum: 0, maximum: PACK_SIZE - 1 }),
+    character: CharacterPublic,
+    rarity: Rarity,
+  },
+  { additionalProperties: false },
+);
+export type DemoCard = Static<typeof DemoCard>;
+
+/**
+ * `POST /api/demo/open`, public, no body (§3.8 item 2): five cards in slot
+ * order, rolled exactly as a pack is, and the franchises they name. Nothing is
+ * stored, so there is no opening id, key or allowance to answer with.
+ */
+export const DemoOpened = Type.Object(
+  {
+    cards: Type.Array(DemoCard, { minItems: PACK_SIZE, maxItems: PACK_SIZE }),
+    franchises: Type.Array(FranchiseRef),
+  },
+  { additionalProperties: false },
+);
+export type DemoOpened = Static<typeof DemoOpened>;

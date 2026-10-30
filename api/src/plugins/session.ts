@@ -16,6 +16,14 @@ declare module "fastify" {
     createSession(accountId: string | null): Promise<Session>;
     destroySession(): Promise<void>;
   }
+  interface FastifyContextConfig {
+    /**
+     * The route runs without a session: its cookie is not looked up, so the
+     * session row is never touched or slid and the answer never sets or clears
+     * the cookie (the public demo, navigation-and-landing.md §3.8 item 4).
+     */
+    sessionless?: true;
+  }
 }
 
 export interface SessionPluginOptions {
@@ -69,6 +77,7 @@ export const sessionPlugin = fp<SessionPluginOptions>(
     });
 
     app.addHook("onRequest", async (req, reply) => {
+      if (req.routeOptions.config.sessionless === true) return;
       const cookieValue = req.cookies[SESSION_COOKIE];
       if (cookieValue === undefined) return;
       const now = new Date();
