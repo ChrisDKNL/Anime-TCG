@@ -1,4 +1,5 @@
 import type { ListingSort } from "@anime-tcg/shared/api";
+import { MAX_ENTRY_AMOUNT } from "@anime-tcg/shared/economy";
 import { ApiError } from "../errors.js";
 
 /**
@@ -45,6 +46,8 @@ export function decodeCursor(text: string, sort: ListingSort): CursorPosition {
     if (Number.isNaN(listedAt.getTime()) || listedAt.toISOString() !== key) throw invalidCursor();
     return { sort, listedAt, id };
   }
-  if (typeof key !== "number" || !Number.isSafeInteger(key) || key < 1) throw invalidCursor();
+  // No listing is ever priced outside 1..MAX_ENTRY_AMOUNT (its check), so no page can follow such a price.
+  if (typeof key !== "number" || !Number.isSafeInteger(key) || key < 1 || key > MAX_ENTRY_AMOUNT)
+    throw invalidCursor();
   return { sort, price: key, id };
 }
