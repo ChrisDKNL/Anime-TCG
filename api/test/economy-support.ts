@@ -153,7 +153,7 @@ export function expectClockBehindDatabase(now: Date): void {
 }
 
 /** Postgres `integrity_constraint_violation`, the code of 0005's `cards_removed_stays` and `accounts_last_reset_forward` triggers. */
-export const REMOVED_STAYS = "23000";
+export const INTEGRITY_VIOLATION = "23000";
 
 /**
  * Gives a recycle's cards back, as no role may since 0005's trigger: the

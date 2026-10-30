@@ -14,7 +14,7 @@ import {
   putBackPastTheTrigger,
   recycle,
   recycleBody,
-  REMOVED_STAYS,
+  INTEGRITY_VIOLATION,
 } from "./economy-support.js";
 import {
   body,
@@ -142,7 +142,7 @@ describe(
           .update(cards)
           .set({ removedAt: null, removedByRecycle: null })
           .where(eq(cards.removedByRecycle, recycleId)),
-      ).rejects.toMatchObject({ cause: { code: REMOVED_STAYS } });
+      ).rejects.toMatchObject({ cause: { code: INTEGRITY_VIOLATION } });
       expect(await entryOf(app, client.cookie, ID.mythic(2))).toMatchObject({ count: 1 });
       // Past the trigger, as the owner: both Mythics come back.
       expect(await putBackPastTheTrigger(recycleId)).toBe(2);

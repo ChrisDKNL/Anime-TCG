@@ -11,9 +11,14 @@ import { buildThemes, type GenreMember, type Theme } from "./themes.js";
  * The statistical tests of economy.md §14 on the real `crypto.randomInt`,
  * with the design and failure rule of collection-packs.md §9: Pearson
  * chi-square, each test at α = 0.001 against the chi-square 0.999 quantile.
- * A correct implementation fails one of these seven tests about 7 times in
- * a thousand runs. A failure is a finding: read the observed and expected
- * counts it prints; never rerun it to green or change a sample size or α.
+ * The pick tests draw a pack's characters without replacement, so their
+ * counts are less dispersed than the multinomial the statistic assumes and
+ * each is conservative: a correct implementation fails a run about 0.2 % of
+ * the time or less, not the 7 in a thousand of seven independent tests at
+ * α. The same conservatism makes the Mythic pick test (10 characters) weak:
+ * it only catches a gross bias. A failure is a finding: read the observed
+ * and expected counts it prints; never rerun it to green or change a sample
+ * size or α.
  */
 
 const THEMED_PACKS = 400_000;

@@ -26,7 +26,7 @@ import { clearAccountData, createTestApp, insertAccount, migrationsDatabaseUrl }
 /** Postgres `insufficient_privilege`; drizzle wraps the pg error as `cause`. */
 const PERMISSION_DENIED = "42501";
 /** Postgres `integrity_constraint_violation`, raised by 0005's `cards_removed_stays` and `accounts_last_reset_forward` triggers. */
-const REMOVED_STAYS = "23000";
+const INTEGRITY_VIOLATION = "23000";
 
 /**
  * Spec §4.1: the pool behind every request is `anime_app`, which can read and
@@ -313,7 +313,7 @@ describe("app database role", () => {
               () => null,
               (err: unknown) => err,
             );
-          expect(refused).toMatchObject({ cause: { code: REMOVED_STAYS } });
+          expect(refused).toMatchObject({ cause: { code: INTEGRITY_VIOLATION } });
           expect((refused as { cause: Error }).cause.message).toMatch(message);
         }
       }
@@ -331,7 +331,7 @@ describe("app database role", () => {
           () => null,
           (err: unknown) => err,
         );
-      expect(born).toMatchObject({ cause: { code: REMOVED_STAYS } });
+      expect(born).toMatchObject({ cause: { code: INTEGRITY_VIOLATION } });
       expect((born as { cause: Error }).cause.message).toMatch(/a new account has no last reset$/);
     } finally {
       await owner.$client.end();
@@ -375,7 +375,7 @@ describe("app database role", () => {
               () => null,
               (err: unknown) => err,
             );
-          expect(refused).toMatchObject({ cause: { code: REMOVED_STAYS } });
+          expect(refused).toMatchObject({ cause: { code: INTEGRITY_VIOLATION } });
           expect((refused as { cause: Error }).cause.message).toMatch(/a removed card stays removed$/);
         }
       }

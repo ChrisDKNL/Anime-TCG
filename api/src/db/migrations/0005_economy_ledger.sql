@@ -3,6 +3,9 @@
 -- duplicates, shop openings and the card columns a recycle needs. Every 1c
 -- account starts at 0 Karma, every 1c opening is a timer opening, and every
 -- 1c card is held. The market's tables and columns arrive with PR 3.
+-- 1c's cards_account_entry_idx is replaced by the partial cards_held_entry_idx
+-- (held cards only, the ones every collection query counts), and
+-- cards_removed_by_recycle_idx indexes the cards each recycle removed.
 -- Each recycle keeps its Karma per card and each shop opening its price, so
 -- audit-ledger checks a row against the value of its own day. Each account
 -- keeps the time of its last collection reset, so the audit can tell a
