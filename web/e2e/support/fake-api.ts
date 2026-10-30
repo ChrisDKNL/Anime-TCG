@@ -52,6 +52,7 @@ export interface Answer {
   status: number;
   json?: unknown;
   raw?: string;
+  headers?: Record<string, string>;
 }
 
 export interface ApiCall {
@@ -123,11 +124,16 @@ export class FakeApi {
     if (answer === "abort") {
       await route.abort("connectionrefused");
     } else if (answer.raw !== undefined) {
-      await route.fulfill({ status: answer.status, body: answer.raw, contentType: "text/html" });
+      await route.fulfill({
+        status: answer.status,
+        headers: answer.headers,
+        body: answer.raw,
+        contentType: "text/html",
+      });
     } else if (answer.json === undefined) {
-      await route.fulfill({ status: answer.status });
+      await route.fulfill({ status: answer.status, headers: answer.headers });
     } else {
-      await route.fulfill({ status: answer.status, json: answer.json });
+      await route.fulfill({ status: answer.status, headers: answer.headers, json: answer.json });
     }
   }
 }

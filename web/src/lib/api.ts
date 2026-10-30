@@ -15,15 +15,19 @@ import { ERROR_CODES, type ErrorCode, type ErrorEnvelope } from "@anime-tcg/shar
 export class ApiError extends Error {
   readonly status: number;
   readonly code: ErrorCode;
-  /** Only on `too_many_failures`: how long the sign-in breather still lasts. */
+  /**
+   * How long the server asks the UI to wait: the envelope's own seconds (the
+   * sign-in breather), else the `Retry-After` header (the route rate limiter,
+   * whose `rate_limited` envelope carries none).
+   */
   readonly retryAfterSeconds: number | undefined;
 
-  constructor(status: number, error: ErrorEnvelope["error"]) {
+  constructor(status: number, error: ErrorEnvelope["error"], retryAfterHeader?: number) {
     super(error.message);
     this.name = "ApiError";
     this.status = status;
     this.code = error.code;
-    this.retryAfterSeconds = error.retryAfterSeconds;
+    this.retryAfterSeconds = error.retryAfterSeconds ?? retryAfterHeader;
   }
 }
 
@@ -53,12 +57,15 @@ function isErrorCode(value: unknown): value is ErrorCode {
   return typeof value === "string" && (ERROR_CODES as readonly string[]).includes(value);
 }
 
+/** A whole number of seconds of at least 1 that counts exactly (`1e300` and `Infinity` do not). */
+function isWholeSeconds(value: unknown): value is number {
+  return Number.isSafeInteger(value) && Number(value) >= 1;
+}
+
 function isErrorEnvelope(value: unknown): value is ErrorEnvelope {
   if (!isRecord(value) || !isRecord(value.error)) return false;
   const { code, message, retryAfterSeconds } = value.error;
-  const retryOk =
-    retryAfterSeconds === undefined ||
-    (Number.isInteger(retryAfterSeconds) && Number(retryAfterSeconds) >= 1);
+  const retryOk = retryAfterSeconds === undefined || isWholeSeconds(retryAfterSeconds);
   return isErrorCode(code) && typeof message === "string" && retryOk;
 }
 
@@ -83,10 +90,22 @@ async function readJson(res: Response): Promise<unknown> {
   }
 }
 
-function failure(status: number, json: unknown): Error {
+/**
+ * `Retry-After` as whole seconds, or `undefined` when it is absent or not a
+ * positive delta-seconds value that counts exactly (400 nines is `Infinity`).
+ * The api only sends delta-seconds, so the HTTP-date form is not read.
+ */
+function readRetryAfter(headers: Headers): number | undefined {
+  const value = headers.get("retry-after")?.trim();
+  if (value === undefined || !/^\d+$/.test(value)) return undefined;
+  const seconds = Number(value);
+  return isWholeSeconds(seconds) ? seconds : undefined;
+}
+
+function failure(res: Response, json: unknown): Error {
   return isErrorEnvelope(json)
-    ? new ApiError(status, json.error)
-    : new NetworkError(`unexpected ${status} answer`);
+    ? new ApiError(res.status, json.error, readRetryAfter(res.headers))
+    : new NetworkError(`unexpected ${res.status} answer`);
 }
 
 /** A route whose success carries a JSON body of type `T` (the response schema is the server's contract). */
@@ -94,14 +113,14 @@ async function expectJson<T>(method: Method, path: string, body?: object): Promi
   const res = await send(method, path, body);
   const json = await readJson(res);
   if (res.ok) return json as T;
-  throw failure(res.status, json);
+  throw failure(res, json);
 }
 
 /** A route whose success is 204. */
 async function expectNoContent(method: Method, path: string, body?: object): Promise<void> {
   const res = await send(method, path, body);
   if (res.ok) return;
-  throw failure(res.status, await readJson(res));
+  throw failure(res, await readJson(res));
 }
 
 export function getSession(): Promise<SessionResponse> {
