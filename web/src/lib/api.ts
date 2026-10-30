@@ -22,9 +22,10 @@ export class ApiError extends Error {
   readonly status: number;
   readonly code: ErrorCode;
   /**
-   * How long to wait, in seconds: the envelope's own number (`too_many_failures`,
-   * `no_pack_available`), else the `Retry-After` header, which is all a
-   * `rate_limited` answer carries (packs-page.md §9, question 3).
+   * How long the server asks the UI to wait, in seconds: the envelope's own
+   * number (the sign-in breather's `too_many_failures`, `no_pack_available`),
+   * else the `Retry-After` header, which is all a `rate_limited` answer from the
+   * route rate limiter carries (accounts.md §4.4-D, packs-page.md §9, question 3).
    */
   readonly retryAfterSeconds: number | undefined;
 
@@ -63,12 +64,15 @@ function isErrorCode(value: unknown): value is ErrorCode {
   return typeof value === "string" && (ERROR_CODES as readonly string[]).includes(value);
 }
 
+/** A whole number of seconds of at least 1 that counts exactly (`1e300` and `Infinity` do not). */
+function isWholeSeconds(value: unknown): value is number {
+  return Number.isSafeInteger(value) && Number(value) >= 1;
+}
+
 function isErrorEnvelope(value: unknown): value is ErrorEnvelope {
   if (!isRecord(value) || !isRecord(value.error)) return false;
   const { code, message, retryAfterSeconds } = value.error;
-  const retryOk =
-    retryAfterSeconds === undefined ||
-    (Number.isInteger(retryAfterSeconds) && Number(retryAfterSeconds) >= 1);
+  const retryOk = retryAfterSeconds === undefined || isWholeSeconds(retryAfterSeconds);
   return isErrorCode(code) && typeof message === "string" && retryOk;
 }
 
@@ -94,18 +98,22 @@ async function readJson(res: Response): Promise<unknown> {
 }
 
 /**
- * `Retry-After` in whole seconds, at least 1. The HTTP-date form is not read:
- * the api only sends seconds, and a date would need the device clock.
+ * `Retry-After` as whole seconds, or `undefined` when it is absent or not a
+ * positive delta-seconds value that counts exactly (400 nines is `Infinity`).
+ * The api only sends delta-seconds, so the HTTP-date form is not read: a date
+ * would need the device clock. The one reader for every caller; each caller
+ * applies its own fallback and cap (`serverWait`, `rateLimitWaitSeconds`).
  */
-export function retryAfterHeader(headers: Headers): number | undefined {
+export function readRetryAfter(headers: Headers): number | undefined {
   const value = headers.get("retry-after")?.trim();
   if (value === undefined || !/^\d+$/.test(value)) return undefined;
-  return Math.max(1, Number(value));
+  const seconds = Number(value);
+  return isWholeSeconds(seconds) ? seconds : undefined;
 }
 
 function failure(res: Response, json: unknown): Error {
   return isErrorEnvelope(json)
-    ? new ApiError(res.status, json.error, retryAfterHeader(res.headers))
+    ? new ApiError(res.status, json.error, readRetryAfter(res.headers))
     : new NetworkError(`unexpected ${res.status} answer`);
 }
 

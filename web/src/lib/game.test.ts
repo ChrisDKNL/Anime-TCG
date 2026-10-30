@@ -6,7 +6,6 @@ import {
   heldAllowance,
   heldOdds,
   initialGame,
-  MAX_RATE_LIMIT_WAIT_SECONDS,
   RATE_LIMIT_FALLBACK_SECONDS,
   rateLimitWaitSeconds,
   visibleLine,
@@ -14,6 +13,7 @@ import {
   type GameState,
   type PacksAnswer,
 } from "./game";
+import { MAX_WAIT_SECONDS } from "./failures";
 
 const CHRIS = "3f2504e0-4f89-11d3-9a0c-0305e82c3301";
 const owner = { accountId: CHRIS, session: 0 };
@@ -180,7 +180,7 @@ describe("rateLimitWaitSeconds", () => {
   });
 
   it("caps a longer Retry-After at 3600 s, however large", () => {
-    expect(MAX_RATE_LIMIT_WAIT_SECONDS).toBe(3600);
+    expect(MAX_WAIT_SECONDS).toBe(3600);
     expect(rateLimitWaitSeconds(3601)).toBe(3600);
     expect(rateLimitWaitSeconds(86_400)).toBe(3600);
     expect(rateLimitWaitSeconds(Infinity)).toBe(3600);

@@ -139,6 +139,13 @@ function DeleteDialog({ open, openingId, account, onClose, onDeleted }: DeleteDi
 
 function LoginSection({ login, onRenamed }: { login: string; onRenamed: (account: AccountPublic) => void }) {
   const form = useRenameForm({ login, onRenamed });
+  const waiting = form.waitRemaining !== null;
+  const submitLabel =
+    form.waitRemaining !== null
+      ? common.tryAgainIn(form.waitRemaining)
+      : form.saving
+        ? manageCopy.saving
+        : manageCopy.save;
   return (
     <section
       aria-labelledby="login-section"
@@ -167,12 +174,17 @@ function LoginSection({ login, onRenamed }: { login: string; onRenamed: (account
             />
           </div>
           <SubmitButton
-            blocked={!form.changed || form.saving}
-            className={`${BUTTON.primary} w-full sm:w-auto`}
+            blocked={!form.changed || form.saving || waiting}
+            className={`${BUTTON.primary} w-full sm:w-auto ${waiting ? "tabular-nums" : ""}`}
           >
-            {form.saving ? manageCopy.saving : manageCopy.save}
+            {submitLabel}
           </SubmitButton>
         </div>
+        {form.waitStatus !== null && (
+          <p role="status" className={HINT_TEXT}>
+            {form.waitStatus}
+          </p>
+        )}
       </form>
     </section>
   );
@@ -239,9 +251,9 @@ function PasswordSection() {
           </SubmitButton>
           {form.changed && <p className={BODY_TEXT}>{manageCopy.passwordChanged}</p>}
         </div>
-        {form.breather && (
+        {form.waitStatus !== null && (
           <p role="status" className={HINT_TEXT}>
-            {common.breather}
+            {form.waitStatus}
           </p>
         )}
       </form>
@@ -309,9 +321,9 @@ function ConfirmDelete({ account, onCancel, onDeleted }: ConfirmDeleteProps) {
           {common.cancel}
         </button>
       </div>
-      {form.breather && (
+      {form.waitStatus !== null && (
         <p role="status" className={HINT_TEXT}>
-          {common.breather}
+          {form.waitStatus}
         </p>
       )}
     </form>
