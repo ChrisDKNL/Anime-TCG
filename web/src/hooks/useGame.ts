@@ -134,8 +134,13 @@ export function useGameState({ account, shell, packsShowing }: Options): Game | 
   const [nextSeq] = useState(requestCounter);
   const current = useRef(owner);
   useEffect(() => {
+    const previous = current.current;
     current.current = owner;
-  }, [owner]);
+    if (previous === owner) return;
+    // A reset leaves nothing of the previous session's answers in the cache, not even until `gcTime`.
+    queryClient.removeQueries({ queryKey: packsKey(previous), exact: true });
+    queryClient.removeQueries({ queryKey: collectionKey(previous), exact: true });
+  }, [owner, queryClient]);
   const isCurrent = useCallback(
     (of: GameOwner) => current.current?.accountId === of.accountId && current.current.session === of.session,
     [],
