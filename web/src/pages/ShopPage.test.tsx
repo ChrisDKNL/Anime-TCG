@@ -386,6 +386,42 @@ describe("buying a pack (§3.3 steps 4 to 6)", () => {
     expect(second).toBe(first);
   });
 
+  it("the 429's wait lives on the page: it survives Cancel and a new confirmation, and the next try is a new key", async () => {
+    const { user, fetchMock } = await confirmBuy({
+      [BUY]: sequence(rateLimited("2"), { status: 201, body: makeShopReceipt() }),
+    });
+    await user.click(within(confirmation()).getByRole("button", { name: "Buy for 400 Karma" }));
+    await within(confirmation()).findByRole("button", { name: /^Try again in [12] s$/ });
+    await user.click(within(confirmation()).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await user.click(within(theme()).getByRole("button", { name: "Buy…" }));
+    expect(within(confirmation()).getByRole("button", { name: /^Try again in [12] s$/ })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
+    await within(confirmation()).findByRole("button", { name: "Buy for 400 Karma" }, { timeout: 4_000 });
+    await user.click(within(confirmation()).getByRole("button", { name: "Buy for 400 Karma" }));
+    await main().findByRole("heading", { level: 2, name: "Action pack" });
+    const [first, second] = buyIds(fetchMock);
+    expect(second).not.toBe(first);
+  });
+
+  it("a close while in flight (a second Escape) opens the confirmation again; Buy… works afterwards", async () => {
+    const buy = held(lostAnswer);
+    const { user } = await confirmBuy({ [BUY]: sequence(buy.handler, envelope(500, "internal")) });
+    await user.click(within(confirmation()).getByRole("button", { name: "Buy for 400 Karma" }));
+    const dialog = confirmation() as HTMLDialogElement;
+    act(() => dialog.close());
+    expect(dialog).toHaveAttribute("open");
+    expect(confirmation()).toBeInTheDocument();
+    buy.release();
+    expect(await within(confirmation()).findByRole("button", { name: "Try again" })).toBeInTheDocument();
+    await user.click(within(confirmation()).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await user.click(within(theme()).getByRole("button", { name: "Buy…" }));
+    expect(confirmation()).toHaveAttribute("open");
+  });
+
   it("no answer: the red banner and Try again, which resends the same key and shows the pack that was dealt", async () => {
     const { user, fetchMock } = await confirmBuy({
       [BUY]: sequence(lostAnswer, { status: 200, body: makeShopReceipt() }),

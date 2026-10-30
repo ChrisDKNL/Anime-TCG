@@ -101,11 +101,25 @@ export function CardDialog({ indexed, names, poolSize, onClose }: Props) {
     focusAfter.current = "recycleButton";
   };
 
-  /** Close: never in flight; after no answer the confirmation's own `Cancel` runs first. */
+  /** Close: never in flight; the `close` event does the rest. */
   const close = () => {
-    if (recycle.action.sending) return;
+    if (!recycle.action.sending) ref.current?.close();
+  };
+
+  /**
+   * Every close, however it came: Chromium honours a prevented `cancel` once, and a second Escape
+   * closes the dialog with no cancelable event. In flight it opens again at once, so it never closes
+   * on an unknown outcome. Otherwise a confirmation's `Cancel` runs first (after no answer it
+   * discards the key and reads the server again), then the dialog goes.
+   */
+  const onCloseEvent = () => {
+    if (recycle.action.sending) {
+      ref.current?.showModal();
+      confirmationRef.current?.focus();
+      return;
+    }
     if (confirming) recycle.back();
-    ref.current?.close();
+    onClose();
   };
 
   /** Escape: ignored in flight; on a confirmation it returns to the details first (§3.7 step 1). */
@@ -121,7 +135,7 @@ export function CardDialog({ indexed, names, poolSize, onClose }: Props) {
       tabIndex={-1}
       aria-labelledby={headingId}
       onCancel={onCancel}
-      onClose={onClose}
+      onClose={onCloseEvent}
       className={WIDE_DIALOG}
     >
       <div className="flex justify-end">

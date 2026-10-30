@@ -5,7 +5,7 @@ import { recycleDuplicates } from "../lib/api";
 import type { Outcome } from "../lib/keyedAction";
 import { parseDuplicates, recycleRange, type RecycleRange } from "../lib/recycle";
 import { useGame } from "./useGame";
-import { useKeyedAction, type KeyedAction } from "./useKeyedAction";
+import { useKeyedAction, useRateLimitWait, type KeyedAction } from "./useKeyedAction";
 
 /** What the confirmation shows and sends: the number, and the value and total it named. */
 export interface RecycleAsk {
@@ -54,7 +54,7 @@ export interface Recycle {
 export function useRecycle(entry: CollectionEntry | null, rules: KarmaRules | null): Recycle {
   const game = useGame();
   const queryClient = useQueryClient();
-  const { balanceFrom, collectionQuery, walletQuery } = game;
+  const { applyBalance, collectionQuery, walletQuery } = game;
   const range = rules === null || entry === null ? null : recycleRange(entry, rules.maxRecycleCount);
   const [fieldText, setFieldText] = useState<string | null>(null);
   const [fieldError, setFieldError] = useState(false);
@@ -84,15 +84,16 @@ export function useRecycle(entry: CollectionEntry | null, rules: KarmaRules | nu
       if (count === undefined || characterId === undefined || rarity === undefined) {
         throw new Error("a recycle needs an entry and a confirmed number");
       }
-      const takeBalance = balanceFrom();
       const receipt = await recycleDuplicates({ requestId, characterId, rarity, count });
-      takeBalance(receipt.balance);
+      applyBalance(receipt.balance);
       refetchCollection();
       return receipt;
     },
-    [count, balanceFrom, characterId, rarity, refetchCollection],
+    [count, applyBalance, characterId, rarity, refetchCollection],
   );
-  const action = useKeyedAction(send);
+  // Held by the dialog's hook, so a 429's wait survives Cancel and a new confirmation.
+  const wait = useRateLimitWait();
+  const action = useKeyedAction(send, wait);
 
   const field = fieldText ?? (range?.kind === "open" ? String(range.max) : "");
 

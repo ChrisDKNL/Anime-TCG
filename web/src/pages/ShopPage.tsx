@@ -9,6 +9,7 @@ import { BuyDialog } from "../components/shop/BuyDialog";
 import { ThemeOffer, type BuyReason } from "../components/shop/ThemeOffer";
 import { useDelayedFlag } from "../hooks/useDelayedFlag";
 import { useGame } from "../hooks/useGame";
+import { useRateLimitWait } from "../hooks/useKeyedAction";
 import { useShellContext } from "../hooks/useShell";
 import { seriesNames } from "../lib/collectionSeries";
 import { shopCopy } from "../lib/economyCopy";
@@ -57,6 +58,8 @@ export function ShopPage() {
   const { announce } = useShellContext();
   const shop = useQuery(game.shopQuery);
   useQuery(game.walletQuery);
+  // A 429's wait lives on the page, so Cancel and a new confirmation keep it (manager decision, 2026-10-30).
+  const wait = useRateLimitWait();
   const showLoading = useDelayedFlag(shop.data === undefined && !shop.isError, LOADING_DELAY_MS);
   const [confirming, setConfirming] = useState<Confirming | null>(null);
   const [bought, setBought] = useState<Bought | null>(null);
@@ -96,6 +99,7 @@ export function ShopPage() {
     void shop.refetch();
   };
 
+  /** The dialog has closed (no longer modal, so the page is not inert): focus back on `Buy…`. */
   const onClose = () => {
     confirming?.returnFocus?.focus();
     setConfirming(null);
@@ -153,6 +157,7 @@ export function ShopPage() {
           key={confirming.theme.id}
           theme={confirming.theme}
           balance={balance}
+          wait={wait}
           onBought={onBought}
           onGone={onGone}
           onClose={onClose}

@@ -2,9 +2,9 @@ import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { envelope, makeAccount, type MockAnswer, type MockHandler } from "../test/api";
-import { callsTo, COLLECTION, liveRegion, pageHeading, renderApp } from "../test/app";
+import { callsTo, COLLECTION, liveRegion, pageHeading, renderApp, WALLET } from "../test/app";
 import { makeLargeCollection, makeOverviewCollection } from "../test/collectionFixtures";
-import { makeCharacter, makeCollection, makeEntry } from "../test/fixtures";
+import { makeCharacter, makeCollection, makeEntry, makeWallet } from "../test/fixtures";
 
 const ASYNC_TIMEOUT = 5_000;
 const account = makeAccount({ cards: 8 });
@@ -684,7 +684,15 @@ describe("states (§4.1)", () => {
   });
 
   it("stale: a refetch with no answer keeps the held data, with its time and the banner", async () => {
-    renderApp({ [COLLECTION]: sequence(overview, { status: 502, raw: "" }) }, account, "/packs");
+    // The server is out of reach: neither the collection nor the wallet read again answers.
+    renderApp(
+      {
+        [COLLECTION]: sequence(overview, { status: 502, raw: "" }),
+        [WALLET]: sequence({ status: 200, body: makeWallet() }, { status: 502, raw: "" }),
+      },
+      account,
+      "/packs",
+    );
     const user = userEvent.setup();
     await user.click(await screen.findByRole("link", { name: "Collection (8)" }, { timeout: ASYNC_TIMEOUT }));
     await pageHeading("Collection");

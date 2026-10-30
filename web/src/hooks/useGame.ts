@@ -89,13 +89,22 @@ function collectionQueryOptions(owner: GameOwner | null, report: (err: unknown) 
   });
 }
 
-function walletQueryOptions(owner: GameOwner | null, nextSeq: () => number, report: (err: unknown) => void) {
+function walletQueryOptions(
+  owner: GameOwner | null,
+  nextSeq: () => number,
+  report: (err: unknown) => void,
+  answered: () => void,
+) {
   return queryOptions({
     queryKey: walletKey(owner),
     queryFn: async (): Promise<WalletAnswer> => {
+      // Numbered when sent: a receipt that arrives while this read is in flight is newer than it.
       const seq = nextSeq();
       try {
-        return { seq, wallet: await getWallet() };
+        const wallet = await getWallet();
+        // The server answered: a banner a lost answer raised no longer holds (manager decision, 2026-10-30).
+        answered();
+        return { seq, wallet };
       } catch (err) {
         report(err);
         throw err;
@@ -141,10 +150,11 @@ export interface Game {
   /** For the Shop page's own observer: it fetches each time the page is shown, and only then. */
   shopQuery: ShopQueryOptions;
   /**
-   * Numbers a request that can answer with a balance when it is sent, and returns the function that
-   * applies the balance its answer carries: a newer wallet read wins over it, an older one does not.
+   * Applies the balance an answer carried (a receipt, `insufficient_funds`), numbered when it arrives:
+   * it is newer than every wallet read sent before then, so a read in flight cannot step it back, and
+   * older than every read sent after (manager decision, 2026-10-30).
    */
-  balanceFrom: () => (balance: number) => void;
+  applyBalance: (balance: number) => void;
   /**
    * Opens a pack; `row` is the control's row now, which a generic failure's line stays tied to.
    * Settles once the answer is applied, and rejects only on a bug in this client (not an api answer).
@@ -218,7 +228,10 @@ export function useGameState({ account, shell, packsShowing }: Options): Game | 
 
   const packsQuery = useMemo(() => packsQueryOptions(owner, nextSeq, report), [owner, nextSeq, report]);
   const collectionQuery = useMemo(() => collectionQueryOptions(owner, report), [owner, report]);
-  const walletQuery = useMemo(() => walletQueryOptions(owner, nextSeq, report), [owner, nextSeq, report]);
+  const walletQuery = useMemo(
+    () => walletQueryOptions(owner, nextSeq, report, clearNotice),
+    [owner, nextSeq, report, clearNotice],
+  );
   const shopQuery = useMemo(() => shopQueryOptions(owner, report), [owner, report]);
   // Observed here but never fetched from here: the held answer stays in the cache for the whole
   // session, so returning to `/packs` shows it at once (§3.1 step 2) while the page's observer refetches.
@@ -325,12 +338,12 @@ export function useGameState({ account, shell, packsShowing }: Options): Game | 
     [owner],
   );
 
-  const balanceFrom = useCallback(() => {
-    const seq = nextSeq();
-    return (value: number) => {
-      if (owner !== null) dispatch({ type: "balance", ...owner, balance: { seq, value } });
-    };
-  }, [nextSeq, owner]);
+  const applyBalance = useCallback(
+    (value: number) => {
+      if (owner !== null) dispatch({ type: "balance", ...owner, balance: { seq: nextSeq(), value } });
+    },
+    [nextSeq, owner],
+  );
 
   const cardCount = collection.data?.totals.cards ?? account?.cards ?? 0;
   const balance = heldBalance(wallet.data, state);
@@ -349,7 +362,7 @@ export function useGameState({ account, shell, packsShowing }: Options): Game | 
             wallet,
             balance,
             shopQuery,
-            balanceFrom,
+            applyBalance,
             openPack: open,
             changeOverview,
           },
@@ -364,7 +377,7 @@ export function useGameState({ account, shell, packsShowing }: Options): Game | 
       wallet,
       balance,
       shopQuery,
-      balanceFrom,
+      applyBalance,
       open,
       changeOverview,
     ],

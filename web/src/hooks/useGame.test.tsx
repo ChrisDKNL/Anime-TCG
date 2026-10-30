@@ -6,8 +6,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type * as api from "../lib/api";
 import { openPack } from "../lib/api";
 import { createQueryClient } from "../lib/queryClient";
-import { makeAccount, mockFetch } from "../test/api";
-import { signedInRoutes } from "../test/app";
+import { makeAccount, mockFetch, type MockHandler } from "../test/api";
+import { signedInRoutes, WALLET } from "../test/app";
+import { makeWallet } from "../test/fixtures";
 import { useGameState } from "./useGame";
 
 // The real client, so only the one opening a test scripts rejects with something no api call can produce.
@@ -19,8 +20,8 @@ vi.mock("../lib/api", async (importOriginal) => {
 const account = makeAccount();
 const other = makeAccount({ id: "9a7b1c2d-3e4f-4a5b-8c6d-7e8f9a0b1c2d", login: "Alex" });
 
-function renderGame() {
-  mockFetch(signedInRoutes(account));
+function renderGame(routes: Record<string, MockHandler> = {}) {
+  mockFetch({ ...signedInRoutes(account), ...routes });
   const queryClient = createQueryClient();
   const shell = { announce: vi.fn(), sessionEnded: vi.fn(), unreachable: vi.fn(), clearNotice: vi.fn() };
   const wrapper = ({ children }: { children: ReactNode }) => (
@@ -108,5 +109,66 @@ describe("useGameState: a reset drops the previous session's answers from the ca
     const { rerender, queryClient } = await withAnswersCached();
     rerender({ signedIn: other });
     expect(cachedFor(queryClient, account.id)).toEqual([]);
+  });
+});
+
+describe("useGameState: the balance a receipt carries against wallet reads (manager decision, 2026-10-30)", () => {
+  /** Signs in with the first wallet read answered, then holds every later one until released. */
+  async function withHeldWalletReads() {
+    let release: (balance: number) => void = () => undefined;
+    let reads = 0;
+    const game = renderGame({
+      [WALLET]: () => {
+        reads += 1;
+        if (reads === 1) return { status: 200, body: makeWallet(1_240) };
+        return new Promise((resolve) => {
+          release = (balance) => resolve({ status: 200, body: makeWallet(balance) });
+        });
+      },
+    });
+    await waitFor(() => expect(game.result.current!.balance).toBe(1_240));
+    /** Releases the held read once its request has gone out. */
+    const answer = async (balance: number) => {
+      await waitFor(() => expect(reads).toBe(2));
+      release(balance);
+    };
+    return { ...game, answer };
+  }
+
+  it("a receipt that arrives while a read is in flight is newer than that read", async () => {
+    const { result, answer } = await withHeldWalletReads();
+    let read!: Promise<unknown>;
+    act(() => {
+      read = result.current!.wallet.refetch();
+    });
+    act(() => result.current!.applyBalance(840));
+    expect(result.current!.balance).toBe(840);
+    await act(async () => {
+      await answer(1_240);
+      await read;
+    });
+    // The read has landed (a later seq than the first), and the receipt's balance still stands.
+    await waitFor(() => expect(result.current!.wallet.data?.seq).toBeGreaterThan(1));
+    expect(result.current!.balance).toBe(840);
+  });
+
+  it("a read sent after the receipt arrived replaces it", async () => {
+    const { result, answer } = await withHeldWalletReads();
+    act(() => result.current!.applyBalance(840));
+    let read!: Promise<unknown>;
+    act(() => {
+      read = result.current!.wallet.refetch();
+    });
+    await act(async () => {
+      await answer(900);
+      await read;
+    });
+    await waitFor(() => expect(result.current!.wallet.data?.wallet.balance).toBe(900));
+    expect(result.current!.balance).toBe(900);
+  });
+
+  it("a wallet answer clears the unreachable banner", async () => {
+    const { shell } = await withHeldWalletReads();
+    expect(shell.clearNotice).toHaveBeenCalled();
   });
 });

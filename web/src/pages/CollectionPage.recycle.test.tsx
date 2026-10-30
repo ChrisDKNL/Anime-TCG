@@ -1,5 +1,5 @@
 import type { ErrorCode } from "@anime-tcg/shared/errors";
-import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
@@ -253,7 +253,7 @@ describe("Recycle for Karma: the confirmation and its answers (§3.6 steps 4 to 
     const { user } = await confirmRecycle({ [RECYCLE]: envelope(409, "balance_limit") });
     await user.click(confirmButton());
     expect(await within(dialog()).findByRole("alert")).toHaveTextContent(
-      "Your Karma is at its ceiling, so nothing was recycled.",
+      "Your balance is at its ceiling, so nothing was recycled.",
     );
     expect(confirmButton()).toHaveAttribute("aria-disabled", "true");
   });
@@ -374,6 +374,24 @@ describe("Recycle for Karma: the confirmation and its answers (§3.6 steps 4 to 
     recycle.release();
     await within(dialog()).findByText(/^Recycled 2 copies of/);
     expect(callsTo(fetchMock, RECYCLE)).toHaveLength(1);
+  });
+
+  it("a close while in flight (a second Escape) opens the dialog again on the confirmation", async () => {
+    const recycle = held({ status: 201, body: makeRecycleReceipt() });
+    const { user } = await confirmRecycle({ [RECYCLE]: recycle.handler });
+    await user.click(confirmButton());
+    act(() => (dialog() as HTMLDialogElement).close());
+    expect(dialog()).toHaveAttribute("open");
+    expect(within(dialog()).getByRole("button", { name: "Recycling…" })).toBeInTheDocument();
+    recycle.release();
+    await within(dialog()).findByText(/^Recycled 2 copies of/);
+  });
+
+  it("a close from the confirmation, not in flight, is its Cancel: the dialog goes and nothing is sent", async () => {
+    const { fetchMock } = await confirmRecycle();
+    act(() => (dialog() as HTMLDialogElement).close());
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+    expect(callsTo(fetchMock, RECYCLE)).toHaveLength(0);
   });
 
   it("unauthenticated: the session ends with /collection as the return path", async () => {

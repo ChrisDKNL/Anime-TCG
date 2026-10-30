@@ -2,7 +2,7 @@ import type { ShopReceipt, ThemeOffer } from "@anime-tcg/shared/api";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type SyntheticEvent } from "react";
 import { useGame } from "../../hooks/useGame";
-import { useKeyedAction } from "../../hooks/useKeyedAction";
+import { useKeyedAction, type RateLimitWait } from "../../hooks/useKeyedAction";
 import { buyShopPack, isApiError } from "../../lib/api";
 import { actionCopy, shopCopy } from "../../lib/economyCopy";
 import type { Outcome } from "../../lib/keyedAction";
@@ -23,11 +23,13 @@ interface Props {
   theme: ThemeOffer;
   /** The held balance the body names; the server checks it again. */
   balance: number;
+  /** The page's 429 wait, which outlives this dialog. */
+  wait: RateLimitWait;
   /** 201, or 200 on a replay: the page closes the dialog and shows the pack. */
   onBought: (receipt: ShopReceipt) => void;
   /** `theme_unavailable`: the page closes the dialog, refetches the shop and says so. */
   onGone: () => void;
-  /** `Cancel`, Escape or a close with nothing pending. */
+  /** The dialog has closed after `Cancel` or Escape, with nothing in flight. */
   onClose: () => void;
 }
 
@@ -42,7 +44,7 @@ interface Props {
  * unknown outcome. The balance an answer carries reaches the header even if
  * the page was left meanwhile. It mounts per purchase, so it opens on mount.
  */
-export function BuyDialog({ theme, balance, onBought, onGone, onClose }: Props) {
+export function BuyDialog({ theme, balance, wait, onBought, onGone, onClose }: Props) {
   const game = useGame();
   const queryClient = useQueryClient();
   const ref = useRef<HTMLDialogElement>(null);
@@ -53,23 +55,22 @@ export function BuyDialog({ theme, balance, onBought, onGone, onClose }: Props) 
   const [noAnswer, setNoAnswer] = useState(false);
   const [line, setLine] = useState<Line>(null);
 
-  const { balanceFrom, collectionQuery, walletQuery } = game;
+  const { applyBalance, collectionQuery, walletQuery } = game;
   const send = useCallback(
     async (requestId: string) => {
-      const takeBalance = balanceFrom();
       try {
         const receipt = await buyShopPack({ requestId, themeId: theme.id });
-        takeBalance(receipt.balance);
+        applyBalance(receipt.balance);
         void queryClient.invalidateQueries({ queryKey: collectionQuery.queryKey });
         return receipt;
       } catch (err) {
-        if (isApiError(err, "insufficient_funds") && err.balance !== undefined) takeBalance(err.balance);
+        if (isApiError(err, "insufficient_funds") && err.balance !== undefined) applyBalance(err.balance);
         throw err;
       }
     },
-    [balanceFrom, queryClient, collectionQuery.queryKey, theme.id],
+    [applyBalance, queryClient, collectionQuery.queryKey, theme.id],
   );
-  const action = useKeyedAction(send);
+  const action = useKeyedAction(send, wait);
 
   useEffect(() => {
     mounted.current = true;
@@ -121,21 +122,34 @@ export function BuyDialog({ theme, balance, onBought, onGone, onClose }: Props) 
     if (outcome !== null && mounted.current) settle(outcome);
   };
 
-  /** After no answer the outcome is unknown: the key goes, and the wallet and collection are read again. */
+  /** `Cancel` and Escape: the dialog closes, and its `close` event ends the confirmation. */
   const cancel = () => {
-    if (action.sending) return;
-    if (noAnswer) {
-      action.discard();
-      void queryClient.refetchQueries({ queryKey: walletQuery.queryKey });
-      void queryClient.invalidateQueries({ queryKey: collectionQuery.queryKey });
-    }
-    onClose();
+    if (!action.sending) ref.current?.close();
   };
 
   /** Escape: never while in flight; otherwise the same as `Cancel`. */
   const onCancelEvent = (event: SyntheticEvent) => {
     event.preventDefault();
     cancel();
+  };
+
+  /**
+   * Every close, however it came: Chromium honours a prevented `cancel` once, and a second Escape
+   * closes the dialog with no cancelable event. In flight it opens again at once, so the dialog never
+   * closes on an unknown outcome. Otherwise it is `Cancel`: the key goes with the dialog, and after
+   * no answer the wallet and the collection are read again.
+   */
+  const onCloseEvent = () => {
+    if (action.sending) {
+      ref.current?.showModal();
+      headingRef.current?.focus();
+      return;
+    }
+    if (noAnswer) {
+      void queryClient.refetchQueries({ queryKey: walletQuery.queryKey });
+      void queryClient.invalidateQueries({ queryKey: collectionQuery.queryKey });
+    }
+    onClose();
   };
 
   const blocked = action.sending || action.wait !== null || line?.kind === "tooLittle";
@@ -149,6 +163,7 @@ export function BuyDialog({ theme, balance, onBought, onGone, onClose }: Props) 
       aria-labelledby={headingId}
       aria-describedby={bodyId}
       onCancel={onCancelEvent}
+      onClose={onCloseEvent}
       className={DIALOG}
     >
       <div className="flex flex-col gap-4">

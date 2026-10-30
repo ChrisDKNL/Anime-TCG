@@ -21,26 +21,44 @@ export interface KeyedAction<R> {
   wait: number | null;
 }
 
+/** A 429's wait: whoever outlives the confirmation holds it, so Cancel and re-opening keep it running. */
+export interface RateLimitWait {
+  /** Seconds left, or null when none runs. */
+  seconds: number | null;
+  start: (seconds: number) => void;
+}
+
+/** The wait from `Retry-After` on `performance.now()`; its end is announced once (collection-overview.md §8). */
+export function useRateLimitWait(): RateLimitWait {
+  const { announce } = useShellContext();
+  const [waitUntil, setWaitUntil] = useState<number | null>(null);
+  const left = useCountdown(
+    waitUntil,
+    useCallback(() => announce(actionCopy.waitOver), [announce]),
+  );
+  const start = useCallback((seconds: number) => setWaitUntil(performance.now() + seconds * SECOND_MS), []);
+  return { seconds: left !== null && left > 0 ? left : null, start };
+}
+
 /**
  * One balance-changing request behind a confirmation (a shop purchase, a
  * recycle) with its idempotency key, as 1c's pack opening holds its own
  * (packs-page.md §3.3, collection-overview.md §3.8 "Request ids"). The key is
  * a ref, created on the first press and kept only on no answer and on a 429
- * (`keepsKey`). A 429 runs the wait from `Retry-After` and announces its end;
+ * (`keepsKey`). A 429 starts `wait`, which the caller holds where it outlives
+ * the confirmation (the Shop page, the card dialog), and which announces its end;
  * no answer raises the app's unreachable banner, which the next 201 or 200
  * clears; `unauthenticated` ends the session. Everything else is the caller's
  * to show from the outcome.
  */
-export function useKeyedAction<R>(send: (requestId: string) => Promise<R>): KeyedAction<R> {
-  const { announce, sessionEnded, unreachable, clearNotice } = useShellContext();
+export function useKeyedAction<R>(
+  send: (requestId: string) => Promise<R>,
+  wait: RateLimitWait,
+): KeyedAction<R> {
+  const { sessionEnded, unreachable, clearNotice } = useShellContext();
   const singleFlight = useSingleFlight();
   const key = useRef<string | null>(null);
   const [sending, setSending] = useState(false);
-  const [waitUntil, setWaitUntil] = useState<number | null>(null);
-  const wait = useCountdown(
-    waitUntil,
-    useCallback(() => announce(actionCopy.waitOver), [announce]),
-  );
 
   const attempt = useCallback(async (): Promise<Outcome<R>> => {
     const requestId = key.current ?? crypto.randomUUID();
@@ -55,6 +73,7 @@ export function useKeyedAction<R>(send: (requestId: string) => Promise<R>): Keye
     }
   }, [send]);
 
+  const { start: startWait } = wait;
   const run = useCallback(async () => {
     let outcome: Outcome<R> | null = null;
     await singleFlight(async () => {
@@ -73,18 +92,18 @@ export function useKeyedAction<R>(send: (requestId: string) => Promise<R>): Keye
           sessionEnded();
           break;
         case "rateLimited":
-          setWaitUntil(performance.now() + settled.seconds * SECOND_MS);
+          startWait(settled.seconds);
           break;
         case "refused":
           break;
       }
     });
     return outcome;
-  }, [singleFlight, attempt, clearNotice, unreachable, sessionEnded]);
+  }, [singleFlight, attempt, clearNotice, unreachable, sessionEnded, startWait]);
 
   const discard = useCallback(() => {
     key.current = null;
   }, []);
 
-  return { run, discard, sending, wait: wait !== null && wait > 0 ? wait : null };
+  return { run, discard, sending, wait: wait.seconds };
 }

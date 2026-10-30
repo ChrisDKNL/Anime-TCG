@@ -35,7 +35,8 @@ import {
  * requestId lifecycle
  * - A lost answer, then Escape: the key goes and the wallet is read again; the next purchase is a
  *   new key.
- * - A 429 without Retry-After: the fallback countdown, the key kept; Cancel then gives a new key.
+ * - A 429 without Retry-After: the fallback countdown, which survives Cancel and a new
+ *   confirmation; once a wait is over, the next buy after Cancel is a new key.
  * - Recycle: a 429, Cancel, a changed number: the new count goes under a new key, never the old one.
  * - Recycle: Close (the dialog's own button) after a lost answer is the confirmation's Cancel.
  * - `request_id_reused` on a buy: the red banner, then a new key that buys; on a recycle: the
@@ -76,6 +77,12 @@ const reveal = (page: Page, title = "Action") =>
 const requestIds = (api: FakeApi, key: string) =>
   api.bodies(key).map((body) => (body as { requestId: string }).requestId);
 const BUY = "POST /api/shop/buy";
+/** What holds focus: its tag and its text, or `BODY` when focus fell to the page. */
+const focused = (page: Page) =>
+  page.evaluate(() => {
+    const el = document.activeElement;
+    return el === null ? null : `${el.tagName} ${el === document.body ? "" : (el.textContent ?? "")}`.trim();
+  });
 const RECYCLE = "POST /api/collection/recycle";
 
 /** The api handles the request, but the answer never reaches the browser. */
@@ -301,7 +308,7 @@ test.describe("the requestId lifecycle", () => {
     const wallets = api.count("GET /api/wallet");
     await page.keyboard.press("Escape");
     await expect(confirmation(page)).toHaveCount(0);
-    // Where focus goes after Escape is BUG 1 (economy.bugs.spec.ts).
+    await expect.poll(() => focused(page)).toBe("BUTTON Buy…");
     // The lost purchase went through: the server's next answer says so.
     await expect(header(page).getByText("840 Karma")).toBeVisible();
     expect(api.count("GET /api/wallet")).toBeGreaterThan(wallets);
@@ -315,7 +322,7 @@ test.describe("the requestId lifecycle", () => {
     expect(api.game.purchases.size).toBe(2);
   });
 
-  test("a 429 without Retry-After: the fallback countdown, the key kept; Cancel, and the next buy is a new key", async ({
+  test("a 429 without Retry-After: the fallback countdown, which survives Cancel and a new confirmation", async ({
     page,
     api,
   }) => {
@@ -330,8 +337,24 @@ test.describe("the requestId lifecycle", () => {
     ).toBeVisible();
     await confirmation(page).getByRole("button", { name: "Cancel" }).click();
     await expect(confirmation(page)).toHaveCount(0);
+    // The wait lives on the Shop page (manager decision, 2026-10-30).
     await theme(page).getByRole("button", { name: "Buy…" }).click();
+    await expect(
+      confirmation(page).getByRole("button", { name: /^Try again in (60|59|58|57) s$/ }),
+    ).toHaveAttribute("aria-disabled", "true");
+    expect(api.count(BUY)).toBe(1);
+  });
+
+  test("a 429, Cancel, the wait over: the next buy is a new key", async ({ page, api }) => {
+    api.on(BUY, { ...envelope(429, "rate_limited"), headers: { "Retry-After": "1" } }, game(api));
+    await confirmBuy(page);
     await confirmation(page).getByRole("button", { name: "Buy for 400 Karma" }).click();
+    await expect(confirmation(page).getByRole("button", { name: "Try again in 1 s" })).toBeVisible();
+    await confirmation(page).getByRole("button", { name: "Cancel" }).click();
+    await theme(page).getByRole("button", { name: "Buy…" }).click();
+    const buy = confirmation(page).getByRole("button", { name: "Buy for 400 Karma" });
+    await expect(buy).toBeVisible({ timeout: 5_000 });
+    await buy.click();
     await expect(reveal(page)).toBeFocused();
     const [first, second] = requestIds(api, BUY);
     expect(second).not.toBe(first);
@@ -839,5 +862,83 @@ test.describe("320 px", () => {
     await recycle.click();
     await expect(dialog.getByRole("button", { name: "Recycle for 80 Karma" })).toBeInViewport();
     expect(await noHorizontalScroll(page)).toBe(true);
+  });
+});
+
+/*
+ * Regressions for the two bugs the hunt found on #51 (formerly economy.bugs.spec.ts).
+ * BUG 1: Cancel and Escape on the pack confirmation dropped focus to <body>: `Buy…` was focused
+ * while the modal was still open and the page inert (market-and-shop.md §3.8 "Focus").
+ * BUG 2: a second Escape in flight closed the native <dialog> without a cancelable `cancel` event
+ * (Chromium honours a prevented `cancel` once), on an unknown outcome (market-and-shop.md §3.3
+ * step 5; collection-overview.md §3.6 step 5); the Shop's `Buy…` then did nothing.
+ */
+test.describe("regression: focus after closing the pack confirmation", () => {
+  async function openConfirmation(page: Page) {
+    await page.goto("/shop");
+    await expect(h1(page, "Shop")).toBeVisible();
+    await theme(page).getByRole("button", { name: "Buy…" }).click();
+    await expect(confirmation(page)).toBeVisible();
+  }
+
+  test("Cancel returns focus to the Buy… that opened it", async ({ page }) => {
+    await openConfirmation(page);
+    await confirmation(page).getByRole("button", { name: "Cancel" }).click();
+    await expect(confirmation(page)).toHaveCount(0);
+    await expect.poll(() => focused(page)).toBe("BUTTON Buy…");
+  });
+
+  test("Escape returns focus to the Buy… that opened it", async ({ page }) => {
+    await openConfirmation(page);
+    await page.keyboard.press("Escape");
+    await expect(confirmation(page)).toHaveCount(0);
+    await expect.poll(() => focused(page)).toBe("BUTTON Buy…");
+  });
+});
+
+test.describe("regression: a second Escape in flight closes nothing", () => {
+  test("Shop: the confirmation stays open in flight, and Try again shows after a lost answer", async ({
+    page,
+    api,
+  }) => {
+    const gate = deferred();
+    api.on(BUY, async () => {
+      await gate.promise;
+      return "abort" as const;
+    });
+    await page.goto("/shop");
+    await theme(page).getByRole("button", { name: "Buy…" }).click();
+    await confirmation(page).getByRole("button", { name: "Buy for 400 Karma" }).click();
+    await expect(confirmation(page).getByRole("button", { name: "Buying…" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Escape");
+    await expect(confirmation(page)).toBeVisible();
+    gate.release();
+    await expect(confirmation(page).getByRole("button", { name: "Try again" })).toBeVisible();
+  });
+
+  test("Card dialog: the recycle confirmation stays open in flight", async ({ page, api }) => {
+    api.game.held = [makeEntry(makeCharacter(1, { name: "Spike Spiegel", tier: "epic" }), { count: 3 })];
+    const gate = deferred();
+    api.on(RECYCLE, async (call) => {
+      await gate.promise;
+      return api.game.reply(call.key, call.body)!;
+    });
+    await page.goto("/collection");
+    await page
+      .getByRole("list", { name: /results?/ })
+      .getByRole("button", { name: /Spike/ })
+      .click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByRole("button", { name: "Recycle…" }).click();
+    await dialog.getByRole("button", { name: "Recycle for 80 Karma" }).click();
+    await expect(dialog.getByRole("button", { name: "Recycling…" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeVisible();
+    gate.release();
+    await expect(dialog.getByRole("status")).toHaveText(
+      "Recycled 2 copies of Spike Spiegel for 80 Karma. You have 1,320 Karma.",
+    );
   });
 });
