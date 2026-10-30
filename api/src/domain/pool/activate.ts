@@ -1,5 +1,6 @@
 import type { PerRarity } from "@anime-tcg/shared/api";
 import { RARITIES, type Rarity } from "@anime-tcg/shared/rarity";
+import { normaliseSearchText } from "@anime-tcg/shared/search";
 import { eq, sql, TransactionRollbackError } from "drizzle-orm";
 import type { Db, Queryable } from "../../db/client.js";
 import {
@@ -146,6 +147,21 @@ function summarise(
   };
 }
 
+/** The market searches these (economy.md §7, §8.4): written with the display strings, in the search normalisation. */
+function searchTitles(entry: { title: string; titleNative: string | null }) {
+  return {
+    searchTitle: normaliseSearchText(entry.title),
+    searchTitleNative: entry.titleNative === null ? null : normaliseSearchText(entry.titleNative),
+  };
+}
+
+function searchNames(character: { name: string; nameNative: string | null }) {
+  return {
+    searchName: normaliseSearchText(character.name),
+    searchNameNative: character.nameNative === null ? null : normaliseSearchText(character.nameNative),
+  };
+}
+
 async function writeSnapshot(tx: Queryable, plan: SnapshotPlan, options: ActivationOptions): Promise<number> {
   const [row] = await tx
     .insert(poolSnapshots)
@@ -167,7 +183,13 @@ async function writeSnapshot(tx: Queryable, plan: SnapshotPlan, options: Activat
     tx
       .insert(series)
       .values(
-        chunk.map((e) => ({ id: e.id, title: e.title, titleNative: e.titleNative, startYear: e.startYear })),
+        chunk.map((e) => ({
+          id: e.id,
+          title: e.title,
+          titleNative: e.titleNative,
+          startYear: e.startYear,
+          ...searchTitles(e),
+        })),
       )
       .onConflictDoUpdate({
         target: series.id,
@@ -175,19 +197,31 @@ async function writeSnapshot(tx: Queryable, plan: SnapshotPlan, options: Activat
           title: sql`excluded.title`,
           titleNative: sql`excluded.title_native`,
           startYear: sql`excluded.start_year`,
+          searchTitle: sql`excluded.search_title`,
+          searchTitleNative: sql`excluded.search_title_native`,
         },
       }),
   );
   await insertInChunks(plan.characters, (chunk) =>
     tx
       .insert(characters)
-      .values(chunk.map((c) => ({ id: c.id, name: c.name, nameNative: c.nameNative, imageUrl: c.imageUrl })))
+      .values(
+        chunk.map((c) => ({
+          id: c.id,
+          name: c.name,
+          nameNative: c.nameNative,
+          imageUrl: c.imageUrl,
+          ...searchNames(c),
+        })),
+      )
       .onConflictDoUpdate({
         target: characters.id,
         set: {
           name: sql`excluded.name`,
           nameNative: sql`excluded.name_native`,
           imageUrl: sql`excluded.image_url`,
+          searchName: sql`excluded.search_name`,
+          searchNameNative: sql`excluded.search_name_native`,
         },
       }),
   );

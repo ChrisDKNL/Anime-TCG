@@ -43,6 +43,13 @@
       "when": 1793315346513,
       "tag": "0005_economy_ledger",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793364263493,
+      "tag": "0006_market",
+      "breakpoints": true
     }
   ]
 }
