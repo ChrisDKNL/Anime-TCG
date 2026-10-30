@@ -1,7 +1,8 @@
 /**
  * The accounts feature's class strings, complete at build time, all existing
- * utilities (accounts.md §6: no new tokens). Red is the existing semantic
- * colour of the AniList banner and the Inventory Reset button.
+ * utilities (accounts.md §6: no new tokens). Red is the app's semantic
+ * colour for errors and destructive actions: the alert banners, the field
+ * errors and the Delete account buttons.
  */
 
 export const FOCUS_RING = "focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500";
