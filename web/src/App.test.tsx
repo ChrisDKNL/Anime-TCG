@@ -20,6 +20,7 @@ import {
   signedInRoutes,
   signedOutSession,
 } from "./test/app";
+import { makeDemo } from "./test/fixtures";
 import { fill } from "./test/user";
 
 /** Budget for async queries that race React's passive-effect flush under parallel-file load. */
@@ -82,16 +83,22 @@ describe("App boot", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Loading…");
   });
 
-  it("unreachable: red banner with Try again above a usable landing page; Try again recovers", async () => {
-    const { fetchMock } = renderApp({ "GET /api/session": { status: 502, raw: "bad gateway" } });
+  it("unreachable: red banner with Try again above a usable landing page; Try again recovers, the pool facts too", async () => {
+    const { fetchMock } = renderApp({
+      "GET /api/session": { status: 502, raw: "bad gateway" },
+      "GET /api/demo": { status: 502, raw: "bad gateway" },
+    });
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("Couldn't reach the game server. Check your connection and try again.");
     expect(screen.getByRole("heading", { level: 1, name: "Anime TCG" })).toBeInTheDocument();
     expect(within(mainNav()).getByRole("link", { name: "Log in" })).toBeInTheDocument();
+    expect(
+      screen.getByText("Characters from the most popular anime on AniList, five to a pack."),
+    ).toBeInTheDocument();
 
-    fetchMock.mockImplementation(() =>
+    fetchMock.mockImplementation((input) =>
       Promise.resolve(
-        new Response(JSON.stringify({ signedIn: false }), {
+        new Response(JSON.stringify(urlOf(input) === "/api/demo" ? makeDemo() : { signedIn: false }), {
           status: 200,
           headers: { "content-type": "application/json" },
         }),
@@ -100,6 +107,9 @@ describe("App boot", () => {
     await userEvent.setup().click(screen.getByRole("button", { name: "Try again" }));
     await waitFor(() => expect(screen.queryByRole("alert")).not.toBeInTheDocument());
     expect(screen.getByRole("heading", { level: 1, name: "Anime TCG" })).toBeInTheDocument();
+    expect(
+      await screen.findByText("2,983 characters from the 100 most popular anime on AniList, five to a pack."),
+    ).toBeInTheDocument();
   });
 
   it("unreachable: the page stays up while Try again runs, and nothing asks the server on its own", async () => {

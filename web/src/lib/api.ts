@@ -3,6 +3,8 @@ import type {
   ChangePasswordBody,
   CollectionResponse,
   DeleteBody,
+  DemoOpened,
+  DemoResponse,
   InviteBody,
   LoginBody,
   OpenPackBody,
@@ -174,4 +176,14 @@ export function openPack(body: OpenPackBody): Promise<PackOpened> {
 
 export function getCollection(): Promise<CollectionResponse> {
   return expectJson<CollectionResponse>("GET", "/api/collection");
+}
+
+/** The landing page's facts: public, no session. */
+export function getDemo(): Promise<DemoResponse> {
+  return expectJson<DemoResponse>("GET", "/api/demo");
+}
+
+/** A demo pack, rolled and forgotten by the server; no body, so nothing in it can steer the roll. */
+export function openDemoPack(): Promise<DemoOpened> {
+  return expectJson<DemoOpened>("POST", "/api/demo/open");
 }

@@ -14,9 +14,17 @@ export const RENAME_RATE_LIMIT = { max: 30, timeWindow: MINUTE_MS } as const;
  */
 export const PACK_RATE_LIMIT = { max: 20, timeWindow: MINUTE_MS } as const;
 /**
+ * Opening a demo pack (navigation-and-landing.md §3.8 item 5), the real bound
+ * on demo packs: the page's count of `DEMO_PACKS_PER_VISIT` lives in the
+ * browser and a reload resets it. At least twice that a minute, so one visit
+ * opened as fast as the button allows, plus a reload, is never refused; the
+ * limit bounds what a script costs a public route that reads the database.
+ */
+export const DEMO_RATE_LIMIT = { max: 20, timeWindow: MINUTE_MS } as const;
+
+/**
  * Every action that moves Karma or cards (economy.md §8.12): recycle, the
  * shop purchase, and listing, buying and cancelling on the market. Each
  * replaces the global bucket for its route; the GETs keep the global one.
-
  */
 export const CARD_ACTION_RATE_LIMIT = { max: 30, timeWindow: MINUTE_MS } as const;

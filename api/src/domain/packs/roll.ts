@@ -42,6 +42,13 @@ export function tierForRoll(table: OddsTable, r: number): Rarity {
 /** Where a pack comes from: the allowance (`free`) or, later, the shop. Only free packs count towards pity and Enchanted (§5.4.7). */
 export type PackSource = "free" | "shop";
 
+/**
+ * What a plan can be made for: a pack dealt to an account, or the landing
+ * page's demo (navigation-and-landing.md §3.8 item 3), which has no account and
+ * so no counters: never Enchanted or pity-due, Radiant like every pack.
+ */
+export type PlanSource = PackSource | "demo";
+
 /** The two counters on the account row (§5.4.5). */
 export interface PackCounters {
   /** Free packs opened since the last Mythic card; 0 to `PITY_PACKS - 1`. */
@@ -68,7 +75,7 @@ const FORCED_MYTHIC: SlotRule = { forced: "mythic" };
  * the precedence of §5.4.3: Radiant, then pity, then Enchanted; a rule lower
  * down is not lost but already met.
  */
-export function planPack(counters: PackCounters, source: PackSource, rng: Rng): PackPlan {
+export function planPack(counters: PackCounters, source: PlanSource, rng: Rng): PackPlan {
   const radiant = rng(0, ODDS_SCALE) < RADIANT_ODDS;
   const free = source === "free";
   const enchanted = free && (counters.freePacksOpened + 1) % ENCHANTED_INTERVAL === 0;

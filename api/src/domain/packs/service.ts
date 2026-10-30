@@ -5,7 +5,7 @@ import type { Logger } from "pino";
 import type { Db, Queryable } from "../../db/client.js";
 import { accounts, cards, packOpenings } from "../../db/schema.js";
 import { ApiError } from "../errors.js";
-import { currentSnapshot, describeCharacters, franchiseRefs, tierPool } from "../pool/catalog.js";
+import { currentSnapshot, describeCharacters, franchiseRefs, TierPoolCache } from "../pool/catalog.js";
 import { perRarity } from "../pool/tiers.js";
 import { allowanceAt, anchorAfterOpening } from "./allowance.js";
 import { publishedOdds } from "./odds.js";
@@ -181,12 +181,10 @@ export const LOCKED_ACCOUNT = {
  * first, so one account's openings, and its reset, run one after another.
  */
 export class PackService {
-  /** Snapshots never change once written, so a pool read for an id is good for as long as the process runs. */
-  private cachedPool: PackPool | null = null;
-
   constructor(
     private readonly db: Db,
     private readonly rng: Rng,
+    private readonly pools: TierPoolCache = new TierPoolCache(),
   ) {}
 
   async status(accountId: string, now: Date): Promise<PacksResponse> {
@@ -243,7 +241,7 @@ export class PackService {
       const snapshot = await currentSnapshot(tx);
       if (snapshot === null) throw new ApiError(503, "pool_unavailable", "Cards are not available right now");
 
-      const pool = await this.poolFor(tx, snapshot.id);
+      const pool: PackPool = { snapshotId: snapshot.id, tiers: await this.pools.get(tx, snapshot.id) };
       const dealt = await dealPack(tx, { account: locked, requestId, openedAt: now }, this.rng, pool, "free");
       return { replayed: false, ...dealt, now };
     });
@@ -262,13 +260,6 @@ export class PackService {
       "pack opened",
     );
     return { replayed, opened: await describeOpening(this.db, opening, account, now) };
-  }
-
-  private async poolFor(tx: Queryable, snapshotId: number): Promise<PackPool> {
-    if (this.cachedPool?.snapshotId !== snapshotId) {
-      this.cachedPool = { snapshotId, tiers: await tierPool(tx, snapshotId) };
-    }
-    return this.cachedPool;
   }
 }
 
