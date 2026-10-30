@@ -5,6 +5,7 @@
  * cannot be added to one of them and missed in another (§3.1 rule 3). `/shop`
  * joined with `feat/economy-ui`; `/market` joins `ACCOUNT_PAGES` in the PR that
  * builds it, and until then it is the not-found page like any other unknown path.
+ * The opening pages (§3.13) and `/demo` (§3.14) joined with the landing revision.
  */
 
 const SITE = "Anime TCG";
@@ -21,13 +22,27 @@ export const ACCOUNT_PAGES = {
 /** Pages only a signed-out visitor sees; a signed-in one is replaced to `/packs` (§3.3 step 7). */
 export const PUBLIC_PAGES = {
   "/": { heading: SITE },
+  "/demo": { heading: "Demo pack" },
   "/login": { heading: "Log in" },
   "/register": { heading: "Register" },
 } as const satisfies Record<string, { heading: string }>;
 
 export type AccountPath = keyof typeof ACCOUNT_PAGES;
+
+/**
+ * The opening pages (§3.13): account pages that show a pack being opened and
+ * its cards, under the section page they are opened from. They have no header
+ * link and are never a return path (§3.1 rule 5): their guard writes the
+ * section page instead.
+ */
+export const OPENING_PAGES = {
+  "/packs/open": { heading: "Pack opening", section: "/packs" },
+  "/shop/open": { heading: "Shop pack", section: "/shop" },
+} as const satisfies Record<string, { heading: string; section: AccountPath }>;
+
 export type PublicPath = keyof typeof PUBLIC_PAGES;
-export type PagePath = AccountPath | PublicPath;
+export type OpeningPath = keyof typeof OPENING_PAGES;
+export type PagePath = AccountPath | OpeningPath | PublicPath;
 
 export const NOT_FOUND = { heading: "Page not found", title: `Page not found · ${SITE}` } as const;
 
@@ -40,8 +55,9 @@ export const HOME_PATH = "/packs" satisfies AccountPath;
 /** `Anime TCG` while booting and on `/`; otherwise the page name first (§3.1 rule 4). */
 export const BOOT_TITLE = SITE;
 
-const PAGES: Record<PagePath, { heading: string }> = { ...PUBLIC_PAGES, ...ACCOUNT_PAGES };
+const PAGES: Record<PagePath, { heading: string }> = { ...PUBLIC_PAGES, ...ACCOUNT_PAGES, ...OPENING_PAGES };
 const ACCOUNT_PATHS = Object.keys(ACCOUNT_PAGES) as AccountPath[];
+const OPENING_PATHS = Object.keys(OPENING_PAGES) as OpeningPath[];
 const PUBLIC_PATHS = Object.keys(PUBLIC_PAGES) as PublicPath[];
 
 /** The list's own entry for `value`, compared exactly, or null: the lookup every check below goes through. */
@@ -54,8 +70,12 @@ export function publicPath(value: unknown): PublicPath | null {
   return listed(PUBLIC_PATHS, value);
 }
 
+export function openingPath(value: unknown): OpeningPath | null {
+  return listed(OPENING_PATHS, value);
+}
+
 export function pagePath(value: unknown): PagePath | null {
-  return toReturnPath(value) ?? publicPath(value);
+  return toReturnPath(value) ?? openingPath(value) ?? publicPath(value);
 }
 
 /**
@@ -68,6 +88,21 @@ export function pagePath(value: unknown): PagePath | null {
  */
 export function toReturnPath(value: unknown): AccountPath | null {
   return listed(ACCOUNT_PATHS, value);
+}
+
+/**
+ * The return path the guard and a session end write for `pathname` (§3.3,
+ * §3.13 steps 7 and 8): an account page itself, an opening page's section
+ * page, or null for anything else.
+ */
+export function returnPathFor(pathname: unknown): AccountPath | null {
+  return sectionOf(pathname) ?? toReturnPath(pathname);
+}
+
+/** The section page of an opening page, whose header link is marked as the current section (§3.13 step 6); else null. */
+export function sectionOf(pathname: unknown): AccountPath | null {
+  const opening = openingPath(pathname);
+  return opening === null ? null : OPENING_PAGES[opening].section;
 }
 
 /** Where a sign-in sends the visitor: the held return path if it is still valid, else `/packs`. */
