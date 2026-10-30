@@ -8,6 +8,7 @@ import type { ControlsAction, IndexedEntry, OverviewControls } from "../../lib/c
 import { LoginText } from "../account/LoginText";
 import { BUTTON } from "../account/styles";
 import { CardDialog } from "./CardDialog";
+import { EmptyCollection } from "./CollectionStates";
 import { CollectionStats, type SeriesLine } from "./CollectionStats";
 import { Pages } from "./Pages";
 import { SeriesView } from "./SeriesView";
@@ -29,15 +30,28 @@ interface Props {
 /** Where focus goes after an action that changes the results under it (§5.3, §4.3, §3.7). */
 type FocusRequest = { to: "results"; scroll: boolean } | { to: "tile"; key: string; position: number };
 
+/** The dialog's entry, and the page as it was when it opened: the grid keeps that order until it closes (§3.4 step 5). */
+interface OpenCard {
+  key: string;
+  position: number;
+  frozen: IndexedEntry[];
+}
+
 /**
  * The loaded collection (collection-overview.md §3.1 to §3.7): the stats,
- * the view switch, then the Cards view or the Series view. The controls are
- * the signed-in layout's, so they survive page changes; the dialog is this
- * page's, so it closes when the page is left.
+ * the view switch, then the Cards view or the Series view; with no entries,
+ * the empty state (§4.1). The controls are the signed-in layout's, so they
+ * survive page changes; the dialog is this page's, so it closes when the page
+ * is left. The dialog sits outside both views and the empty state, so a
+ * refetch that empties the collection while it is open leaves it open with
+ * `You no longer have this card.` (§4.5).
  */
 export function CollectionOverview({ data, staleSince, controls, onChange }: Props) {
   const model = useCollectionOverview(data, controls);
   const pendingFocus = useRef<FocusRequest | null>(null);
+  const [open, setOpen] = useState<OpenCard | null>(null);
+  const emptyHeading = useRef<HTMLHeadingElement>(null);
+  const empty = data.entries.length === 0;
 
   const focusAfter = (request: FocusRequest) => {
     pendingFocus.current = request;
@@ -48,6 +62,31 @@ export function CollectionOverview({ data, staleSince, controls, onChange }: Pro
     return request;
   };
 
+  const poolSize = data.snapshot?.characterCount ?? null;
+  const dialog = open !== null && (
+    <CardDialog
+      key={open.key}
+      indexed={model.byKey.get(open.key) ?? null}
+      names={model.names}
+      poolSize={poolSize}
+      onClose={() => {
+        // §3.7 step 3; with no entries left, the empty state's heading, which says what is there now.
+        if (empty) emptyHeading.current?.focus();
+        else focusAfter({ to: "tile", key: open.key, position: open.position });
+        setOpen(null);
+      }}
+    />
+  );
+
+  if (empty) {
+    return (
+      <>
+        <EmptyCollection headingRef={emptyHeading} />
+        {dialog}
+      </>
+    );
+  }
+
   return (
     <>
       <CollectionStats data={data} staleSince={staleSince} series={seriesLine(model, controls)} />
@@ -55,7 +94,9 @@ export function CollectionOverview({ data, staleSince, controls, onChange }: Pro
       {controls.tab === "cards" ? (
         <CardsView
           model={model}
-          poolSize={data.snapshot?.characterCount ?? null}
+          poolSize={poolSize}
+          open={open}
+          onOpen={setOpen}
           controls={controls}
           onChange={onChange}
           takeFocusRequest={takeFocusRequest}
@@ -73,6 +114,7 @@ export function CollectionOverview({ data, staleSince, controls, onChange }: Pro
           }}
         />
       )}
+      {dialog}
     </>
   );
 }
@@ -89,6 +131,9 @@ function seriesLine(model: OverviewModel, controls: OverviewControls): SeriesLin
 interface CardsViewProps {
   model: OverviewModel;
   poolSize: number | null;
+  /** The open dialog's entry: while it is open the grid shows the page as it was when it opened. */
+  open: OpenCard | null;
+  onOpen: (card: OpenCard) => void;
   controls: OverviewControls;
   onChange: (action: ControlsAction) => void;
   /** The focus an action asked for, taken once the Cards view has rendered what the action changed. */
@@ -96,15 +141,16 @@ interface CardsViewProps {
   focusAfter: (request: FocusRequest) => void;
 }
 
-/** The dialog's entry, and the page as it was when it opened: the grid keeps that order until it closes (§3.4 step 5). */
-interface OpenCard {
-  key: string;
-  position: number;
-  frozen: IndexedEntry[];
-}
-
-function CardsView({ model, poolSize, controls, onChange, takeFocusRequest, focusAfter }: CardsViewProps) {
-  const [open, setOpen] = useState<OpenCard | null>(null);
+function CardsView({
+  model,
+  poolSize,
+  open,
+  onOpen,
+  controls,
+  onChange,
+  takeFocusRequest,
+  focusAfter,
+}: CardsViewProps) {
   const { results, page, pages, pageEntries, byKey } = model;
   const resultsRef = useRef<HTMLParagraphElement>(null);
   const gridRef = useRef<HTMLUListElement>(null);
@@ -156,7 +202,7 @@ function CardsView({ model, poolSize, controls, onChange, takeFocusRequest, focu
               key={indexed.key}
               indexed={indexed}
               poolSize={poolSize}
-              onOpen={() => setOpen({ key: indexed.key, position, frozen: pageEntries })}
+              onOpen={() => onOpen({ key: indexed.key, position, frozen: pageEntries })}
             />
           ))}
         </ul>
@@ -168,18 +214,6 @@ function CardsView({ model, poolSize, controls, onChange, takeFocusRequest, focu
           onPage={(next) => {
             focusAfter({ to: "results", scroll: true });
             onChange({ type: "page", page: next });
-          }}
-        />
-      )}
-      {open !== null && (
-        <CardDialog
-          key={open.key}
-          indexed={byKey.get(open.key) ?? null}
-          names={model.names}
-          poolSize={poolSize}
-          onClose={() => {
-            focusAfter({ to: "tile", key: open.key, position: open.position });
-            setOpen(null);
           }}
         />
       )}

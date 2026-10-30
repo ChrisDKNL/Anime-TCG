@@ -1,11 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { CollectionOverview } from "../components/collection/CollectionOverview";
-import {
-  CollectionError,
-  CollectionSkeleton,
-  EmptyCollection,
-} from "../components/collection/CollectionStates";
+import { CollectionError, CollectionSkeleton } from "../components/collection/CollectionStates";
 import { PageHeading } from "../components/layout/PageHeading";
 import { useDelayedFlag } from "../hooks/useDelayedFlag";
 import { useGame } from "../hooks/useGame";
@@ -29,17 +25,14 @@ export function CollectionPage() {
 
   let content: ReactNode = null;
   if (collection.data !== undefined) {
-    content =
-      collection.data.entries.length === 0 ? (
-        <EmptyCollection />
-      ) : (
-        <CollectionOverview
-          data={collection.data}
-          staleSince={collection.isError ? new Date(collection.dataUpdatedAt) : null}
-          controls={game.state.overview}
-          onChange={game.changeOverview}
-        />
-      );
+    content = (
+      <CollectionOverview
+        data={collection.data}
+        staleSince={collection.isError ? new Date(collection.dataUpdatedAt) : null}
+        controls={game.state.overview}
+        onChange={game.changeOverview}
+      />
+    );
   } else if (collection.isError) {
     content = <CollectionError onRetry={() => void collection.refetch()} />;
   } else if (showLoading) {

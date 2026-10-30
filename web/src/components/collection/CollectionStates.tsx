@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router";
+import type { RefObject } from "react";
 import { pageCopy } from "../../lib/collectionCopy";
 import { DEFAULT_CONTROLS } from "../../lib/collectionView";
 import { BUTTON } from "../account/styles";
@@ -11,11 +12,17 @@ import { ViewSwitch } from "./ViewSwitch";
 const SKELETON_TILES = Array.from({ length: 12 }, (_, i) => i);
 const ignore = () => undefined;
 
-/** §4.1 empty: no stats, no view switch, no toolbar; `Open a pack` is a real link to `/packs`. */
-export function EmptyCollection() {
+/**
+ * §4.1 empty: no stats, no view switch, no toolbar; `Open a pack` is a real
+ * link to `/packs`. The heading is the focus target when the card dialog
+ * closes over a collection a refetch emptied (§3.7 step 3).
+ */
+export function EmptyCollection({ headingRef }: { headingRef: RefObject<HTMLHeadingElement | null> }) {
   return (
     <div className="flex flex-col items-center gap-4 py-16 text-center">
-      <h2 className="text-lg font-bold text-zinc-100">{pageCopy.empty}</h2>
+      <h2 ref={headingRef} tabIndex={-1} className="text-lg font-bold text-zinc-100 focus:outline-none">
+        {pageCopy.empty}
+      </h2>
       <Link to="/packs" className={LINK_BUTTON.primary}>
         {pageCopy.openAPack}
       </Link>

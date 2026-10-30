@@ -61,6 +61,13 @@ test("BUG: a refetch that empties the collection drops the open dialog without `
   gate.release();
   await expect(page.getByRole("heading", { name: "No cards yet" })).toBeAttached();
   await expect(page.getByRole("dialog", { name: "You no longer have this card." })).toBeVisible();
+  await expect(openDialog(page)).toBeFocused();
+  // §3.7 step 3 (manager decision, 2026-10-30): Close puts focus on the empty state's heading.
+  await openDialog(page).getByRole("button", { name: "Close" }).last().click();
+  await expect(openDialog(page)).toHaveCount(0);
+  await expect(page.getByRole("heading", { level: 2, name: "No cards yet" })).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(page.getByRole("link", { name: "Open a pack" })).toBeFocused();
 });
 
 test("BUG: focus inside the dialog's details falls to <body> when a refetch removes the entry", async ({

@@ -518,6 +518,28 @@ describe("the card dialog (§3.4, §3.7, §4.5)", () => {
     expect(close).toHaveFocus();
   });
 
+  it("a refetch that empties the collection: the dialog stays with the gone message over the empty state; close focuses its heading", async () => {
+    const { user, queryClient } = await openCollection(
+      sequence(overview, { status: 200, body: makeCollection() }),
+    );
+    await user.click(within(grid()).getByRole("button", { name: /Gon/ }));
+    const dialog = screen.getByRole("dialog");
+    await queryClient.refetchQueries({ queryKey: ["collection"] });
+    await within(dialog).findByText("You no longer have this card.", {}, { timeout: ASYNC_TIMEOUT });
+    expect(dialog).toBeInTheDocument();
+    expect(dialog).toHaveAccessibleName("You no longer have this card.");
+    // Focus was on the dialog itself, which stays.
+    expect(dialog).toHaveFocus();
+    // The empty state is already under it.
+    const heading = screen.getByRole("heading", { level: 2, name: "No cards yet", hidden: true });
+    expect(screen.queryByRole("list", { name: /results?/, hidden: true })).not.toBeInTheDocument();
+    await user.click(within(dialog).getAllByRole("button", { name: "Close" }).at(-1)!);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    expect(heading).toHaveAttribute("tabindex", "-1");
+    expect(heading).toHaveFocus();
+    expect(screen.getByRole("link", { name: "Open a pack" })).toBeInTheDocument();
+  });
+
   it("closing on a page that got shorter focuses the last tile", async () => {
     const onlyOne = makeOverviewCollection();
     onlyOne.entries = onlyOne.entries.filter((entry) => entry.character.id === 1);

@@ -171,7 +171,7 @@ The rule (owner, 2026-10-29): a player recycles **duplicates** of an entry, neve
 
 1. The close button, or Escape on the details, closes the dialog. Escape on a confirmation returns to the details first.
 2. On close the grid reapplies its sort and filters to the server's numbers.
-3. Focus goes to the first of these that exists: the tile of the entry the dialog showed when it closed, if that tile is on the current page; the tile now at the opening tile's position on the page, or the last tile if the page got shorter; the results line, after the page is clamped.
+3. Focus goes to the first of these that exists: the tile of the entry the dialog showed when it closed, if that tile is on the current page; the tile now at the opening tile's position on the page, or the last tile if the page got shorter; the results line, after the page is clamped. When a refetch emptied the collection while the dialog was open, the empty state is under it and focus goes to its heading `No cards yet` (`tabindex="-1"`): like the results line, it says what is there now, and `Open a pack` is the next Tab stop (manager decision, 2026-10-30).
 4. While the dialog is open, a refetch can remove its entry (§4.5 "entry gone"). If focus was inside the details, the control that held it goes with them: focus moves to the message `You no longer have this card.`, a focus target (`tabindex="-1"`) and the first thing in the body under the close button, so a screen reader hears what replaced the details. It never falls to `<body>`. Focus on the dialog itself or on the close button stays where it is (manager decision, 2026-10-30).
 
 ### 3.8 What the UI needs from the server
@@ -310,15 +310,15 @@ The UI reads every one of them from `GET /api/wallet`; none is written into a st
 
 ### 4.5 Card dialog
 
-| State                        | User sees                                                                                                                                               | User can do          |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
-| open                         | Close button, art, name (heading), native name, series, `Also in`, facts, at most one note, List on the market, Recycle for Karma                       | List, recycle, close |
-| tier moved                   | Under the facts: `Packs now give <name> as <Tier>.`                                                                                                     | As open              |
-| out of pool                  | Under the facts: `No longer in packs. Doesn't count toward completion.`                                                                                 | As open              |
-| stale (collection or wallet) | `List…` and `Recycle…` disabled, reason `Listing and recycling wait until the game server answers.`                                                     | Close                |
-| entry changed by a refetch   | The facts show the server's new counts; reasons follow them                                                                                             | As open              |
-| entry gone after a refetch   | Body replaced by `You no longer have this card.` and `Close`; focus inside the details moves to the message (§3.7 step 4, manager decision, 2026-10-30) | Close                |
-| session ended                | The dialog closes; `accounts.md` §4.8                                                                                                                   | Log in               |
+| State                        | User sees                                                                                                                                                                                                                              | User can do          |
+| ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- |
+| open                         | Close button, art, name (heading), native name, series, `Also in`, facts, at most one note, List on the market, Recycle for Karma                                                                                                      | List, recycle, close |
+| tier moved                   | Under the facts: `Packs now give <name> as <Tier>.`                                                                                                                                                                                    | As open              |
+| out of pool                  | Under the facts: `No longer in packs. Doesn't count toward completion.`                                                                                                                                                                | As open              |
+| stale (collection or wallet) | `List…` and `Recycle…` disabled, reason `Listing and recycling wait until the game server answers.`                                                                                                                                    | Close                |
+| entry changed by a refetch   | The facts show the server's new counts; reasons follow them                                                                                                                                                                            | As open              |
+| entry gone after a refetch   | Body replaced by `You no longer have this card.` and `Close`; focus inside the details moves to the message (§3.7 step 4). When the collection is now empty, the dialog stays open over the empty state (manager decision, 2026-10-30) | Close                |
+| session ended                | The dialog closes; `accounts.md` §4.8                                                                                                                                                                                                  | Log in               |
 
 ### 4.6 List on the market
 
