@@ -20,6 +20,7 @@ const MIGRATION_FILES = [
   "0004_packs_hardening.sql",
   "0005_economy_ledger.sql",
   "0006_market.sql",
+  "0007_market_bought_cards_guard.sql",
 ];
 const MIGRATION_WHEN = [
   "1793207773838",
@@ -29,6 +30,7 @@ const MIGRATION_WHEN = [
   "1793296711999",
   "1793315346513",
   "1793364263493",
+  "1793388379456",
 ];
 
 /**

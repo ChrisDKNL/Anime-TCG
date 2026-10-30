@@ -99,8 +99,9 @@ import { createTestApp, send, type SignedInClient, testConfig, testDatabaseUrl }
  *   seller cannot list or recycle what it sold; a reset of the middle account;
  * - a lapsed but unswept listing frees its card for `available` and recycling.
  * Least privilege
- * - the app role cannot DELETE a card; exactly what `delete_bought_cards`
- *   lets it do to another account, and that `audit-ledger` sees a stray call;
+ * - the app role cannot DELETE a card; `delete_bought_cards` refuses while
+ *   the account has an active listing (0007), exactly what it then lets it
+ *   do to another account, and that `audit-ledger` sees a stray call;
  *   PUBLIC has no EXECUTE; a temp table named `cards` does not redirect it;
  * - the app role can null `removed_by_purchase` on a sold card (the trigger
  *   allows it for the foreign key's set null): `audit-ledger` must catch it.
@@ -869,7 +870,7 @@ describe("market hunt (tester, economy.md PR 3)", () => {
       expect(await heldCopies(app, holder.account.id, ID.common(50))).toHaveLength(1);
     });
 
-    it("delete_bought_cards(x) deletes exactly x's cards with a purchase_id, held, listed or resold, nothing else; audit-ledger sees a stray call", async () => {
+    it("delete_bought_cards(x) refuses while x has an active listing, then deletes exactly x's cards with a purchase_id, held, once listed or resold, nothing else; audit-ledger sees a stray call", async () => {
       const source = await holding([ID.common(51), ID.common(52), ID.common(53), ID.common(54)]);
       const x = await funded(100, [ID.common(55)]);
       const y = await funded(100);
@@ -885,24 +886,36 @@ describe("market hunt (tester, economy.md PR 3)", () => {
       const yBefore = byId(await allCardsOf(y.account.id));
       const sourceBefore = byId(await allCardsOf(source.account.id));
 
+      // Manager decision, 2026-10-30 (0007): never while x has an active listing, so no listing loses its card.
+      const refused: unknown = await app.db
+        .execute(sql`select delete_bought_cards(${x.account.id}) as deleted`)
+        .then(
+          () => null,
+          (err: unknown) => err,
+        );
+      expect(refused).toMatchObject({ cause: { code: "23000" } });
+      expect(byId(await allCardsOf(x.account.id))).toEqual(xBefore);
+      expect((await cancelListing(app, x.cookie, xListing.listingId)).statusCode).toBe(200);
+
       const result = await app.db.execute<{ deleted: number }>(
         sql`select delete_bought_cards(${x.account.id}) as deleted`,
       );
       expect(result.rows).toEqual([{ deleted: 3 }]);
-      // x's resold card goes too, so y's purchase from x has lost its sold card: both fail the audit.
+      // x's resold card goes too, so y's purchase from x has lost its sold card: both fail the audit
+      // (economy.md, the accepted residual of a call outside a reset).
       forged.push(x.account.id, y.account.id);
       expect(byId(await allCardsOf(x.account.id))).toEqual(
         xBefore.filter((card) => card.purchaseId === null),
       );
       expect(byId(await allCardsOf(y.account.id))).toEqual(yBefore);
       expect(byId(await allCardsOf(source.account.id))).toEqual(sourceBefore);
-      // What it allows, plainly: x's live listing now names no card while still active.
-      expect(await listingRow(xListing.listingId)).toMatchObject({ status: "active", cardId: null });
+      // The cancelled listing keeps its history without the card; nothing active names no card.
+      expect(await listingRow(xListing.listingId)).toMatchObject({ status: "cancelled", cardId: null });
       const audit = await auditLedger(app.db);
       expect(audit.failures.map((failure) => failure.id)).toEqual(
         expect.arrayContaining([x.account.id, y.account.id]),
       );
-      // A buyer of that listing moves nothing (the spec's backstop: a bug, rolled back).
+      // A buyer of that listing moves nothing.
       const z = await funded(100);
       const res = await buyListing(app, z.cookie, xListing.listingId);
       expect(res.statusCode).not.toBe(201);

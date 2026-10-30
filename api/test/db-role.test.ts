@@ -465,6 +465,83 @@ describe("app database role", () => {
     ).toEqual([{ status: "sold", cardId: null }]);
   });
 
+  it("refuses delete_bought_cards on an account with an active listing, deleting nothing, live or lapsed (0007, manager decision, 2026-10-30)", async () => {
+    const seller = await insertAccount(app.db, "GuardSeller");
+    const buyer = await insertAccount(app.db, "GuardBuyer");
+    const sale = await seedSale(seller, buyer);
+    const now = new Date();
+    // The buyer lists the card it bought: a live listing, then one lapsed but not yet swept.
+    for (const expiresAt of [new Date(now.getTime() + 60_000), new Date(now.getTime() - 1)]) {
+      const [listing] = await app.db
+        .insert(marketListings)
+        .values({
+          sellerId: buyer,
+          requestId: randomUUID(),
+          cardId: sale.boughtId,
+          characterId: PROBE_CHARACTER,
+          rarity: "mythic",
+          price: 27_500,
+          fee: 1_375,
+          status: "active",
+          createdAt: new Date(expiresAt.getTime() - 120_000),
+          expiresAt,
+        })
+        .returning({ id: marketListings.id });
+      if (listing === undefined) throw new Error("listing insert returned no row");
+      const refused: unknown = await app.db
+        .execute(sql`select delete_bought_cards(${buyer}) as deleted`)
+        .then(
+          () => null,
+          (err: unknown) => err,
+        );
+      expect(refused).toMatchObject({ cause: { code: INTEGRITY_VIOLATION } });
+      expect((refused as { cause: Error }).cause.message).toMatch(/cancel its active listings/);
+      expect(await app.db.select({ id: cards.id }).from(cards).where(eq(cards.id, sale.boughtId))).toEqual([
+        { id: sale.boughtId },
+      ]);
+      await app.db
+        .update(marketListings)
+        .set({ status: "cancelled", closedAt: now })
+        .where(eq(marketListings.id, listing.id));
+    }
+    // With no active listing left it deletes the bought card, and only that.
+    expect((await app.db.execute(sql`select delete_bought_cards(${buyer}) as deleted`)).rows).toEqual([
+      { deleted: 1 },
+    ]);
+  });
+
+  it("still resets an account whose bought card is listed: the reset cancels the listing, then deletes the card (0007)", async () => {
+    const seller = await insertAccount(app.db, "GuardResetSeller");
+    const buyer = await insertAccount(app.db, "GuardResetBuyer");
+    const sale = await seedSale(seller, buyer);
+    const now = new Date();
+    const [listing] = await app.db
+      .insert(marketListings)
+      .values({
+        sellerId: buyer,
+        requestId: randomUUID(),
+        cardId: sale.boughtId,
+        characterId: PROBE_CHARACTER,
+        rarity: "mythic",
+        price: 27_500,
+        fee: 1_375,
+        status: "active",
+        createdAt: now,
+        expiresAt: new Date(now.getTime() + 60_000),
+      })
+      .returning({ id: marketListings.id });
+    if (listing === undefined) throw new Error("listing insert returned no row");
+    const result = await resetCollection(app.db, "GuardResetBuyer", { confirm: true, keepKarma: true });
+    expect(result).toMatchObject({ applied: true, listings: 1 });
+    expect(await app.db.select().from(cards).where(eq(cards.accountId, buyer))).toEqual([]);
+    expect(
+      await app.db
+        .select({ status: marketListings.status, cardId: marketListings.cardId })
+        .from(marketListings)
+        .where(eq(marketListings.id, listing.id)),
+    ).toEqual([{ status: "cancelled", cardId: null }]);
+  });
+
   /** A ledger row and a recycle that removes `cardId`, written as the app role writes them. */
   async function seedRecycle(
     accountId: string,
