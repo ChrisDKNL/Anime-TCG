@@ -440,7 +440,9 @@ describe("the card dialog (§3.4, §3.7, §4.5)", () => {
       "20 Oct 2026",
     ]);
     expect(within(dialog).queryByText(/Packs now give|No longer in packs/)).toBeNull();
-    expect(within(dialog).queryByText(/market|Recycle|Karma/i)).toBeNull();
+    // Recycle for Karma is the dialog's one section until the market's PR adds its own (§3.4 step 4).
+    expect(within(dialog).getByRole("heading", { level: 3, name: "Recycle for Karma" })).toBeInTheDocument();
+    expect(within(dialog).queryByText(/List on the market/)).toBeNull();
   });
 
   it("one copy: no last obtained; another series: Also in, with the year where titles are shared", async () => {
