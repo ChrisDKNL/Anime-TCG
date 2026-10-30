@@ -9,6 +9,7 @@ import {
   expect,
   isolated,
   makeAccount,
+  PNG,
   recordStatusTexts,
   signedIn,
   statusTexts,
@@ -37,7 +38,9 @@ import {
  * - The count changed: the facts show the new count and `Last obtained` appears; the order
  *   behind the dialog holds until close, then the sort is reapplied and focus follows the entry
  *   to its new place.
- * - Focus inside the details when the entry goes: collection-overview.bugs.spec.ts.
+ * - Regressions (manager decisions, 2026-10-30): a refetch that empties the collection keeps
+ *   the dialog open over the empty state, and Close focuses `No cards yet`; focus inside the
+ *   details when the entry goes moves to `You no longer have this card.`, never to <body>.
  * - The refetch answering `unauthenticated`: the dialog closes, `/login`, nothing modal.
  * - The refetch failing: the held data stays with the stale note; the dialog keeps its details.
  *
@@ -46,6 +49,7 @@ import {
  *   card retries and shows `No image` when it fails there too. One that fails only in the dialog
  *   cannot be staged here (the browser reuses the decoded tile image), so the unit hunt
  *   (CollectionPage.hunt.test.tsx) fires the error on the dialog's image itself.
+ * - Regression: a refetch that brings a new image address after a failed one shows the new image.
  *
  * Toolbar at 320 px (§5.2, §7 "Keyboard path", "Touch targets")
  * - No sideways scroll with every filter on and the longest series chosen; every control fits
@@ -354,6 +358,70 @@ test.describe("a refetch that lands while the dialog is open", () => {
     await expect(tiles(page).nth(1)).toBeFocused();
     await expect(tiles(page)).toHaveCount(5);
   });
+
+  test("regression: a refetch that empties the collection keeps the dialog, over the empty state; Close focuses `No cards yet`", async ({
+    page,
+    api,
+  }) => {
+    // Found by the hunt: the empty state replaced the overview and unmounted the open dialog, with
+    // focus on <body>. §4.5 "entry gone after a refetch", §3.7 step 3 (manager decision, 2026-10-30).
+    const gate = heldRefetch(api, ok(makeCollection([])));
+    await viaPacks(page);
+    await tiles(page).nth(1).click();
+    await expect(page.getByRole("dialog", { name: "Spike Spiegel" })).toBeFocused();
+    gate.release();
+    await expect(page.getByRole("heading", { name: "No cards yet" })).toBeAttached();
+    await expect(page.getByRole("dialog", { name: "You no longer have this card." })).toBeVisible();
+    await expect(openDialog(page)).toBeFocused();
+    await openDialog(page).getByRole("button", { name: "Close" }).last().click();
+    await expectNothingModal(page);
+    await expect(page.getByRole("heading", { level: 2, name: "No cards yet" })).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(page.getByRole("link", { name: "Open a pack" })).toBeFocused();
+    expectAddressClean(page);
+  });
+
+  test("regression: focus inside the details when a refetch removes the entry moves to the gone message, never <body>", async ({
+    page,
+    api,
+  }) => {
+    // Found by the hunt: Spike Spiegel in eight series, so the dialog shows `Also in` with
+    // `and 2 more`; with focus there the refetch lands without Spike, the details unmount with the
+    // focused button, and focus fell to <body>. §3.7 step 4 (manager decision, 2026-10-30).
+    const many = makeOverviewCollection();
+    const extra = [200, 201, 202, 203, 204, 205, 206];
+    many.franchises.push(...extra.map((id) => makeFranchise(id, { title: `Extra ${id}` })));
+    many.entries.find((entry) => entry.character.id === 1)!.character.franchiseIds = [100, ...extra];
+    const fewer = structuredClone(many);
+    fewer.entries = fewer.entries.filter((entry) => entry.character.id !== 1);
+    const gate = deferred();
+    api.on("GET /api/collection", ok(many), async () => {
+      await gate.promise;
+      return ok(fewer);
+    });
+    await viaPacks(page);
+    await tiles(page).nth(1).click();
+    const more = page
+      .getByRole("dialog", { name: "Spike Spiegel" })
+      .getByRole("button", { name: "and 2 more" });
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Tab");
+    await expect(more).toBeFocused();
+    gate.release();
+    await expect(openDialog(page).getByText("You no longer have this card.")).toBeVisible();
+    const focus = await page.evaluate(() => ({
+      tag: document.activeElement?.tagName,
+      inside: document.querySelector("dialog[open]")?.contains(document.activeElement) ?? false,
+    }));
+    expect(focus, "focus stays inside the open dialog").toEqual({
+      tag: expect.not.stringMatching(/^BODY$/),
+      inside: true,
+    });
+    await expect(openDialog(page).getByText("You no longer have this card.")).toBeFocused();
+    // The next Tab goes on to the Close under the message.
+    await page.keyboard.press("Tab");
+    await expect(openDialog(page).getByRole("button", { name: "Close" }).last()).toBeFocused();
+  });
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -385,6 +453,38 @@ test.describe("card art that fails to load", () => {
     await expect(dialog.getByRole("article")).toHaveCSS("width", "240px");
     await page.keyboard.press("Escape");
     await expect(spike).toBeFocused();
+  });
+
+  test("regression: art that failed shows the new image when a refetch brings a new address", async ({
+    page,
+    api,
+  }) => {
+    // Found by the hunt: the card kept its failed art state across a new `imageUrl` and never
+    // tried the new address. §5.6 rule 7 (manager decision, 2026-10-30): a new address resets
+    // the art; the address that failed is not retried.
+    const OLD = "https://s4.anilist.co/file/anilistcdn/character/large/old-spike.png";
+    const NEW = "https://s4.anilist.co/file/anilistcdn/character/large/new-spike.png";
+    await page.route(OLD, (route) => route.fulfill({ status: 404, body: "" }));
+    await page.route(NEW, (route) => route.fulfill({ body: PNG, contentType: "image/png" }));
+    const before = makeOverviewCollection();
+    before.entries.find((entry) => entry.character.id === 1)!.character.imageUrl = OLD;
+    const after = makeOverviewCollection();
+    const spikeAfter = after.entries.find((entry) => entry.character.id === 1)!;
+    spikeAfter.character.imageUrl = NEW;
+    // A visible change too, so the test knows the refetch landed before it looks at the art.
+    spikeAfter.count = 4;
+    const gate = deferred();
+    api.on("GET /api/collection", ok(before), async () => {
+      await gate.promise;
+      return ok(after);
+    });
+    await viaPacks(page);
+    const spike = tiles(page).nth(1);
+    await expect(spike.getByText("No image", { exact: true })).toBeVisible();
+    gate.release();
+    await expect(spike).toHaveAccessibleName(/, 4 copies$/);
+    await expect(spike.locator("img")).toHaveAttribute("src", NEW);
+    await expect(spike.getByText("No image")).toHaveCount(0);
   });
 });
 
@@ -480,6 +580,24 @@ test("the toolbar at 320 px: no sideways scroll with every filter on, §5.2's ro
     if (height < 40) short.push(`${name} ${height.toFixed(1)} px`);
   }
   expect(short, "controls under 40 px tall at 320 px").toEqual([]);
+});
+
+test("regression: the rarity chips are at least 40 px tall on a phone, on two lines", async ({ page }) => {
+  // Found by the hunt: 38.5 px, since the 11 px text inherited a 1.5 line height (16.5 px) inside
+  // py-2.5 and the borders. §7 "Touch targets"; §5.2 two lines at 320 px (manager decision,
+  // 2026-10-30).
+  await page.setViewportSize({ width: 320, height: 800 });
+  await page.goto("/collection");
+  const chips = rarityGroup(page).getByRole("button");
+  await expect(chips).toHaveCount(7);
+  const heights = await chips.evaluateAll((buttons) =>
+    buttons.map((b) => `${b.textContent} ${b.getBoundingClientRect().height}`),
+  );
+  expect(heights.filter((entry) => Number(entry.split(" ").at(-1)) < 40)).toEqual([]);
+  const lines = await chips.evaluateAll(
+    (buttons) => new Set(buttons.map((b) => Math.round(b.getBoundingClientRect().top))).size,
+  );
+  expect(lines).toBe(2);
 });
 
 // ---------------------------------------------------------------------------------------------
