@@ -610,9 +610,9 @@ test.describe("the balance display", () => {
     await theme(page).getByRole("button", { name: "Buy…" }).click();
     await confirmation(page).getByRole("button", { name: "Buy for 400 Karma" }).click();
     await expect(header(page).getByText("840 Karma")).toBeVisible();
+    const late = page.waitForResponse("**/api/wallet");
     gate.release();
-    await expect.poll(() => api.count("GET /api/wallet")).toBeGreaterThanOrEqual(2);
-    await page.waitForTimeout(200);
+    await late;
     await expect(header(page).getByText("840 Karma")).toBeVisible();
     expect(await balances(page)).toEqual(["1,240 Karma", "840 Karma"]);
   });

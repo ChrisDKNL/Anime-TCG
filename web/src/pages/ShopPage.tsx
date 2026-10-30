@@ -11,6 +11,7 @@ import { useDelayedFlag } from "../hooks/useDelayedFlag";
 import { useGame } from "../hooks/useGame";
 import { useRateLimitWait } from "../hooks/useKeyedAction";
 import { useShellContext } from "../hooks/useShell";
+import { isolate } from "../lib/bidi";
 import { seriesNames } from "../lib/collectionSeries";
 import { shopCopy } from "../lib/economyCopy";
 import { PAGE_HEADING_ID } from "../lib/pageFocus";
@@ -36,7 +37,7 @@ function toReveal({ receipt, theme }: Bought): RevealPack {
   return {
     id: receipt.pack.openingId,
     heading: <LoginText text={{ template: shopCopy.revealHeading, login: theme.title }} />,
-    label: shopCopy.revealHeading(theme.title),
+    label: shopCopy.revealHeading(isolate(theme.title)),
     summaryLead: "",
     cards: receipt.pack.cards,
     franchises: receipt.pack.franchises,
