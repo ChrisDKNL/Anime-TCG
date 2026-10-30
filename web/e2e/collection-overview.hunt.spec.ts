@@ -1064,7 +1064,7 @@ test.describe("hostile names and series titles", () => {
     expect(raised).toEqual([]);
   });
 
-  test("zero-width characters stay in the name: typing the visible letters does not find it (§3.3 has no rule for them)", async ({
+  test("zero-width characters stay in the name: typing the visible letters does not find it (§3.3 step 1, manager decision 2026-10-30)", async ({
     page,
   }) => {
     await page.goto("/collection");

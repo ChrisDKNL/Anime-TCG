@@ -75,7 +75,7 @@ All four run in the browser over the entries the server returned. They are displ
 
 **Search match rule** (`economy.md` §8.4 applies the same normalisation on the server for the market's search)
 
-1. The query and every searched field are normalised the same way, in this order: Unicode NFKC (folds full-width letters), lower-case, NFD, remove U+0300–U+036F (Latin accents), NFC, trim, collapse whitespace runs to one space. Kana voiced marks (U+3099, U+309A) are outside the removed range, so `か` does not match `が`.
+1. The query and every searched field are normalised the same way, in this order: Unicode NFKC (folds full-width letters), lower-case, NFD, remove U+0300–U+036F (Latin accents), NFC, trim, collapse whitespace runs to one space. Kana voiced marks (U+3099, U+309A) are outside the removed range, so `か` does not match `が`. Zero-width characters are kept too (manager decision, 2026-10-30): no step removes U+200B, U+200C, U+200D or U+2060, so a name that holds one matches only a query that holds it, as pasted from AniList; typing the visible letters does not find it. U+FEFF counts as whitespace in the trim and the collapse.
 2. The normalised query is split on spaces into terms. An empty query is no search.
 3. An entry matches when **every term** is a substring of **at least one** of: the character name, the character's native name, and the title and the native title of **each** of the character's franchises (`franchiseIds`, resolved through the response's `franchises`).
 4. Punctuation counts: it is kept, so `d.luffy` does not match Monkey D. Luffy (`monkey d. luffy` has no `d.luffy` in it), while `d. luffy` and `d luffy` do, each term on its own (step 3: `d` is in `d.`). The field accepts at most 100 characters.

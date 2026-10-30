@@ -22,6 +22,16 @@ describe("normalise (collection-overview.md §3.3 step 1)", () => {
   it("keeps punctuation", () => {
     expect(normalise("Monkey D. Luffy")).toBe("monkey d. luffy");
   });
+
+  it("keeps the zero-width characters, so a name with one matches only a query with it (manager decision, 2026-10-30)", () => {
+    for (const mark of ["​", "‌", "‍", "⁠"]) {
+      expect(normalise(`Zero${mark}Width`)).toBe(`zero${mark}width`);
+      expect(matchesTerms([normalise(`Zero${mark}Width`)], searchTerms("zerowidth"))).toBe(false);
+      expect(matchesTerms([normalise(`Zero${mark}Width`)], searchTerms(`zero${mark}width`))).toBe(true);
+    }
+    // U+FEFF is whitespace to the trim and the collapse.
+    expect(normalise("Zero﻿Width﻿")).toBe("zero width");
+  });
 });
 
 describe("searchTerms (§3.3 step 2)", () => {
