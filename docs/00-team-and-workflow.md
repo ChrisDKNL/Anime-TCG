@@ -70,3 +70,7 @@ The owner runs a local Claude Code session on their dev machine and a cloud sess
 - Never run `prettier --write` (or any formatter) on a path a running subagent is editing; format only the files you are committing. A formatter rewriting a file mid-edit silently breaks the agent's edits (happened 2026-10-28).
 - A subagent's report is a claim. The manager spot-checks claims that matter (a "tests pass" is re-run; a "stopped the server" is checked with `lsof`).
 - Status lives in `docs/02-roadmap.md`, decisions in `docs/adr/`. Chat history is not memory.
+- **Merge-friendly PRs** (owner decision, 2026-10-30):
+  - **Build on `main`, never on another open PR.** A feature that needs another one starts after that one merges. With auto-merge on, the wait is short, and squash merges then never leave a branch in conflict with its own history.
+  - **Shared tables stay out of feature PRs.** A feature PR writes its security entry as its own file in `docs/security-log/` and does not edit the controls, threat model or open items of `docs/05-security.md`, or the status columns of `docs/02-roadmap.md`.
+  - **One register-sync PR after merges.** The manager applies the merged PRs' register edits and roadmap statuses in one small docs PR (`docs/register-sync-<date>`).

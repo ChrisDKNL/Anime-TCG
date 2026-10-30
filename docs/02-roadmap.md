@@ -1,6 +1,6 @@
 # Roadmap
 
-Status of every feature. The manager updates this; it is the single source of truth for "where are we". Brainstorm notes go at the bottom until they become a row.
+Status of every feature. The manager updates this; it is the single source of truth for "where are we". Since 2026-10-30 feature PRs do not edit the status columns: the manager updates them after each merge in the register-sync docs PR (`docs/security-log/README.md`), so feature PRs never conflict on this table. Brainstorm notes go at the bottom until they become a row.
 
 Statuses: `idea` → `specced` → `building` → `testing` → `qc` → `security` → `pr` → `shipped`.
 
