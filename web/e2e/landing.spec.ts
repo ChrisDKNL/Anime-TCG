@@ -131,6 +131,26 @@ test("the demo card is the tier frame alone: no glow, glint or drift, even for a
   expect(await mythic.evaluate((card) => getComputedStyle(card).boxShadow)).toBe("none");
 });
 
+test("a double click and a held Enter each spend one demo pack (manager decision, 2026-10-30)", async ({
+  page,
+  api,
+}) => {
+  api.on("GET /api/session", signedOut);
+  await page.goto("/");
+  await demoButton(page).dblclick();
+  await expect(demoList(page).getByRole("listitem")).toHaveCount(5);
+  await expect(demoButton(page)).not.toHaveAttribute("aria-disabled");
+  expect(api.count("POST /api/demo/open")).toBe(1);
+
+  await demoButton(page).focus();
+  await page.keyboard.down("Enter");
+  for (let i = 0; i < 4; i += 1) await page.keyboard.down("Enter");
+  await page.keyboard.up("Enter");
+  await expect(demoList(page).getByRole("article").first()).toHaveAccessibleName(/Character 5020\b/);
+  await expect(demoButton(page)).not.toHaveAttribute("aria-disabled");
+  expect(api.count("POST /api/demo/open")).toBe(2);
+});
+
 test("rate limited with Retry-After: the button counts down, the wait line once, then it is back", async ({
   page,
   api,

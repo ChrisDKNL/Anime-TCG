@@ -257,6 +257,25 @@ describe("opening demo packs", () => {
     expect(main().queryByText(/\b(remaining|last one|used up|tries)\b/i)).not.toBeInTheDocument();
   });
 
+  it("a double click spends one demo pack, even when the first answer lands before the second click", async () => {
+    const { fetchMock } = renderLanding();
+    const user = userEvent.setup();
+    await user.dblClick(await demoButton());
+    await demoList();
+    expect(callsTo(fetchMock, DEMO_OPEN)).toHaveLength(1);
+    await user.click(await demoButton());
+    await waitFor(() => expect(callsTo(fetchMock, DEMO_OPEN)).toHaveLength(2));
+  });
+
+  it("a held Enter spends one demo pack", async () => {
+    const { fetchMock } = renderLanding();
+    const button = await demoButton();
+    button.focus();
+    await userEvent.setup().keyboard("{Enter>5/}");
+    await demoList();
+    expect(callsTo(fetchMock, DEMO_OPEN)).toHaveLength(1);
+  });
+
   it("a 503: the unavailable line in the button's place, the cards already shown stay", async () => {
     renderLanding({ [DEMO_OPEN]: sequence(ok(demoPack(2000)), envelope(503, "pool_unavailable")) });
     const user = userEvent.setup();

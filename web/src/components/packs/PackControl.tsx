@@ -1,8 +1,9 @@
 import type { PublishedOdds } from "@anime-tcg/shared/api";
-import { useId, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
+import { useId, useRef, useState } from "react";
 import type { ControlShown, ControlView, CountdownView } from "../../lib/packControl";
 import { packControlCopy } from "../../lib/packsCopy";
 import { BUTTON } from "../account/styles";
+import { ignoreRepeat, openOnce } from "./activation";
 import { OddsDialog } from "./OddsDialog";
 import { ERROR_LINE, SECONDARY_LINE, TEXT_BUTTON_SM } from "./styles";
 
@@ -117,21 +118,6 @@ function Control({
       )}
     </div>
   );
-}
-
-/**
- * The single-flight guard covers only the time an opening is in flight; a
- * local server can answer before a double click's second click or the next
- * auto-repeat of a held Enter, so those never count as a new activation
- * (§3.3 step 2). A click from the keyboard has `detail` 0.
- */
-function openOnce(event: MouseEvent, onOpen: () => void) {
-  if (event.detail <= 1) onOpen();
-}
-
-/** A held Enter repeats keydown, and each repeat would click the button again; a held Space clicks once, on keyup. */
-function ignoreRepeat(event: KeyboardEvent) {
-  if (event.repeat && event.key === "Enter") event.preventDefault();
 }
 
 /** The line under the button; at most one shows (§4.1). */

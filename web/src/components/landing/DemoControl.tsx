@@ -1,6 +1,7 @@
 import type { DemoControl as Control } from "../../lib/demo";
 import { demoCopy } from "../../lib/navigationCopy";
 import { BUTTON } from "../account/styles";
+import { ignoreRepeat, openOnce } from "../packs/activation";
 import { ERROR_LINE, SECONDARY_LINE } from "../packs/styles";
 import { JoinOffer } from "./JoinOffer";
 
@@ -14,7 +15,9 @@ interface Props {
  * and 1.7, §4.5): `Open a demo pack` with the disclosure under it, or the
  * unavailable line in the button's place, or after the last demo pack of the
  * visit the Join offer. The button is never `disabled` while it shows: it is
- * `aria-disabled`, so focus stays on it while a pack opens or a wait runs.
+ * `aria-disabled`, so focus stays on it while a pack opens or a wait runs. It
+ * has the pack button's guards: a double click or a held Enter opens one demo
+ * pack, never two (manager decision, 2026-10-30).
  */
 export function DemoControl({ control, onOpen }: Props) {
   if (control.kind === "done") {
@@ -32,7 +35,8 @@ export function DemoControl({ control, onOpen }: Props) {
         <button
           type="button"
           aria-disabled={control.enabled ? undefined : "true"}
-          onClick={control.enabled ? onOpen : undefined}
+          onClick={control.enabled ? (event) => openOnce(event, onOpen) : undefined}
+          onKeyDown={ignoreRepeat}
           className={`${BUTTON.primary} w-full tabular-nums sm:w-auto`}
         >
           {label(control.label)}
