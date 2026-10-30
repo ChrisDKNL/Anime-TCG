@@ -525,6 +525,33 @@ describe("/packs: the countdown (§3.2)", () => {
     expect(screen.queryByText("Couldn't check for the next pack.")).not.toBeInTheDocument();
   });
 
+  it("a failed check belongs to the answer it failed after: an opening's 201 brings its countdown back", async () => {
+    vi.useFakeTimers({ ...FAKE, toFake: [...FAKE.toFake] });
+    renderApp(
+      {
+        [PACKS]: sequence(packs({ available: 1, nextPackInSeconds: 1 }), { status: 502, raw: "" }),
+        [OPEN]: {
+          status: 201,
+          body: makePackOpened({ allowance: { available: 1, nextPackInSeconds: 600 } }),
+        },
+      },
+      account,
+      "/packs",
+    );
+    expect(await screen.findByText("Next pack in 0:01")).toBeInTheDocument();
+    act(() => {
+      vi.advanceTimersByTime(1_000);
+    });
+    expect(await screen.findByText("Couldn't check for the next pack.")).toBeInTheDocument();
+
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime.bind(vi) });
+    await user.click(main().getByRole("button", { name: "Open pack" }));
+    await screen.findByRole("list", { name: "Your pack" });
+    expect(screen.getByText("Next pack in 10:00")).toBeInTheDocument();
+    expect(screen.queryByText("Couldn't check for the next pack.")).not.toBeInTheDocument();
+    expect(main().queryByRole("button", { name: "Check again" })).not.toBeInTheDocument();
+  });
+
   it("no countdown runs and nothing is asked while another page shows; returning asks once", async () => {
     vi.useFakeTimers({ ...FAKE, toFake: [...FAKE.toFake] });
     const { fetchMock } = renderApp(
