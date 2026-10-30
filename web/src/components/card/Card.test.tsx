@@ -176,4 +176,45 @@ describe("Card (card-and-rarity.md)", () => {
     expect(card.querySelectorAll("script")).toHaveLength(0);
     expect(card.querySelectorAll("img")).toHaveLength(1);
   });
+
+  it("inside a control it is part of it: no article, no name of its own, phrasing elements only", () => {
+    const { container } = render(
+      <button type="button" aria-label="The tile's own name">
+        <Card
+          character={makeCharacter(3, { name: "Frieren" })}
+          rarity="mythic"
+          series="Sousou no Frieren"
+          poolSize={2_983}
+          effects="hover"
+          standalone={false}
+        />
+      </button>,
+    );
+    expect(screen.queryByRole("article")).not.toBeInTheDocument();
+    expect(screen.getByRole("button")).toHaveAccessibleName("The tile's own name");
+    const frame = container.querySelector(".card-frame-mythic");
+    expect(frame?.tagName).toBe("SPAN");
+    expect(frame).not.toHaveAttribute("aria-label");
+    expect(frame).toHaveClass("shadow-glow-mythic", "card-pearl-hover");
+    expect(container.querySelectorAll("button div, button p, button article")).toHaveLength(0);
+  });
+
+  it("at dialog size: the larger frame, face and type of §3.2", () => {
+    render(
+      <Card
+        character={makeCharacter(4, { name: "Frieren", rank: 12 })}
+        rarity="epic"
+        series="Sousou no Frieren"
+        poolSize={2_983}
+        effects="full"
+        size="dialog"
+      />,
+    );
+    const card = screen.getByRole("article");
+    expect(card).toHaveClass("rounded-[14px]", "p-[6px]", "card-glint");
+    expect(within(card).getByText("Frieren")).toHaveClass("text-[17px]");
+    expect(within(card).getByText("Sousou no Frieren")).toHaveClass("text-[15px]");
+    expect(within(card).getByText("#0012 / 2983").parentElement).toHaveClass("text-[13px]");
+    expect(within(card).getByText("✦✦✦✦").parentElement).toHaveClass("text-[14px]");
+  });
 });
