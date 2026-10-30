@@ -35,6 +35,8 @@ export const common = {
   tryAgainIn: (seconds: number) => `Try again in ${seconds} s`,
   breather:
     "Five misses in a row. Take ten seconds, check the spelling of your login and whether caps lock is on, then try again.",
+  /** The breather's sibling for the route rate limiter (accounts.md §4.4, manager decision 2026-10-30). */
+  rateLimited: "That was a lot of tries in a short time. Give it a moment, then try again.",
   waitOver: "You can try again now.",
 } as const;
 

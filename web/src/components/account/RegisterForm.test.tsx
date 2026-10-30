@@ -1,8 +1,8 @@
-import { screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SESSION_QUERY_KEY } from "../../hooks/useAccountSession";
-import { envelope, makeAccount, mockFetch, noContent, sentBody } from "../../test/api";
+import { envelope, makeAccount, mockFetch, noContent, rateLimited, sentBody } from "../../test/api";
 import { renderWithProviders } from "../../test/render";
 import { RegisterForm } from "./RegisterForm";
 import { fill } from "../../test/user";
@@ -27,6 +27,19 @@ async function toStep2(user: ReturnType<typeof userEvent.setup>) {
 }
 
 const UNREACHABLE_FORM = "Couldn't reach the game server. Nothing was changed. Try again.";
+const RATE_LIMITED = "That was a lot of tries in a short time. Give it a moment, then try again.";
+
+/** The wait of accounts.md §4.4 on `button`, with the rate limiter's status line and no unreachable banner. */
+function expectRateLimitedWait(button: HTMLElement) {
+  expect(button).toHaveAttribute("aria-disabled", "true");
+  expect(button).toHaveClass("tabular-nums");
+  expect(screen.getByText(RATE_LIMITED)).toHaveAttribute("role", "status");
+  expect(screen.queryByText(UNREACHABLE_FORM)).not.toBeInTheDocument();
+}
+
+function liveRegion() {
+  return screen.getAllByRole("status").find((el) => el.hasAttribute("aria-live"))!;
+}
 
 async function fillStep2AndSubmit(user: ReturnType<typeof userEvent.setup>) {
   await fill(user, screen.getByLabelText("Login"), "Chris");
@@ -263,5 +276,68 @@ describe("RegisterForm step 2", () => {
     expect(password).toHaveValue("secret-ish");
     expect(screen.getByRole("button", { name: "Hide password" })).toHaveAttribute("aria-pressed", "true");
     expect(screen.getByRole("button", { name: "Show password confirmation" })).toBeInTheDocument();
+  });
+});
+
+describe("RegisterForm rate limited (manager decision, 2026-10-30)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it("step 1: Retry-After's seconds on Continue, the code kept, then Continue again", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
+    const { user, fetchMock } = setup({ "POST /api/accounts/check-invite": rateLimited("3") });
+    await fill(user, screen.getByLabelText("Invite code"), "code");
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    expectRateLimitedWait(await screen.findByRole("button", { name: "Try again in 3 s" }));
+    expect(screen.getByLabelText("Invite code")).toHaveValue("code");
+    expect(screen.getByLabelText("Invite code")).not.toBeDisabled();
+    await user.type(screen.getByLabelText("Invite code"), "{Enter}");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    act(() => {
+      vi.advanceTimersByTime(3000);
+    });
+    expect(screen.getByRole("button", { name: "Continue" })).not.toHaveAttribute("aria-disabled");
+    expect(liveRegion()).toHaveTextContent("You can try again now.");
+  });
+
+  it("step 1: without Retry-After the wait is 60 s", async () => {
+    const { user } = setup({ "POST /api/accounts/check-invite": rateLimited() });
+    await fill(user, screen.getByLabelText("Invite code"), "code");
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    expectRateLimitedWait(await screen.findByRole("button", { name: "Try again in 60 s" }));
+  });
+
+  it("step 2: Retry-After's seconds on Register, every field kept", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
+    const { user } = setup({
+      "POST /api/accounts/check-invite": noContent,
+      "POST /api/accounts/register": rateLimited("2"),
+    });
+    await toStep2(user);
+    await fillStep2AndSubmit(user);
+    expectRateLimitedWait(await screen.findByRole("button", { name: "Try again in 2 s" }));
+    expect(screen.getByLabelText("Login")).toHaveValue("Chris");
+    expect(screen.getByLabelText("Password")).toHaveValue("a strong one");
+    expect(screen.getByLabelText("Confirm password")).toHaveValue("a strong one");
+    act(() => {
+      vi.advanceTimersByTime(2000);
+    });
+    expect(screen.getByRole("button", { name: "Register" })).not.toHaveAttribute("aria-disabled");
+    expect(liveRegion()).toHaveTextContent("You can try again now.");
+  });
+
+  it("step 2: without Retry-After the wait is 60 s, and it is not the invite check's wait", async () => {
+    const { user } = setup({
+      "POST /api/accounts/check-invite": noContent,
+      "POST /api/accounts/register": rateLimited(),
+    });
+    await toStep2(user);
+    await fillStep2AndSubmit(user);
+    expectRateLimitedWait(await screen.findByRole("button", { name: "Try again in 60 s" }));
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.getByRole("button", { name: "Continue" })).not.toHaveAttribute("aria-disabled");
+    expect(screen.queryByText(RATE_LIMITED)).not.toBeInTheDocument();
   });
 });

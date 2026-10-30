@@ -26,6 +26,8 @@ export function RegisterForm({ onRegistered, crossLink }: Props) {
   const form = useRegisterForm({ onRegistered });
 
   const busy = form.checking || form.submitting;
+  const waiting = form.waitRemaining !== null;
+  const countdown = form.waitRemaining === null ? null : common.tryAgainIn(form.waitRemaining);
 
   return (
     <div className="flex flex-col gap-4">
@@ -62,9 +64,17 @@ export function RegisterForm({ onRegistered, crossLink }: Props) {
             inputMode="text"
             inputClassName="font-mono tracking-wide"
           />
-          <SubmitButton blocked={busy} className={`${BUTTON.primary} w-full sm:w-auto sm:self-start`}>
-            {form.checking ? registerCopy.checking : registerCopy.continue}
+          <SubmitButton
+            blocked={busy || waiting}
+            className={`${BUTTON.primary} w-full sm:w-auto sm:self-start ${waiting ? "tabular-nums" : ""}`}
+          >
+            {countdown ?? (form.checking ? registerCopy.checking : registerCopy.continue)}
           </SubmitButton>
+          {form.waitStatus !== null && (
+            <p role="status" className={HINT_TEXT}>
+              {form.waitStatus}
+            </p>
+          )}
         </form>
       ) : (
         <form noValidate onSubmit={(event) => void form.submitStep2(event)} className="flex flex-col gap-4">
@@ -107,8 +117,11 @@ export function RegisterForm({ onRegistered, crossLink }: Props) {
             autoComplete="new-password"
           />
           <div className="flex flex-col gap-2 sm:flex-row">
-            <SubmitButton blocked={busy} className={`${BUTTON.primary} w-full sm:w-auto`}>
-              {form.submitting ? registerCopy.submitting : registerCopy.submit}
+            <SubmitButton
+              blocked={busy || waiting}
+              className={`${BUTTON.primary} w-full sm:w-auto ${waiting ? "tabular-nums" : ""}`}
+            >
+              {countdown ?? (form.submitting ? registerCopy.submitting : registerCopy.submit)}
             </SubmitButton>
             <button
               type="button"
@@ -119,6 +132,11 @@ export function RegisterForm({ onRegistered, crossLink }: Props) {
               {common.back}
             </button>
           </div>
+          {form.waitStatus !== null && (
+            <p role="status" className={HINT_TEXT}>
+              {form.waitStatus}
+            </p>
+          )}
         </form>
       )}
       {crossLink}

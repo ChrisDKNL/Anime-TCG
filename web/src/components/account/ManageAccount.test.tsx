@@ -2,7 +2,7 @@ import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SESSION_QUERY_KEY } from "../../hooks/useAccountSession";
-import { envelope, makeAccount, mockFetch, noContent, sentBody } from "../../test/api";
+import { envelope, makeAccount, mockFetch, noContent, rateLimited, sentBody } from "../../test/api";
 import { renderWithProviders } from "../../test/render";
 import { ManageAccount } from "./ManageAccount";
 import { fill } from "../../test/user";
@@ -24,6 +24,15 @@ function liveRegion() {
 }
 
 const UNREACHABLE_FORM = "Couldn't reach the game server. Nothing was changed. Try again.";
+const RATE_LIMITED = "That was a lot of tries in a short time. Give it a moment, then try again.";
+
+/** The wait of accounts.md §4.4 on `button`, with the rate limiter's status line and no unreachable banner. */
+function expectRateLimitedWait(button: HTMLElement) {
+  expect(button).toHaveAttribute("aria-disabled", "true");
+  expect(button).toHaveClass("tabular-nums");
+  expect(screen.getByText(RATE_LIMITED)).toHaveAttribute("role", "status");
+  expect(screen.queryByText(UNREACHABLE_FORM)).not.toBeInTheDocument();
+}
 
 async function fillPasswords(user: ReturnType<typeof userEvent.setup>) {
   await fill(user, screen.getByLabelText("Current password"), "old one");
@@ -254,7 +263,7 @@ describe("ManageAccount", () => {
     });
 
     it("any other server answer shows the in-form banner", async () => {
-      const { user } = setup({ "POST /api/account/change-password": envelope(429, "rate_limited") });
+      const { user } = setup({ "POST /api/account/change-password": envelope(500, "internal") });
       await fillPasswords(user);
       expect(await screen.findByRole("alert")).toHaveTextContent(UNREACHABLE_FORM);
     });
@@ -420,6 +429,72 @@ describe("ManageAccount", () => {
       const { user } = setup({ "POST /api/account/delete": envelope(500, "internal") });
       await submitDelete(user);
       expect(await screen.findByRole("alert")).toHaveTextContent(UNREACHABLE_FORM);
+    });
+  });
+
+  describe("rate limited (manager decision, 2026-10-30)", () => {
+    it("rename: Retry-After's seconds on Save, the login kept, then Save again", async () => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
+      const { user, fetchMock } = setup({ "PATCH /api/account/login": rateLimited("4") });
+      await rename(user);
+      expectRateLimitedWait(await screen.findByRole("button", { name: "Try again in 4 s" }));
+      expect(screen.getByLabelText("New login")).toHaveValue("Chris2");
+      await user.type(screen.getByLabelText("New login"), "{Enter}");
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      act(() => {
+        vi.advanceTimersByTime(4000);
+      });
+      expect(screen.getByRole("button", { name: "Save" })).not.toHaveAttribute("aria-disabled");
+      expect(liveRegion()).toHaveTextContent("You can try again now.");
+    });
+
+    it("rename: without Retry-After the wait is 60 s", async () => {
+      const { user } = setup({ "PATCH /api/account/login": rateLimited() });
+      await rename(user);
+      expectRateLimitedWait(await screen.findByRole("button", { name: "Try again in 60 s" }));
+    });
+
+    it("change password: Retry-After's seconds on the button, every field kept", async () => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
+      const { user } = setup({ "POST /api/account/change-password": rateLimited("3") });
+      await fillPasswords(user);
+      expectRateLimitedWait(await screen.findByRole("button", { name: "Try again in 3 s" }));
+      expect(screen.getByLabelText("Current password")).toHaveValue("old one");
+      expect(screen.getByLabelText("New password")).toHaveValue("a new long one");
+      expect(screen.getByLabelText("Confirm new password")).toHaveValue("a new long one");
+      act(() => {
+        vi.advanceTimersByTime(3000);
+      });
+      expect(screen.getByRole("button", { name: "Change password" })).not.toHaveAttribute("aria-disabled");
+      expect(liveRegion()).toHaveTextContent("You can try again now.");
+    });
+
+    it("change password: without Retry-After the wait is 60 s", async () => {
+      const { user } = setup({ "POST /api/account/change-password": rateLimited() });
+      await fillPasswords(user);
+      expectRateLimitedWait(await screen.findByRole("button", { name: "Try again in 60 s" }));
+    });
+
+    it("delete: Retry-After's seconds on the delete button, the password kept", async () => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
+      const { user, fetchMock } = setup({ "POST /api/account/delete": rateLimited("2") });
+      await submitDelete(user);
+      const button = await screen.findByRole("button", { name: "Try again in 2 s" });
+      expectRateLimitedWait(button);
+      expect(within(screen.getByRole("dialog")).getByLabelText("Password")).toHaveValue("a password");
+      await user.click(button);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      act(() => {
+        vi.advanceTimersByTime(2000);
+      });
+      expect(screen.getByRole("button", { name: "Delete Chris" })).not.toHaveAttribute("aria-disabled");
+      expect(liveRegion()).toHaveTextContent("You can try again now.");
+    });
+
+    it("delete: without Retry-After the wait is 60 s", async () => {
+      const { user } = setup({ "POST /api/account/delete": rateLimited() });
+      await submitDelete(user);
+      expectRateLimitedWait(await screen.findByRole("button", { name: "Try again in 60 s" }));
     });
   });
 });

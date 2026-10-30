@@ -81,6 +81,13 @@ describe("copy", () => {
     expect(copy.header.manage).toBe("Manage account");
   });
 
+  it("gives the rate limiter's wait its own status line: no miss count and no fixed length, the countdown says how long", () => {
+    expect(copy.common.rateLimited).toBe(
+      "That was a lot of tries in a short time. Give it a moment, then try again.",
+    );
+    expect(copy.common.rateLimited).not.toMatch(/\d|five|ten|second|miss/i);
+  });
+
   it("isolates the login with FSI/PDI in the plain strings that cannot hold <bdi>", () => {
     const rtl = "\u202Egnp.exe";
     expect(copy.header.accountMenuLabel(rtl)).toBe("Account menu. Signed in as \u2068\u202Egnp.exe\u2069");

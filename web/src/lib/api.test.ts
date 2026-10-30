@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { envelope, makeAccount, mockFetch, noContent, sentBody } from "../test/api";
+import { envelope, makeAccount, mockFetch, noContent, rateLimited, sentBody } from "../test/api";
 import {
   ApiError,
   changePassword,
@@ -90,6 +90,41 @@ describe("api client", () => {
     mockFetch({ "POST /api/account/delete": envelope(429, "too_many_failures", 7) });
     const err = await deleteAccount({ password: "x" }).catch((e: unknown) => e);
     expect(err).toMatchObject({ status: 429, code: "too_many_failures", retryAfterSeconds: 7 });
+  });
+
+  it("takes a rate_limited answer's seconds from Retry-After", async () => {
+    mockFetch({ "POST /api/session/login": rateLimited("42") });
+    const err = await login({ login: "x", password: "y" }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err).toMatchObject({ status: 429, code: "rate_limited", retryAfterSeconds: 42 });
+  });
+
+  it("a rate_limited answer without Retry-After carries no seconds", async () => {
+    mockFetch({ "POST /api/session/login": rateLimited() });
+    const err = await login({ login: "x", password: "y" }).catch((e: unknown) => e);
+    expect(err).toMatchObject({ status: 429, code: "rate_limited", retryAfterSeconds: undefined });
+  });
+
+  it("reads Retry-After only as whole positive seconds", async () => {
+    for (const header of ["0", "-5", "1.5", "soon", "Fri, 30 Oct 2026 12:00:00 GMT", ""]) {
+      mockFetch({ "POST /api/account/change-password": rateLimited(header) });
+      const err = await changePassword({ currentPassword: "a", newPassword: "b" }).catch((e: unknown) => e);
+      expect(err, header).toMatchObject({ code: "rate_limited", retryAfterSeconds: undefined });
+    }
+    mockFetch({ "POST /api/account/change-password": rateLimited(" 7 ") });
+    const err = await changePassword({ currentPassword: "a", newPassword: "b" }).catch((e: unknown) => e);
+    expect(err).toMatchObject({ retryAfterSeconds: 7 });
+  });
+
+  it("the envelope's own seconds win over the header", async () => {
+    mockFetch({
+      "POST /api/account/delete": {
+        ...envelope(429, "too_many_failures", 7),
+        headers: { "retry-after": "30" },
+      },
+    });
+    const err = await deleteAccount({ password: "x" }).catch((e: unknown) => e);
+    expect(err).toMatchObject({ code: "too_many_failures", retryAfterSeconds: 7 });
   });
 
   it("a non-JSON failure answer is a NetworkError, not an ApiError", async () => {
