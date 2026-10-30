@@ -1,6 +1,6 @@
 /**
- * Every string of the packs page, the reveal, the odds dialog, the card and the
- * interim collection, verbatim from docs/design/packs-page.md §8 and
+ * Every string of the packs page, the reveal, the odds dialog and the card,
+ * verbatim from docs/design/packs-page.md §8 and
  * card-and-rarity.md §6–§8. Every number in them is the server's: the
  * functions take the answer's figures and only format them. The copy test
  * renders every string and scans it for the words navigation-and-landing.md §8
@@ -10,9 +10,10 @@
 import type { PackKind, PublishedOdds, Rarity } from "@anime-tcg/shared/api";
 import { RARITIES, RARITY_LABEL } from "@anime-tcg/shared/rarity";
 import { isolate } from "./bidi";
-import { common, shortDate } from "./copy";
+import { common, formatCount, shortDate } from "./copy";
 
-const NUMBER = new Intl.NumberFormat("en-GB");
+export { formatCount };
+
 const ORDINAL = new Intl.PluralRules("en-GB", { type: "ordinal" });
 const ORDINAL_SUFFIX: Record<Intl.LDMLPluralRule, string> = {
   zero: "th",
@@ -28,20 +29,13 @@ const PERCENT = new Intl.NumberFormat("en-GB", {
   maximumSignificantDigits: 3,
   roundingMode: "trunc",
 });
-/** collection-overview.md §8 `<HH:MM>`. */
-const CLOCK = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" });
 
 const SLOT_WORDS = ["first", "second", "third", "fourth", "fifth"] as const;
 const SIZE_WORDS = ["one", "two", "three", "four", "five"] as const;
 
-/** A count as `Intl.NumberFormat("en-GB")` writes it: `2,983`. */
-export function formatCount(n: number): string {
-  return NUMBER.format(n);
-}
-
 /** `1st`, `2nd`, `3rd`, `10th`, `300th`. */
 export function ordinal(n: number): string {
-  return `${NUMBER.format(n)}${ORDINAL_SUFFIX[ORDINAL.select(n)]}`;
+  return `${formatCount(n)}${ORDINAL_SUFFIX[ORDINAL.select(n)]}`;
 }
 
 /** `first` … `fifth` for a card's position in a pack, counted from 1. */
@@ -51,7 +45,7 @@ export function slotWord(position: number): string {
 
 /** `one` … `five` for a number of cards. */
 export function sizeWord(n: number): string {
-  return SIZE_WORDS[n - 1] ?? NUMBER.format(n);
+  return SIZE_WORDS[n - 1] ?? formatCount(n);
 }
 
 /** The separator before item `index` of `length` items: `a, b and c`. */
@@ -64,7 +58,8 @@ function joinList(items: readonly string[]): string {
   return items.map((item, i) => `${listSeparator(i, items.length)}${item}`).join("");
 }
 
-const plural = (n: number, one: string, many: string) => `${NUMBER.format(n)} ${n === 1 ? one : many}`;
+/** `1 copy`, `2 copies`: a formatted count and the word that agrees with it. */
+export const plural = (n: number, one: string, many: string) => `${formatCount(n)} ${n === 1 ? one : many}`;
 
 /** `free ` follows `odds.pity.freePacksOnly` (card-and-rarity.md §7.1, §7.4). */
 const free = (odds: PublishedOdds) => (odds.pity.freePacksOnly ? "free " : "");
@@ -89,7 +84,7 @@ function spokenDuration(totalSeconds: number): string {
 
 export const packControlCopy = {
   count: (available: number, cap: number) =>
-    `${NUMBER.format(available)} of ${NUMBER.format(cap)} ${cap === 1 ? "pack" : "packs"} ready`,
+    `${formatCount(available)} of ${formatCount(cap)} ${cap === 1 ? "pack" : "packs"} ready`,
   loading: "Loading your packs…",
   loadFailed: "Couldn't load your packs.",
   tryAgain: "Try again",
@@ -108,7 +103,7 @@ export const packControlCopy = {
   waitOver: common.waitOver,
   ready: (available: number, cap: number) => `${packControlCopy.count(available, cap)}.`,
   pity: (packs: number, freePacksOnly: boolean) =>
-    `Mythic guaranteed within ${NUMBER.format(packs)} ${freePacksOnly ? "free " : ""}${packs === 1 ? "pack" : "packs"}.`,
+    `Mythic guaranteed within ${formatCount(packs)} ${freePacksOnly ? "free " : ""}${packs === 1 ? "pack" : "packs"}.`,
   odds: "Pack odds",
 } as const;
 
@@ -128,7 +123,7 @@ export function summaryParts(rarities: readonly Rarity[]): TierCount[] {
 /** `<summary>`: `1 Epic, 1 Rare and 3 Common`, shared with the landing page's demo. */
 export function summary(rarities: readonly Rarity[]): string {
   return joinList(
-    summaryParts(rarities).map(({ rarity, count }) => `${NUMBER.format(count)} ${RARITY_LABEL[rarity]}`),
+    summaryParts(rarities).map(({ rarity, count }) => `${formatCount(count)} ${RARITY_LABEL[rarity]}`),
   );
 }
 
@@ -145,15 +140,15 @@ function lowestTier(table: PublishedOdds["radiant"]["odds"]): Rarity {
 
 export const revealCopy = {
   heading: (kind: PackKind) => HEADING[kind],
-  newCount: (k: number) => ` · ${NUMBER.format(k)} new`,
+  newCount: (k: number) => ` · ${formatCount(k)} new`,
   newMarker: "New",
   enchanted: (odds: PublishedOdds) =>
     `Every ${ordinal(odds.enchanted.every)} ${free(odds)}pack is Enchanted: its ${slotWord(odds.enchanted.slot + 1)} card is ${RARITY_LABEL[odds.enchanted.floor]} or better.`,
   radiant: (odds: PublishedOdds) =>
-    `About 1 pack in ${NUMBER.format(Math.round(odds.scale / odds.radiant.chance))} is Radiant: ${sizeWord(odds.slots.length)} cards of ${RARITY_LABEL[lowestTier(odds.radiant.odds)]} or better, at least one of them ${RARITY_LABEL[odds.radiant.lastSlot]}.`,
+    `About 1 pack in ${formatCount(Math.round(odds.scale / odds.radiant.chance))} is Radiant: ${sizeWord(odds.slots.length)} cards of ${RARITY_LABEL[lowestTier(odds.radiant.odds)]} or better, at least one of them ${RARITY_LABEL[odds.radiant.lastSlot]}.`,
   pityMythic: (odds: PublishedOdds) => `This Mythic came from the guarantee: ${pityRule(odds)}`,
   announce: (kind: PackKind, rarities: readonly Rarity[], k: number) =>
-    `${HEADING[kind]}: ${summary(rarities)}.${k >= 1 ? ` ${NUMBER.format(k)} new.` : ""}`,
+    `${HEADING[kind]}: ${summary(rarities)}.${k >= 1 ? ` ${formatCount(k)} new.` : ""}`,
 } as const;
 
 /** The guarantee rule itself: the clause after the colon of the reveal's guarantee line. */
@@ -217,7 +212,7 @@ export const oddsCopy = {
   },
   shop: "Shop packs can be Radiant. They don't count toward Enchanted packs or the guarantee.",
   tiers: (odds: PublishedOdds) =>
-    `A character's tier comes from its popularity rank on AniList among the ${NUMBER.format(odds.snapshot.characterCount)} characters of the current pool: ${bandRules(odds)}`,
+    `A character's tier comes from its popularity rank on AniList among the ${formatCount(odds.snapshot.characterCount)} characters of the current pool: ${bandRules(odds)}`,
   pool: (odds: PublishedOdds) => `Pool as of ${shortDate(odds.snapshot.takenAt)}.`,
 } as const;
 
@@ -241,28 +236,11 @@ export const cardCopy = {
   },
   rankSpoken: (rank: number, pool: number | null) =>
     pool === null
-      ? `Popularity rank ${NUMBER.format(rank)}`
-      : `Popularity rank ${NUMBER.format(rank)} of ${NUMBER.format(pool)}`,
+      ? `Popularity rank ${formatCount(rank)}`
+      : `Popularity rank ${formatCount(rank)} of ${formatCount(pool)}`,
   /** The article's name; the AniList strings in it are isolated (collection-overview.md §5.6 rule 3). */
   label: (name: string, rarity: Rarity, series: string | null) =>
     series === null
       ? `${isolate(name)}, ${RARITY_LABEL[rarity]}`
       : `${isolate(name)}, ${RARITY_LABEL[rarity]}, ${isolate(series)}`,
-} as const;
-
-export const collectionCopy = {
-  loading: "Loading your collection…",
-  empty: "No cards yet",
-  openAPack: "Open a pack",
-  error: "Couldn't load your collection.",
-  tryAgain: "Try again",
-  stale: (at: Date) => `Showing your collection as of ${CLOCK.format(at)}.`,
-  duplicates: (n: number) => (n === 0 ? "No duplicates" : plural(n, "duplicate", "duplicates")),
-  perTier: (rarity: Rarity, n: number) => `${RARITY_LABEL[rarity]} ${NUMBER.format(n)}`,
-  filterLabel: "Rarity",
-  filterAll: "All rarities",
-  noMatch: (rarity: Rarity) => `No ${RARITY_LABEL[rarity]} cards in your collection.`,
-  copies: (n: number) => `×${NUMBER.format(n)}`,
-  copiesSpoken: (n: number) => plural(n, "copy", "copies"),
-  gridLabel: "Your cards",
 } as const;

@@ -126,6 +126,38 @@ describe("Card (card-and-rarity.md)", () => {
     expect(card.querySelector("img")).toBeNull();
   });
 
+  it("starts the art over at a new image address, and never retries the address that failed (collection-overview.md §5.6 rule 7)", () => {
+    const OLD = "https://s4.anilist.co/file/anilistcdn/character/large/old.png";
+    const NEW = "https://s4.anilist.co/file/anilistcdn/character/large/new.png";
+    const card = (imageUrl: string) => (
+      <Card
+        character={makeCharacter(1_234, { name: "Frieren", imageUrl })}
+        rarity="rare"
+        series={null}
+        poolSize={null}
+        effects="full"
+      />
+    );
+    const { rerender } = render(card(OLD));
+    const article = screen.getByRole("article");
+    fireEvent.error(article.querySelector("img")!);
+    expect(within(article).getByText("No image")).toBeInTheDocument();
+
+    // The same address again, as a refetch that changed something else brings it: no retry.
+    rerender(card(OLD));
+    expect(within(article).getByText("No image")).toBeInTheDocument();
+    expect(article.querySelector("img")).toBeNull();
+
+    // A new address: the art is asked for again, on the placeholder until it loads.
+    rerender(card(NEW));
+    const art = article.querySelector("img");
+    expect(art).toHaveAttribute("src", NEW);
+    expect(art).toHaveClass("invisible");
+    expect(within(article).queryByText("No image")).not.toBeInTheDocument();
+    fireEvent.load(art!);
+    expect(art).not.toHaveClass("invisible");
+  });
+
   it('keeps the full name and series in `title` for the truncated lines, isolated, each in a `dir="auto"` element', () => {
     const card = renderCard("common");
     const name = within(card).getByText("Frieren");
@@ -175,5 +207,46 @@ describe("Card (card-and-rarity.md)", () => {
     expect(within(card).getByText("<script>alert(1)</script>")).toBeInTheDocument();
     expect(card.querySelectorAll("script")).toHaveLength(0);
     expect(card.querySelectorAll("img")).toHaveLength(1);
+  });
+
+  it("inside a control it is part of it: no article, no name of its own, phrasing elements only", () => {
+    const { container } = render(
+      <button type="button" aria-label="The tile's own name">
+        <Card
+          character={makeCharacter(3, { name: "Frieren" })}
+          rarity="mythic"
+          series="Sousou no Frieren"
+          poolSize={2_983}
+          effects="hover"
+          standalone={false}
+        />
+      </button>,
+    );
+    expect(screen.queryByRole("article")).not.toBeInTheDocument();
+    expect(screen.getByRole("button")).toHaveAccessibleName("The tile's own name");
+    const frame = container.querySelector(".card-frame-mythic");
+    expect(frame?.tagName).toBe("SPAN");
+    expect(frame).not.toHaveAttribute("aria-label");
+    expect(frame).toHaveClass("shadow-glow-mythic", "card-pearl-hover");
+    expect(container.querySelectorAll("button div, button p, button article")).toHaveLength(0);
+  });
+
+  it("at dialog size: the larger frame, face and type of §3.2", () => {
+    render(
+      <Card
+        character={makeCharacter(4, { name: "Frieren", rank: 12 })}
+        rarity="epic"
+        series="Sousou no Frieren"
+        poolSize={2_983}
+        effects="full"
+        size="dialog"
+      />,
+    );
+    const card = screen.getByRole("article");
+    expect(card).toHaveClass("rounded-[14px]", "p-[6px]", "card-glint");
+    expect(within(card).getByText("Frieren")).toHaveClass("text-[17px]");
+    expect(within(card).getByText("Sousou no Frieren")).toHaveClass("text-[15px]");
+    expect(within(card).getByText("#0012 / 2983").parentElement).toHaveClass("text-[13px]");
+    expect(within(card).getByText("✦✦✦✦").parentElement).toHaveClass("text-[14px]");
   });
 });

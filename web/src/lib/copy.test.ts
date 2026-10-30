@@ -42,6 +42,8 @@ describe("copy", () => {
     expect(copy.cardCount(0)).toBe("No cards yet");
     expect(copy.cardCount(1)).toBe("1 card");
     expect(copy.cardCount(12)).toBe("12 cards");
+    expect(copy.cardCount(1_240)).toBe("1,240 cards");
+    expect(copy.formatCount(2_983)).toBe("2,983");
   });
 
   // The date is the viewer's local calendar day, so the instants are built from local parts. A fixed
@@ -52,6 +54,9 @@ describe("copy", () => {
       "No cards yet · Created 28 Oct 2026",
     );
     expect(copy.metaLine(3, new Date(2025, 0, 2, 0, 0).toISOString())).toBe("3 cards · Created 2 Jan 2025");
+    expect(copy.metaLine(1_240, new Date(2025, 0, 2, 0, 0).toISOString())).toBe(
+      "1,240 cards · Created 2 Jan 2025",
+    );
   });
 
   it("writes every month in three letters, September as Sep (§8 `D Mon YYYY`)", () => {

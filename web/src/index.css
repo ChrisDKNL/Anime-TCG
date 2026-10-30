@@ -140,7 +140,8 @@
 
 /*
  * Glint (Epic, Legendary): a light layer over the whole card. `card-glint` plays it always (the
- * reveal), `card-glint-hover` only while the card is hovered (grid tiles). Each card starts at its own
+ * reveal), `card-glint-hover` only while the card is hovered or its tile has keyboard focus (grid
+ * tiles: the card sits inside the tile's button). Each card starts at its own
  * point of the loop (`--card-phase`), so cards on one screen do not glint together. Under reduced
  * motion the layer is not rendered at all.
  */
@@ -175,7 +176,8 @@
     background-size: 260% 100%;
     background-position: 130% 0;
   }
-  &:hover::after {
+  &:hover::after,
+  :focus-visible &::after {
     animation: var(--animate-card-glint);
     animation-delay: calc(var(--card-phase, 0) * -1s);
   }
@@ -186,7 +188,7 @@
   }
 }
 
-/* Pearl drift (Mythic): the frame's own background moves; `-hover` plays it only while hovered. */
+/* Pearl drift (Mythic): the frame's own background moves; `-hover` plays it only while hovered or focused. */
 @utility card-pearl {
   animation: var(--animate-card-pearl);
   animation-delay: calc(var(--card-phase, 0) * -1s);
@@ -196,12 +198,14 @@
 }
 
 @utility card-pearl-hover {
-  &:hover {
+  &:hover,
+  :focus-visible & {
     animation: var(--animate-card-pearl);
     animation-delay: calc(var(--card-phase, 0) * -1s);
   }
   @media (prefers-reduced-motion: reduce) {
-    &:hover {
+    &:hover,
+    :focus-visible & {
       animation: none;
     }
   }

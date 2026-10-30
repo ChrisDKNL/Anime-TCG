@@ -25,9 +25,9 @@ import {
   type GameOwner,
   type GameState,
   type PacksAnswer,
-  type RarityFilter,
   type Row,
 } from "../lib/game";
+import type { ControlsAction } from "../lib/collectionView";
 import { rethrowUnlessKnown } from "../lib/failures";
 import { revealCopy } from "../lib/packsCopy";
 import type { ShellActions } from "./useShell";
@@ -93,7 +93,8 @@ export interface Game {
    * Settles once the answer is applied, and rejects only on a bug in this client (not an api answer).
    */
   openPack: (row: Row) => Promise<void>;
-  setRarityFilter: (filter: RarityFilter) => void;
+  /** Changes the collection overview's controls (`state.overview`). */
+  changeOverview: (action: ControlsAction) => void;
 }
 
 interface Options {
@@ -255,9 +256,9 @@ export function useGameState({ account, shell, packsShowing }: Options): Game | 
     ],
   );
 
-  const setRarityFilter = useCallback(
-    (filter: RarityFilter) => {
-      if (owner !== null) dispatch({ type: "rarityFilter", ...owner, filter });
+  const changeOverview = useCallback(
+    (action: ControlsAction) => {
+      if (owner !== null) dispatch({ type: "overview", ...owner, action });
     },
     [owner],
   );
@@ -275,9 +276,9 @@ export function useGameState({ account, shell, packsShowing }: Options): Game | 
             collectionQuery,
             collection,
             openPack: open,
-            setRarityFilter,
+            changeOverview,
           },
-    [account, state, cardCount, packsQuery, collectionQuery, collection, open, setRarityFilter],
+    [account, state, cardCount, packsQuery, collectionQuery, collection, open, changeOverview],
   );
 }
 

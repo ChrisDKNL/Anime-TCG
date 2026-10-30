@@ -39,9 +39,14 @@ export const ACCOUNT_CONTROL = `inline-flex max-w-full items-center gap-2 rounde
 
 export const MENU_ITEM = `block w-full rounded-lg px-3 py-2 text-left text-sm text-zinc-200 hover:bg-zinc-800 focus:bg-zinc-800 ${PHONE_MIN_HEIGHT} focus:outline-none`;
 
+const DIALOG_SHELL =
+  "pop-in m-auto max-h-[85vh] w-[calc(100%-2rem)] overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-100 backdrop:bg-zinc-950/70 backdrop:backdrop-blur-sm focus:outline-none";
+
 /** The modal `<dialog>` shell: the delete confirmation and the odds page (packs-page.md §3.5, §5.4). */
-export const DIALOG =
-  "pop-in m-auto max-h-[85vh] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-100 backdrop:bg-zinc-950/70 backdrop:backdrop-blur-sm focus:outline-none";
+export const DIALOG = `${DIALOG_SHELL} max-w-lg`;
+
+/** The same shell, wider, for the collection's card dialog (collection-overview.md §5.4). */
+export const WIDE_DIALOG = `${DIALOG_SHELL} max-w-2xl`;
 
 export const PANEL = "rounded-2xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-100";
 export const PANEL_HEADING = "text-lg font-bold";
