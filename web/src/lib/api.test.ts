@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { envelope, makeAccount, mockFetch, noContent, sentBody } from "../test/api";
+import { envelope, makeAccount, mockFetch, noContent, rateLimited, sentBody } from "../test/api";
 import { makeCollection, makePackOpened, makePacks } from "../test/fixtures";
 import {
   ApiError,
@@ -15,8 +15,8 @@ import {
   NetworkError,
   openPack,
   register,
+  readRetryAfter,
   renameLogin,
-  retryAfterHeader,
 } from "./api";
 
 describe("api client", () => {
@@ -97,6 +97,56 @@ describe("api client", () => {
     expect(err).toMatchObject({ status: 429, code: "too_many_failures", retryAfterSeconds: 7 });
   });
 
+  it("takes a rate_limited answer's seconds from Retry-After", async () => {
+    mockFetch({ "POST /api/session/login": rateLimited("42") });
+    const err = await login({ login: "x", password: "y" }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err).toMatchObject({ status: 429, code: "rate_limited", retryAfterSeconds: 42 });
+  });
+
+  it("a rate_limited answer without Retry-After carries no seconds", async () => {
+    mockFetch({ "POST /api/session/login": rateLimited() });
+    const err = await login({ login: "x", password: "y" }).catch((e: unknown) => e);
+    expect(err).toMatchObject({ status: 429, code: "rate_limited", retryAfterSeconds: undefined });
+  });
+
+  it("reads Retry-After only as whole positive seconds", async () => {
+    for (const header of ["0", "-5", "1.5", "soon", "Fri, 30 Oct 2026 12:00:00 GMT", ""]) {
+      mockFetch({ "POST /api/account/change-password": rateLimited(header) });
+      const err = await changePassword({ currentPassword: "a", newPassword: "b" }).catch((e: unknown) => e);
+      expect(err, header).toMatchObject({ code: "rate_limited", retryAfterSeconds: undefined });
+    }
+    mockFetch({ "POST /api/account/change-password": rateLimited(" 7 ") });
+    const err = await changePassword({ currentPassword: "a", newPassword: "b" }).catch((e: unknown) => e);
+    expect(err).toMatchObject({ retryAfterSeconds: 7 });
+  });
+
+  it("reads a Retry-After too large to count exactly as no seconds, and passes a large exact one on", async () => {
+    mockFetch({ "POST /api/session/login": rateLimited("9".repeat(400)) });
+    const huge = await login({ login: "x", password: "y" }).catch((e: unknown) => e);
+    expect(huge).toMatchObject({ code: "rate_limited", retryAfterSeconds: undefined });
+
+    mockFetch({ "POST /api/session/login": rateLimited("86400") });
+    const day = await login({ login: "x", password: "y" }).catch((e: unknown) => e);
+    expect(day).toMatchObject({ code: "rate_limited", retryAfterSeconds: 86400 });
+  });
+
+  it("an envelope whose seconds do not count exactly is not the envelope", async () => {
+    mockFetch({ "POST /api/session/login": envelope(429, "too_many_failures", 1e300) });
+    await expect(login({ login: "x", password: "y" })).rejects.toBeInstanceOf(NetworkError);
+  });
+
+  it("the envelope's own seconds win over the header", async () => {
+    mockFetch({
+      "POST /api/account/delete": {
+        ...envelope(429, "too_many_failures", 7),
+        headers: { "retry-after": "30" },
+      },
+    });
+    const err = await deleteAccount({ password: "x" }).catch((e: unknown) => e);
+    expect(err).toMatchObject({ code: "too_many_failures", retryAfterSeconds: 7 });
+  });
+
   it("a non-JSON failure answer is a NetworkError, not an ApiError", async () => {
     mockFetch({ "GET /api/session": { status: 502, raw: "<html>Bad Gateway</html>" } });
     await expect(getSession()).rejects.toBeInstanceOf(NetworkError);
@@ -172,14 +222,15 @@ describe("api client", () => {
   });
 
   it("reads Retry-After as whole seconds, at least 1, and ignores anything else", () => {
-    const read = (value: string) => retryAfterHeader(new Headers({ "Retry-After": value }));
+    const read = (value: string) => readRetryAfter(new Headers({ "Retry-After": value }));
     expect(read("3")).toBe(3);
     expect(read(" 60 ")).toBe(60);
-    expect(read("0")).toBe(1);
+    expect(read("0")).toBeUndefined();
+    expect(read("9".repeat(400))).toBeUndefined();
     expect(read("1.5")).toBeUndefined();
     expect(read("-2")).toBeUndefined();
     expect(read("Wed, 21 Oct 2026 07:28:00 GMT")).toBeUndefined();
     expect(read("")).toBeUndefined();
-    expect(retryAfterHeader(new Headers())).toBeUndefined();
+    expect(readRetryAfter(new Headers())).toBeUndefined();
   });
 });

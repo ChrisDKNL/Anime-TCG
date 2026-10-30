@@ -2,9 +2,9 @@
 
 Roadmap item 3 · builds on 1c (server-side collection, `docs/design/collection-packs.md`, shipped in #28), the page addresses (`docs/design/navigation-and-landing.md`, shipped in #30) and item 2 (economy, `docs/design/economy.md`) · shows [ADR 0004](../adr/0004-economy-ground-rules.md) §4 as amended by [ADR 0011](../adr/0011-economy-revised-karma-market-snapshot.md) §3 (market, recycle) under [ADR 0008](../adr/0008-server-authoritative.md) · written 2026-10-29, revised the same day for the owner's decisions
 
-> **Revised 2026-10-29** to the owner's decisions (ADR 0011 and the owner's later answers the same day) and the server specs as revised for them (`collection-packs.md` at 0ce69bd, `economy.md` at 9a3e059): six rarity tiers (Common, Uncommon, Rare, Epic, Legendary, Mythic), fixed per character by popularity rank and drawn as the owner's frames with one to six stars (`docs/design/card-and-rarity.md`); one entry per character; completion per series, where a series is an AniList **franchise**, and for the whole pool; "Sell" becomes "List on the market", for every card including the last copy; **Recycle for Karma** turns duplicates into Karma at a set value per tier, and there is no recycling into a higher tier; the currency is Karma. The Karma balance in the header, the Shop page and the Market page are a companion spec, `docs/design/market-and-shop.md`, which says why it is separate. `economy.md`'s amounts are still five-tier, so they appear as placeholders (`<ref Epic>`, `<recycle Epic>`, `<min Epic>`, `<max Epic>`), and §3.9 says what is settled with it and what is not.
+> **Revised 2026-10-29** to the owner's decisions (ADR 0011 and the owner's later answers the same day) and the server specs as revised for them (`collection-packs.md` at 0ce69bd, `economy.md` at 9a3e059): six rarity tiers (Common, Uncommon, Rare, Epic, Legendary, Mythic), fixed per character by popularity rank and drawn as the owner's frames with one to six stars (`docs/design/card-and-rarity.md`); one entry per character; completion per series, where a series is an AniList **franchise**, and for the whole pool; "Sell" becomes "List on the market", for every card including the last copy; **Recycle for Karma** turns duplicates into Karma at a set value per tier, and there is no recycling into a higher tier; the currency is Karma. The Karma balance in the header, the Shop page and the Market page are a companion spec, `docs/design/market-and-shop.md`, which says why it is separate. The amounts come from `GET /api/wallet`, so they appear as placeholders (`<ref Epic>`, `<recycle Epic>`, `<min Epic>`, `<max Epic>`); `economy.md` at 64b20f9 re-derives them for six tiers (ADR 0013), and §3.9 says what is settled with it and what is not.
 >
-> **Reconciled 2026-10-29** with what is on `main`: 1c's server as shipped in #28 (six tiers, the rank and the pool size in the contract), the page addresses of `navigation-and-landing.md` as shipped in #30 (its §10: the Collection tab is now the `/collection` page, reached by a header link, with its own title and a visible `h1` that takes focus), and `economy.md` as landed in 0562e10, which settles the five mismatches E1 to E5 of the previous revision (§3.9).
+> **Reconciled 2026-10-29** with what is on `main`: 1c's server as shipped in #28 (six tiers, the rank and the pool size in the contract), the page addresses of `navigation-and-landing.md` as shipped in #30 (its §10: the Collection tab is now the `/collection` page, reached by a header link, with its own title and a visible `h1` that takes focus), and `economy.md` as landed in 0562e10, which settles the five mismatches E1 to E5 of the previous revision (§3.9); then `economy.md` at 64b20f9, which re-derives its numbers for six tiers (settling E8) and drops franchise packs (ADR 0013).
 
 ## 1. Goal
 
@@ -173,7 +173,7 @@ The rule (owner, 2026-10-29): a player recycles **duplicates** of an entry, neve
 
 ### 3.8 What the UI needs from the server
 
-Per screen, with the field that supplies it. ✓ means the server supplies it as needed (`collection-packs.md` as shipped in #28, `economy.md` as landed in 0562e10); Ex refers to §3.9.
+Per screen, with the field that supplies it. ✓ means the server supplies it as needed (`collection-packs.md` as shipped in #28, `economy.md` at 64b20f9); Ex refers to §3.9.
 
 **Cards view** (`GET /api/collection`, `CollectionResponse`, `collection-packs.md` §6.2 with `economy.md` §11.2's additions)
 
@@ -204,7 +204,7 @@ Per screen, with the field that supplies it. ✓ means the server supplies it as
 | Fee preview                         | `rules.feeBps`, `rules.feeMin`                     | ✓      |
 | Listing time                        | `rules.listingTtlSeconds`                          | ✓      |
 | Listing cap, before a request       | `rules.maxListings`, `activeListings`              | ✓      |
-| Recycle value per tier              | `rules.recycleValues[rarity]`                      | ✓, E8  |
+| Recycle value per tier              | `rules.recycleValues[rarity]`                      | ✓      |
 | Balance                             | `balance`                                          | ✓      |
 
 **List on the market**: `POST /api/market/listings`, `ListBody` `{ requestId, characterId, rarity, price }`. Success `Listing` (201, 200 on a replay) with `price`, `fee`, `expiresAt`. Errors used: 400 `price_out_of_bounds`, 409 `not_enough_copies`, `listing_limit`, `request_id_reused`, 400 `validation_failed`, 401, 403 `bad_origin`, 429 `rate_limited` (all ✓). The `Listing` carries no updated entry or totals, so the view refetches the collection.
@@ -217,9 +217,9 @@ Per screen, with the field that supplies it. ✓ means the server supplies it as
 
 ### 3.9 Mismatches and dependencies
 
-Against `collection-packs.md` as shipped in #28 and `economy.md` as landed on `main` in 0562e10. Each open item is for the manager to settle; this spec designs around none of them silently, and says what it does meanwhile.
+Against `collection-packs.md` as shipped in #28 and `economy.md` at 64b20f9 (six tiers, no franchise packs, ADR 0013). Each open item is for the manager to settle; this spec designs around none of them silently, and says what it does meanwhile.
 
-**Settled.** `collection-packs.md` carries six tiers in the contract, the rank and the pool size (`card-and-rarity.md` §12), franchises (`franchiseIds`, `FranchiseRef`, `completion.franchises`), the reserved `kind` and `variant`, and the card tokens in its web PR. `economy.md` carries `feeMin`, the balance on `insufficient_funds`, native names and titles in the market's search, and `Wallet.activeListings`; and, for `market-and-shop.md`, `closedAt`, the `limit` on `market_limit`, `ThemeOffer.cards`, `ThemeOffer.franchiseIds` for both kinds, `filterFranchiseIds`, and an `active` list without expired listings. The owner's decided build order (§9.1) settles the delivery order. Two notes stand with no change asked: the listing time arrives in seconds and is shown in days (whole days when divisible by 86 400, else hours), and listing and recycle answers carry no updated entry, so the view refetches.
+**Settled.** `collection-packs.md` carries six tiers in the contract, the rank and the pool size (`card-and-rarity.md` §12), franchises (`franchiseIds`, `FranchiseRef`, `completion.franchises`), the reserved `kind` and `variant`, and the card tokens in its web PR. `economy.md` carries `feeMin`, the balance on `insufficient_funds`, native names and titles in the market's search, and `Wallet.activeListings`; and, for `market-and-shop.md`, `closedAt`, the `limit` on `market_limit`, `ThemeOffer.cards`, `ThemeOffer.franchiseIds` (every theme draws from all franchises, and a theme has no kind, ADR 0013), `filterFranchiseIds`, and an `active` list without expired listings. The owner's decided build order (§9.1) settles the delivery order. Two notes stand with no change asked: the listing time arrives in seconds and is shown in days (whole days when divisible by 86 400, else hours), and listing and recycle answers carry no updated entry, so the view refetches.
 
 **The previous revision's mismatches, all settled in `economy.md` as landed**
 
@@ -233,22 +233,22 @@ Against `collection-packs.md` as shipped in #28 and `economy.md` as landed on `m
 
 E2 and E3 also answer this spec's two open questions (§9.2) with their recommended options: the recycle request carries only the count, and `recyclable` counts unlisted copies. The owner's answer is not recorded in either spec's decision record, so §9.2 keeps them, marked as such.
 
-**Still open**
+**This revision's mismatch, settled in `economy.md` at 64b20f9**
 
-| #   | Mismatch                                                                                                                                                                                                                                                                                                                                                                                             | This spec meanwhile                                 | Asked of `economy.md`                                                                                       |
-| --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| E8  | **Five-tier numbers.** `economy.md` says itself that it is not buildable yet: `REFERENCE_VALUE`, `RECYCLE_VALUE`, `MARKET_PRICE_MIN` and `MARKET_PRICE_MAX` have no Uncommon, are derived from the five-tier per-slot odds (§5.1, §5.2), and §11.2 and §12 still say `PerRarity` has five tiers. 1c shipped six tiers with five different slot tables, so there is no single per-slot rate to invert | Placeholders for every amount; six tiers everywhere | Re-derive §5, §5.1, §5.2 and §9 for six tiers on 1c's shipped tables (`collection-packs.md` §5.4.1, §5.4.6) |
+| #   | Was                                                                                                                                                                                                                                                                                                                                          | Settled by                                                                                                                                                                                                                                                                                                                                                     |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| E8  | **Five-tier numbers.** `REFERENCE_VALUE`, `RECYCLE_VALUE`, `MARKET_PRICE_MIN` and `MARKET_PRICE_MAX` had no Uncommon and were derived from the five-tier per-slot odds (§5.1, §5.2), and §11.2 and §12 said `PerRarity` has five tiers; 1c shipped six tiers with five different slot tables, so there was no single per-slot rate to invert | §5, §5.1, §5.2, §9: re-derived for six tiers on 1c's shipped tables, inverting a tier's share of a standard pack's cards (the per-slot rate averaged over the five slots; ADR 0013 decision 1, a manager default the owner may revise); `PerRarity` has six tiers in §11.2 and §12. This spec keeps placeholders for every amount, since the server sends them |
 
-The shop's open items (its odds fields and the rank chip on the market) are in `market-and-shop.md` §3.8.
+**Still open**: none in `economy.md`. The shop's open items (its odds fields and the rank chip on the market) are in `market-and-shop.md` §3.8.
 
-**Dependencies: placeholders for numbers being recomputed in `economy.md`**
+**Dependencies: placeholders for numbers the server sends (`Wallet.rules`)**
 
-| Placeholder          | Meaning                                                                                     | Used in    |
-| -------------------- | ------------------------------------------------------------------------------------------- | ---------- |
-| `<ref T>`            | reference value of tier T, six tiers with Uncommon (five-tier in `economy.md` §5 today, E8) | §3.5, §3.6 |
-| `<recycle T>`        | Karma per recycled duplicate of tier T: a quarter of `<ref T>`, rounded down, at least 1    | §3.6, §8   |
-| `<min T>`, `<max T>` | market bounds of tier T: half and two and a half times `<ref T>`                            | §3.5, §8   |
-| `<feePct>`           | the market fee, `feeBps` as a percentage (5 %, `economy.md` §5)                             | §3.5, §8   |
+| Placeholder          | Meaning                                                                                  | Used in    |
+| -------------------- | ---------------------------------------------------------------------------------------- | ---------- |
+| `<ref T>`            | reference value of tier T, six tiers with Uncommon (`economy.md` §5)                     | §3.5, §3.6 |
+| `<recycle T>`        | Karma per recycled duplicate of tier T: a quarter of `<ref T>`, rounded down, at least 1 | §3.6, §8   |
+| `<min T>`, `<max T>` | market bounds of tier T: half and two and a half times `<ref T>`                         | §3.5, §8   |
+| `<feePct>`           | the market fee, `feeBps` as a percentage (5 %, `economy.md` §5)                          | §3.5, §8   |
 
 The UI reads every one of them from `GET /api/wallet`; none is written into a string or a constant. The card's six tiers, its rank and the pool size are in 1c's shipped contract (`card-and-rarity.md` §12, R1 and R2).
 
@@ -750,16 +750,16 @@ The Inventory `Reset` button and its confirmation are deleted by the 1c web PR (
 
 ### 9.1 Decided by the owner, 2026-10-29
 
-| Question                              | Decision                                                                                                                                                          | Where                      |
-| ------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
-| Who builds the card dialog            | The collection overview is built right after 1c with a details-only dialog; `feat/economy-ui` adds Recycle for Karma and `feat/market-ui` adds List on the market | §3.4                       |
-| A Karma icon                          | None: every amount reads `<n> Karma`                                                                                                                              | §6.4                       |
-| The list price field's starting value | Empty, with the bounds as the hint and `See <name> on the market` beside it                                                                                       | §3.5                       |
-| Where the Karma shop lives            | Its own Shop tab, which is now the `/shop` page (`navigation-and-landing.md` §3.1)                                                                                | `market-and-shop.md` §3.2  |
-| Recycling                             | Duplicates only, never the last copy, for Karma at a quarter of the tier's reference value; no tier recycle                                                       | §3.6                       |
-| Upgrades                              | Only in the mini-games (items 5, 6)                                                                                                                               | §2                         |
-| Selling                               | Every card, the last copy included, on the player market; fee 5 %, at least 1, rounded up; bounds 0.5 × to 2.5 × the reference value; limits per rolling 7 days   | §3.5, `market-and-shop.md` |
-| Themed packs                          | Genre packs automatically, plus franchise packs the owner picks; price about 2.3 × the expected card value                                                        | `market-and-shop.md` §3.3  |
+| Question                              | Decision                                                                                                                                                             | Where                      |
+| ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| Who builds the card dialog            | The collection overview is built right after 1c with a details-only dialog; `feat/economy-ui` adds Recycle for Karma and `feat/market-ui` adds List on the market    | §3.4                       |
+| A Karma icon                          | None: every amount reads `<n> Karma`                                                                                                                                 | §6.4                       |
+| The list price field's starting value | Empty, with the bounds as the hint and `See <name> on the market` beside it                                                                                          | §3.5                       |
+| Where the Karma shop lives            | Its own Shop tab, which is now the `/shop` page (`navigation-and-landing.md` §3.1)                                                                                   | `market-and-shop.md` §3.2  |
+| Recycling                             | Duplicates only, never the last copy, for Karma at a quarter of the tier's reference value; no tier recycle                                                          | §3.6                       |
+| Upgrades                              | Only in the mini-games (items 5, 6)                                                                                                                                  | §2                         |
+| Selling                               | Every card, the last copy included, on the player market; fee 5 %, at least 1, rounded up; bounds 0.5 × to 2.5 × the reference value; limits per rolling 7 days      | §3.5, `market-and-shop.md` |
+| Themed packs                          | Genre packs only, automatically for every eligible genre, each drawing from all franchises; no franchise packs (ADR 0013); price about 2.3 × the expected card value | `market-and-shop.md` §3.3  |
 
 ### 9.2 Open
 

@@ -35,12 +35,18 @@ export function envelope(status: number, code: ErrorCode, retryAfterSeconds?: nu
 
 export const noContent: MockAnswer = { status: 204 };
 
+/** The route rate limiter's 429: its envelope carries no seconds, only the `Retry-After` header does (when sent). */
+export function rateLimited(retryAfter?: string): MockAnswer {
+  const answer = envelope(429, "rate_limited");
+  return retryAfter === undefined ? answer : { ...answer, headers: { "retry-after": retryAfter } };
+}
+
 function toResponse(answer: MockAnswer): Response {
-  const headers = answer.headers ?? {};
-  if (answer.raw !== undefined) return new Response(answer.raw, { status: answer.status, headers });
-  if (answer.body === undefined) return new Response(null, { status: answer.status, headers });
+  const { status, headers } = answer;
+  if (answer.raw !== undefined) return new Response(answer.raw, { status, headers });
+  if (answer.body === undefined) return new Response(null, { status, headers });
   return new Response(JSON.stringify(answer.body), {
-    status: answer.status,
+    status,
     headers: { "content-type": "application/json", ...headers },
   });
 }

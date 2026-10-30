@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { ApiError, NetworkError } from "./api";
-import { rethrowUnlessKnown, toFailure } from "./failures";
+import {
+  MAX_WAIT_SECONDS,
+  RATE_LIMITED_FALLBACK_SECONDS,
+  rethrowUnlessKnown,
+  serverWait,
+  toFailure,
+} from "./failures";
 
 describe("toFailure", () => {
   it("classifies the two failure families", () => {
@@ -25,5 +31,56 @@ describe("rethrowUnlessKnown", () => {
   it("rethrows anything else", () => {
     const bug = new TypeError("undefined is not a function");
     expect(() => rethrowUnlessKnown(bug)).toThrow(bug);
+  });
+});
+
+describe("serverWait", () => {
+  it("the breather waits the envelope's seconds, and invents none when it names none", () => {
+    expect(serverWait({ kind: "api", code: "too_many_failures", retryAfterSeconds: 7 })).toEqual({
+      reason: "misses",
+      seconds: 7,
+    });
+    expect(serverWait({ kind: "api", code: "too_many_failures", retryAfterSeconds: undefined })).toEqual({
+      reason: "misses",
+      seconds: undefined,
+    });
+  });
+
+  it("the rate limiter waits Retry-After's seconds, or 60 without the header", () => {
+    expect(serverWait({ kind: "api", code: "rate_limited", retryAfterSeconds: 42 })).toEqual({
+      reason: "rateLimited",
+      seconds: 42,
+    });
+    expect(serverWait({ kind: "api", code: "rate_limited", retryAfterSeconds: undefined })).toEqual({
+      reason: "rateLimited",
+      seconds: RATE_LIMITED_FALLBACK_SECONDS,
+    });
+    expect(RATE_LIMITED_FALLBACK_SECONDS).toBe(60);
+  });
+
+  it("caps every wait at 3600 s, from either source of seconds", () => {
+    expect(MAX_WAIT_SECONDS).toBe(3600);
+    expect(serverWait({ kind: "api", code: "rate_limited", retryAfterSeconds: 3600 })).toEqual({
+      reason: "rateLimited",
+      seconds: 3600,
+    });
+    expect(serverWait({ kind: "api", code: "rate_limited", retryAfterSeconds: 86400 })).toEqual({
+      reason: "rateLimited",
+      seconds: 3600,
+    });
+    expect(serverWait({ kind: "api", code: "too_many_failures", retryAfterSeconds: 1e300 })).toEqual({
+      reason: "misses",
+      seconds: 3600,
+    });
+    expect(serverWait({ kind: "api", code: "rate_limited", retryAfterSeconds: Infinity })).toEqual({
+      reason: "rateLimited",
+      seconds: 3600,
+    });
+  });
+
+  it("asks for no wait on any other outcome", () => {
+    expect(serverWait({ kind: "network" })).toBeNull();
+    expect(serverWait({ kind: "api", code: "bad_credentials", retryAfterSeconds: undefined })).toBeNull();
+    expect(serverWait({ kind: "api", code: "no_pack_available", retryAfterSeconds: 30 })).toBeNull();
   });
 });
