@@ -20,14 +20,21 @@ import {
 } from "./routes";
 
 describe("the route list (§3.1)", () => {
-  it("holds exactly the pages of this build; /market waits for its PR", () => {
+  it("holds exactly the pages of this build", () => {
     expect(Object.keys(PUBLIC_PAGES)).toEqual(["/", "/demo", "/login", "/register"]);
-    expect(Object.keys(ACCOUNT_PAGES)).toEqual(["/packs", "/shop", "/collection", "/profile", "/account"]);
+    expect(Object.keys(ACCOUNT_PAGES)).toEqual([
+      "/packs",
+      "/shop",
+      "/market",
+      "/collection",
+      "/profile",
+      "/account",
+    ]);
     expect(Object.keys(OPENING_PAGES)).toEqual(["/packs/open", "/shop/open"]);
     expect(pagePath("/shop")).toBe("/shop");
     expect(pagePath("/packs/open")).toBe("/packs/open");
     expect(pagePath("/demo")).toBe("/demo");
-    expect(pagePath("/market")).toBeNull();
+    expect(pagePath("/market")).toBe("/market");
   });
 
   it("names every page's h1 as the route table does", () => {
@@ -70,6 +77,7 @@ describe("the route list (§3.1)", () => {
     expect(pageTitle("/packs/open")).toBe("Pack opening · Anime TCG");
     expect(pageTitle("/shop")).toBe("Shop · Anime TCG");
     expect(pageTitle("/shop/open")).toBe("Shop pack · Anime TCG");
+    expect(pageTitle("/market")).toBe("Market · Anime TCG");
     expect(pageTitle("/collection")).toBe("Collection · Anime TCG");
     expect(pageTitle("/profile")).toBe("Profile · Anime TCG");
     expect(pageTitle("/login")).toBe("Log in · Anime TCG");
@@ -77,7 +85,7 @@ describe("the route list (§3.1)", () => {
     expect(pageTitle("/account")).toBe("Manage account · Anime TCG");
     for (const path of [
       "/Shop",
-      "/market",
+      "/Market",
       "/Packs",
       "/packs/1",
       "/packs/Open",
@@ -91,8 +99,8 @@ describe("the route list (§3.1)", () => {
     expect(BOOT_TITLE).toBe("Anime TCG");
   });
 
-  it("links Packs, Shop, then Collection in the header; Profile has no link until item 4", () => {
-    expect(NAV_LINKS).toEqual(["/packs", "/shop", "/collection"]);
+  it("links Packs, Shop, Market, then Collection in the header; Profile has no link until item 4", () => {
+    expect(NAV_LINKS).toEqual(["/packs", "/shop", "/market", "/collection"]);
     expect(HOME_PATH).toBe("/packs");
   });
 
@@ -100,6 +108,7 @@ describe("the route list (§3.1)", () => {
     expect(Object.values(ACCOUNT_PAGES).map((page) => page.guardLine)).toEqual([
       "Log in to open your packs.",
       "Log in to see the shop.",
+      "Log in to see the market.",
       "Log in to see your collection.",
       "Log in to see your profile.",
       "Log in to manage your account.",
@@ -167,7 +176,7 @@ describe("the return path check (§3.3 step 3)", () => {
     ["a public page", "/login"],
     ["the start page", "/"],
     ["an unknown page", "/no-such-page"],
-    ["a page that does not exist yet", "/market"],
+    ["a page that does not exist", "/auction"],
     ["an opening page", "/packs/open"],
     ["the shop's opening page", "/shop/open"],
     ["the demo page", "/demo"],
@@ -213,7 +222,7 @@ describe("the trailing-slash replace (§3.1 rule 2)", () => {
       "//evil.example/",
       "/\\evil.example/",
       "/Packs/",
-      "/market/",
+      "/Market/",
       "/no-such/",
       "/packs/1/",
     ]) {

@@ -117,7 +117,7 @@ describe("the hero (§3.7 item 1)", () => {
 });
 
 describe("How it plays and Pack odds (§3.7 items 2 and 3)", () => {
-  it("numbered steps 01 to 04, each a term and one sentence from the server's numbers", async () => {
+  it("numbered steps 01 to 05, each a term and one sentence from the server's numbers", async () => {
     renderLanding();
     await screen.findByText(LEDE);
     const section = screen.getByRole("region", { name: "How it plays" });
@@ -129,18 +129,21 @@ describe("How it plays and Pack odds (§3.7 items 2 and 3)", () => {
       "Rarity",
       "Collection",
       "Karma",
+      "Market",
     ]);
     expect(steps.map((step) => step.querySelector('[aria-hidden="true"]')?.textContent)).toEqual([
       "01",
       "02",
       "03",
       "04",
+      "05",
     ]);
     expect(steps.map((step) => step.querySelector("p")?.textContent)).toEqual([
       "A new pack every 10 minutes, and up to 3 can pile up. Five cards each.",
       "Every character has one of six tiers, set by how many AniList users favourited them. Every pack uses the odds below.",
       "See how much of each series you have, and how much of all 2,983 characters.",
       KARMA,
+      "List cards for other players to buy with Karma, and buy theirs.",
     ]);
   });
 

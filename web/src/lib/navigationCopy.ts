@@ -15,6 +15,7 @@ export const headerCopy = {
   navLabel: "Main",
   packs: "Packs",
   shop: "Shop",
+  market: "Market",
   collection: "Collection",
   logIn: "Log in",
   register: "Register",
@@ -60,7 +61,7 @@ export const landingCopy = {
   howItPlays: "How it plays",
   /** The steps' visible numbers (`aria-hidden`, the list position is announced): `01`, `02`, … */
   stepNumber: (position: number) => String(position).padStart(2, "0"),
-  terms: { packs: "Packs", rarity: "Rarity", collection: "Collection", karma: "Karma" },
+  terms: { packs: "Packs", rarity: "Rarity", collection: "Collection", karma: "Karma", market: "Market" },
   packsRow: "A new pack on a timer, and a few can pile up. Five cards each.",
   packsRowWithFacts: (intervalSeconds: number, cap: number) =>
     `A new pack every ${interval(intervalSeconds)}, and up to ${formatCount(cap)} can pile up. Five cards each.`,
@@ -73,6 +74,8 @@ export const landingCopy = {
   /** From `feat/economy-ui` (§3.7 item 2). */
   karmaRow:
     "Recycle duplicates for Karma and spend it on themed packs. Karma comes only from playing. It can't be bought.",
+  /** From `feat/market-ui` (§3.7 item 2). */
+  marketRow: "List cards for other players to buy with Karma, and buy theirs.",
   /** The static pack beside the hero (`aria-hidden`, §3.7 item 1.8); the button and `Pack odds` say it aloud. */
   packDrawing: { brand: "Anime TCG", label: "Demo pack", cards: "Five cards" },
   odds: {
@@ -113,6 +116,7 @@ export function landingText(facts: DemoResponse | undefined): LandingText {
         text: pool === null ? landingCopy.collectionRow : landingCopy.collectionRowWithFacts(pool.characters),
       },
       { term: terms.karma, text: landingCopy.karmaRow },
+      { term: terms.market, text: landingCopy.marketRow },
     ],
   };
 }

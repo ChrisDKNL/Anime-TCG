@@ -114,7 +114,7 @@ describe("/shop and the header (market-and-shop.md §3.1 to §3.3)", () => {
     expect(buy).toHaveAccessibleDescription("400 Karma");
   });
 
-  it("links Packs, Shop and Collection; the free pack page never mentions the shop", async () => {
+  it("links Packs, Shop, Market and Collection; the free pack page never mentions the shop", async () => {
     await openShop();
     const nav = screen.getByRole("navigation", { name: "Main" });
     expect(within(nav).getByRole("link", { name: "Shop" })).toHaveAttribute("aria-current", "page");
@@ -122,7 +122,7 @@ describe("/shop and the header (market-and-shop.md §3.1 to §3.3)", () => {
       within(nav)
         .getAllByRole("link")
         .map((link) => link.getAttribute("href")),
-    ).toEqual(["/packs", "/shop", "/collection"]);
+    ).toEqual(["/packs", "/shop", "/market", "/collection"]);
   });
 
   it("the first three series, then `and <N> more`, which shows the rest in place", async () => {
