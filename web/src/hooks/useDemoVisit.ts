@@ -27,7 +27,7 @@ export interface DemoVisitStore {
 interface Options {
   /** A sign-in discards the visit, cards included (§3.10 item 5). */
   signedIn: boolean;
-  shell: Pick<ShellActions, "announce" | "clearNotice">;
+  shell: Pick<ShellActions, "announce" | "serverAnswered">;
   /**
    * Whether `/demo` is on screen or being navigated to: a reveal that lands elsewhere is counted and
    * held, and neither announced nor entered (§3.14 step 6).
@@ -68,7 +68,7 @@ export function useDemoVisitStore({ signedIn, shell, demoShowing }: Options): De
   const queryClient = useQueryClient();
   const { mutateAsync } = useMutation({ mutationFn: openDemoPack });
   const singleFlight = useSingleFlight();
-  const { announce, clearNotice } = shell;
+  const { announce, serverAnswered } = shell;
 
   const open = useCallback(
     async (from: DemoOpenedFrom) => {
@@ -81,8 +81,8 @@ export function useDemoVisitStore({ signedIn, shell, demoShowing }: Options): De
           dispatch({ type: "opened", opened, landedShowing });
           if (landedShowing) announce(demoCopy.announce(opened.cards.map((card) => card.rarity)));
           // The server answered, so a banner the facts raised no longer holds, and the facts can come now.
+          serverAnswered();
           if (queryClient.getQueryState(DEMO_FACTS_KEY)?.status === "error") {
-            clearNotice();
             void queryClient.refetchQueries({ queryKey: DEMO_FACTS_KEY });
           }
         } catch (err) {
@@ -102,7 +102,7 @@ export function useDemoVisitStore({ signedIn, shell, demoShowing }: Options): De
         }
       });
     },
-    [singleFlight, epoch, mutateAsync, demoShowing, announce, queryClient, clearNotice],
+    [singleFlight, epoch, mutateAsync, demoShowing, announce, serverAnswered, queryClient],
   );
 
   const [shownPacks] = useState(() => new WeakSet<DemoPack>());

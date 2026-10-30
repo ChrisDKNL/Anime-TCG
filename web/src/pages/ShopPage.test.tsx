@@ -557,6 +557,14 @@ describe("/shop/open (market-and-shop.md §3.3 step 6; navigation-and-landing.md
     expect(header().getByRole("link", { name: "Shop" })).toHaveAttribute("aria-current", "page");
   });
 
+  it("an address typed after the first render, with nothing held: replaced by /shop, whose h1 takes focus", async () => {
+    const { history } = await openShop();
+    act(() => history.push("/shop/open"));
+    await waitFor(() => expect(screen.getByRole("heading", { level: 1, name: "Shop" })).toHaveFocus());
+    expect(history.location.pathname).toBe("/shop");
+    expect(history.length).toBe(2);
+  });
+
   it("a load or a reload with nothing held: replaced by /shop, no focus move, nothing bought", async () => {
     const { history, fetchMock } = renderApp({}, account, "/shop/open");
     expect(await pageHeading("Shop")).toBeInTheDocument();
