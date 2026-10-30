@@ -139,6 +139,13 @@ All six mismatches of this spec's first version (S1 to S6: `closedAt`, the `limi
 - **`insufficient_funds` without `balance`** (no current server sends one): the red line names the balance the page holds, which is the server's last.
 - **Leaving the page with the confirmation open** closes it as `Cancel` does: its `requestId` goes with it. The next showing of Shop or Collection reads the wallet and the collection again, so a purchase whose answer was lost shows up there.
 
+**After the hunt on #51** (manager decisions, 2026-10-30):
+
+- **The 429 wait lives on the Shop page**, not in the confirmation: it survives `Cancel` and re-opening, as the recycle's does in the card dialog. `Cancel` still discards the `requestId`; the first try after the wait is a new request.
+- **A successful wallet read (200) clears the unreachable banner**, as any other answer from the server does.
+- **Wallet ordering**: a balance from a receipt (or from `insufficient_funds`) is newer than every `GET /api/wallet` sent before that answer arrived, so a read in flight when the receipt lands cannot overwrite it; a read sent after it replaces it.
+- **Nothing closes the confirmation while a purchase is in flight**, whatever closes it (Chromium lets a second Escape close a `<dialog>` without a cancelable `cancel` event): it opens again at once. `Cancel` and Escape close the dialog first and then return focus to `Buy…`, since a modal dialog's page is inert.
+
 ## 4. States
 
 | View              | State                     | User sees                                                                              | User can do                 |
