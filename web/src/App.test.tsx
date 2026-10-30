@@ -7,14 +7,22 @@ import App from "./App";
 import { SESSION_QUERY_KEY } from "./hooks/useAccountSession";
 import { createQueryClient } from "./lib/queryClient";
 import { createAppRouter } from "./router";
-import { envelope, makeAccount, noContent } from "./test/api";
-import { ANILIST, liveRegion, pageHeading, renderApp, signedOutSession } from "./test/app";
+import { envelope, makeAccount, mockFetch, noContent, urlOf, type MockAnswer } from "./test/api";
+import {
+  callsTo,
+  COLLECTION,
+  gameServer,
+  liveRegion,
+  OPEN,
+  PACKS,
+  pageHeading,
+  renderApp,
+  signedInRoutes,
+  signedOutSession,
+} from "./test/app";
 import { fill } from "./test/user";
 
-/**
- * Budget for async queries that race real timers (the 350 ms pack-reveal delay
- * in useGame) or React's passive-effect flush under parallel-file load.
- */
+/** Budget for async queries that race React's passive-effect flush under parallel-file load. */
 const ASYNC_TIMEOUT = 5_000;
 
 const account = makeAccount({ login: "Chris" });
@@ -37,7 +45,7 @@ describe("App boot", () => {
         .map((link) => link.textContent),
     ).toEqual(["Log in", "Register"]);
     expect(screen.queryByRole("link", { name: "Packs" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /open booster pack/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open pack" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^Account menu/ })).not.toBeInTheDocument();
     expect(document.title).toBe("Anime TCG");
   });
@@ -132,7 +140,7 @@ describe("App boot", () => {
   });
 
   it("unreachable on an account page: /login with the guard line; Try again that finds a session returns there", async () => {
-    const { fetchMock, history } = renderApp(
+    const { history } = renderApp(
       { "GET /api/session": { status: 502, raw: "bad gateway" } },
       account,
       "/collection",
@@ -142,14 +150,7 @@ describe("App boot", () => {
     expect(screen.getByText("Log in to see your collection.")).toBeInTheDocument();
     expect(screen.getByRole("alert")).toHaveTextContent("Couldn't reach the game server.");
 
-    fetchMock.mockImplementation(() =>
-      Promise.resolve(
-        new Response(JSON.stringify({ signedIn: true, account }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
-      ),
-    );
+    mockFetch(signedInRoutes(account));
     await userEvent.setup().click(screen.getByRole("button", { name: "Try again" }));
     expect(await pageHeading("Collection")).toBeInTheDocument();
     expect(history.location.pathname).toBe("/collection");
@@ -164,7 +165,7 @@ describe("App boot", () => {
     expect(within(mainNav()).getByRole("link", { name: "Collection (0)" })).not.toHaveAttribute(
       "aria-current",
     );
-    expect(screen.getByRole("button", { name: /open booster pack/i })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Open pack" })).toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "Anime TCG" })).not.toBeInTheDocument();
     await waitFor(() => expect(document.title).toBe("Packs · Anime TCG"));
   });
@@ -335,16 +336,17 @@ describe("App account switch", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it("a session naming a different account starts that account's game from scratch, on the same page", async () => {
-    const { queryClient, history } = renderApp({}, account);
+    const { routes } = gameServer();
+    const { queryClient, history } = renderApp(routes, account, "/packs");
     const user = userEvent.setup();
-    const button = await screen.findByRole("button", { name: /open booster pack/i });
-    await waitFor(() => expect(button).toBeEnabled(), { timeout: ASYNC_TIMEOUT });
-    await user.click(button);
+    await user.click(await screen.findByRole("button", { name: "Open pack" }));
+    expect(await screen.findAllByRole("article", {}, { timeout: ASYNC_TIMEOUT })).toHaveLength(5);
     expect(
       await screen.findByRole("link", { name: "Collection (5)" }, { timeout: ASYNC_TIMEOUT }),
     ).toBeInTheDocument();
 
     const other = makeAccount({ id: "9b2d7c1e-0000-4000-8000-000000000002", login: "Kris" });
+    mockFetch(signedInRoutes(other));
     act(() => {
       queryClient.setQueryData(SESSION_QUERY_KEY, { signedIn: true, account: other });
     });
@@ -352,7 +354,7 @@ describe("App account switch", () => {
     expect(
       await screen.findByRole("button", { name: "Account menu. Signed in as \u2068Kris\u2069" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: "Collection (0)" })).toBeInTheDocument();
+    expect(await screen.findByRole("link", { name: "Collection (0)" })).toBeInTheDocument();
     expect(screen.queryAllByRole("article")).toHaveLength(0);
     expect(history.location.pathname).toBe("/packs");
   });
@@ -361,63 +363,73 @@ describe("App account switch", () => {
 describe("App game", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it("opens a pack of 5, adds it to the collection and keeps nothing in localStorage", async () => {
-    renderApp({}, account);
+  it("opens a pack the server deals: five cards, New markers, the count, the summary announced, nothing stored", async () => {
+    const { routes } = gameServer();
+    const { fetchMock } = renderApp(routes, account, "/packs");
     const user = userEvent.setup();
-    const button = await screen.findByRole("button", { name: /open booster pack/i });
-    await waitFor(() => expect(button).toBeEnabled(), { timeout: ASYNC_TIMEOUT });
-
-    await user.click(button);
-    expect(screen.getByRole("button", { name: CONTROL })).toBeDisabled();
+    expect(await screen.findByText("3 of 3 packs ready")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Open pack" }));
 
     const cards = await screen.findAllByRole("article", {}, { timeout: ASYNC_TIMEOUT });
     expect(cards).toHaveLength(5);
     expect(screen.getAllByText("New")).toHaveLength(5);
-    expect(screen.getByRole("link", { name: "Collection (5)" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: CONTROL })).toBeEnabled();
-    expect(localStorage.getItem("anime-tcg:inventory:v1")).toBeNull();
-  });
-
-  it("the collection and the last reveal survive a page change; the reveal comes back without its entrance", async () => {
-    renderApp({}, account);
-    const user = userEvent.setup();
-    const button = await screen.findByRole("button", { name: /open booster pack/i });
-    await waitFor(() => expect(button).toBeEnabled(), { timeout: ASYNC_TIMEOUT });
-    await user.click(button);
-    const revealed = await screen.findAllByRole("article", {}, { timeout: ASYNC_TIMEOUT });
-    expect(revealed[0]).toHaveClass("card-reveal");
-
-    await user.click(screen.getByRole("link", { name: "Collection (5)" }));
-    await pageHeading("Collection");
-    expect(screen.getByText("5 cards")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("link", { name: "Packs" }));
-    await pageHeading("Packs");
-    const returned = screen.getAllByRole("article");
-    expect(returned).toHaveLength(5);
-    for (const card of returned) expect(card).not.toHaveClass("card-reveal");
-  });
-
-  it("a pack opened on /packs lands while the player is on another page", async () => {
-    renderApp({}, account);
-    const user = userEvent.setup();
-    const button = await screen.findByRole("button", { name: /open booster pack/i });
-    await waitFor(() => expect(button).toBeEnabled(), { timeout: ASYNC_TIMEOUT });
-    await user.click(button);
-    // The links stay usable while the pack opens (§3.5 step 4).
-    await user.click(screen.getByRole("link", { name: "Collection (0)" }));
-    await pageHeading("Collection");
+    expect(screen.getByText("2 of 3 packs ready")).toBeInTheDocument();
+    expect(liveRegion()).toHaveTextContent("Your pack: 1 Rare, 1 Uncommon and 3 Common. 5 new.");
     expect(
       await screen.findByRole("link", { name: "Collection (5)" }, { timeout: ASYNC_TIMEOUT }),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: CONTROL })).toBeEnabled();
+    expect(callsTo(fetchMock, OPEN)).toHaveLength(1);
+    expect(fetchMock.mock.calls.some(([url]) => urlOf(url).includes("anilist"))).toBe(false);
+    expect(localStorage.length).toBe(0);
   });
 
-  it("shows the AniList error with a retry button when signed in", async () => {
-    renderApp({ [ANILIST]: { status: 429, body: { errors: [{ message: "Too Many Requests" }] } } }, account);
-    const alert = await screen.findByRole("alert", {}, { timeout: ASYNC_TIMEOUT });
-    expect(alert).toHaveTextContent(/rate limit/i);
-    expect(screen.getByRole("button", { name: /retry/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /open booster pack/i })).toBeDisabled();
+  it("the reveal survives a page change and comes back without its entrance", async () => {
+    const { routes } = gameServer();
+    renderApp(routes, account, "/packs");
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Open pack" }));
+    const list = await screen.findByRole("list", { name: "Your pack" }, { timeout: ASYNC_TIMEOUT });
+    expect(within(list).getAllByRole("listitem")[0]).toHaveClass("animate-card-enter");
+
+    await user.click(await screen.findByRole("link", { name: "Collection (5)" }, { timeout: ASYNC_TIMEOUT }));
+    await pageHeading("Collection");
+    expect(await screen.findByText("5 cards · No duplicates")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("link", { name: "Packs" }));
+    await pageHeading("Packs");
+    const returned = within(screen.getByRole("list", { name: "Your pack" })).getAllByRole("listitem");
+    expect(returned).toHaveLength(5);
+    for (const item of returned) expect(item).not.toHaveClass("animate-card-enter");
+  });
+
+  it("a pack opened on /packs lands while the player is on another page: unannounced, the collection refetched", async () => {
+    const { routes, server } = gameServer();
+    let release: () => void = () => undefined;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const open = routes[OPEN] as (init: RequestInit | undefined, url: string) => MockAnswer;
+    const { fetchMock } = renderApp(
+      { ...routes, [OPEN]: async (init, url) => held.then(() => open(init, url)) },
+      account,
+      "/packs",
+    );
+    const user = userEvent.setup();
+    await user.click(await screen.findByRole("button", { name: "Open pack" }));
+    // The links stay usable while the pack opens (§3.5 step 4); the Account control does not.
+    expect(screen.getByRole("button", { name: CONTROL })).toBeDisabled();
+    await user.click(screen.getByRole("link", { name: "Collection (0)" }));
+    await pageHeading("Collection");
+    release();
+
+    expect(
+      await screen.findByRole("link", { name: "Collection (5)" }, { timeout: ASYNC_TIMEOUT }),
+    ).toBeInTheDocument();
+    expect(server.opened).toBe(1);
+    expect(liveRegion()).not.toHaveTextContent("Your pack");
+    expect(callsTo(fetchMock, PACKS)).toHaveLength(1);
+    expect(callsTo(fetchMock, COLLECTION).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByRole("button", { name: CONTROL })).toBeEnabled();
   });
 });

@@ -1,22 +1,22 @@
 /// <reference lib="dom" />
 import { expect, test, type Page } from "@playwright/test";
-import { isolated, mockAniList } from "./support/fake-api";
+import { isolated, mockCardImages } from "./support/fake-api";
 
 /**
  * Test plan: two tabs of one browser against the real api through the Vite /api proxy
  * (docs/design/navigation-and-landing.md §3.2 step 2, §3.5 steps 7 and 8; accounts.md §4.8).
  *
  * Skipped unless REAL_API_URL, REAL_API_INVITE_CODE and DATABASE_URL are set, exactly as
- * accounts.real.spec.ts (see there for how to start the api). AniList stays mocked.
+ * accounts.real.spec.ts (see there for how to start the api). AniList's image CDN stays mocked.
  *
  * 1. Register a fresh login in tab 1; tab 2 (same cookie jar) opens /account and is signed in.
  * 2. Tab 1 logs out: the server ends the session.
- * 3. Tab 2 does not know yet: moving between its pages asks the server nothing (§3.2 step 2; the
- *    app never polls), so it still shows the signed-in header.
- * 4. Tab 2's next call (a rename) is answered `unauthenticated`: /login replaces /account, the
- *    session-ended banner shows, focus is on the `Log in` heading, the return path is /account,
- *    and the old login is unchanged on the server.
- * 5. Tab 2 logs in again and is back on /account; tab 1 on its next load is signed in too.
+ * 3. Tab 2 does not know yet: it still shows the signed-in header, and nothing polls (§3.2 step 2).
+ * 4. Tab 2's next call is answered `unauthenticated`. Since 1c that call is the `GET /api/packs`
+ *    that showing /packs sends (packs-page.md §3.1 step 2), not a session check: /login replaces
+ *    /packs, the session-ended banner shows, focus is on the `Log in` heading and the return path
+ *    is /packs. (Before 1c the pages asked nothing and the first call was a rename on /account.)
+ * 5. Tab 2 logs in again and is back on /packs; tab 1 on its next load is signed in too.
  * Rate budget: one register and one log in. Cleanup: DELETE this run's login in afterAll.
  */
 
@@ -58,7 +58,7 @@ test.describe("two tabs against the real api", () => {
     context,
   }) => {
     test.setTimeout(60_000);
-    await mockAniList(page);
+    await mockCardImages(page);
 
     await page.goto("/register");
     await page.getByRole("textbox", { name: "Invite code" }).fill(INVITE_CODE!);
@@ -71,7 +71,7 @@ test.describe("two tabs against the real api", () => {
     await expect(controlFor(page, LOGIN)).toBeVisible();
 
     const other = await context.newPage();
-    await mockAniList(other);
+    await mockCardImages(other);
     await other.goto("/account");
     await expect(h1(other, "Manage account")).toBeVisible();
     await expect(controlFor(other, LOGIN)).toBeVisible();
@@ -82,21 +82,15 @@ test.describe("two tabs against the real api", () => {
     await expect(h1(page, "Anime TCG")).toBeFocused();
     expect(await (await page.request.get("/api/session")).json()).toEqual({ signedIn: false });
 
-    // Tab 2 moves between its pages without asking the server: it still shows the account.
+    // Tab 2 does not know yet: nothing polls, so it still shows the account.
+    await expect(controlFor(other, LOGIN)).toBeVisible();
     const sessionChecks: string[] = [];
     other.on("request", (request) => {
       if (new URL(request.url()).pathname === "/api/session") sessionChecks.push(request.method());
     });
-    await mainNav(other).getByRole("link", { name: "Packs", exact: true }).click();
-    await expect(h1(other, "Packs")).toBeFocused();
-    await controlFor(other, LOGIN).click();
-    await other.getByRole("menuitem", { name: "Manage account" }).click();
-    await expect(h1(other, "Manage account")).toBeFocused();
-    expect(sessionChecks).toEqual([]);
 
-    // Its next call is answered unauthenticated.
-    await other.getByRole("main").getByRole("textbox", { name: "New login" }).fill(`${LOGIN}-x`);
-    await other.getByRole("main").getByRole("button", { name: "Save" }).click();
+    // Its next call, the allowance /packs asks for when it is shown, is answered unauthenticated.
+    await mainNav(other).getByRole("link", { name: "Packs", exact: true }).click();
     await expect(other).toHaveURL(`${REAL_API_URL}/login`);
     await expect(h1(other, "Log in")).toBeFocused();
     await expect(
@@ -104,16 +98,18 @@ test.describe("two tabs against the real api", () => {
     ).toBeVisible();
     await expect(controlFor(other, LOGIN)).toHaveCount(0);
     expect(await other.evaluate(() => (history.state as { returnTo?: unknown } | null)?.returnTo)).toBe(
-      "/account",
+      "/packs",
     );
+    expect(sessionChecks).toEqual([]);
 
-    // Log in again in tab 2: back on /account, the login unchanged.
+    // Log in again in tab 2: back on /packs.
     await other.getByRole("textbox", { name: "Login", exact: true }).fill(LOGIN);
     await other.getByLabel("Password", { exact: true }).fill(PASSWORD);
     await other.getByRole("button", { name: "Log in", exact: true }).click();
-    await expect(other).toHaveURL(`${REAL_API_URL}/account`);
-    await expect(h1(other, "Manage account")).toBeFocused();
+    await expect(other).toHaveURL(`${REAL_API_URL}/packs`);
+    await expect(h1(other, "Packs")).toBeFocused();
     await expect(controlFor(other, LOGIN)).toBeVisible();
+    await expect(other.getByText("3 of 3 packs ready")).toBeVisible();
 
     // Tab 1 picks the new session up on its next load.
     await page.reload();

@@ -234,6 +234,7 @@ The owner chose to show how close the guarantee is, on the pack page ("Owner, 20
 
 - The card is not itself a control. Where it opens something (a tile), the wrapping `<button>` is named as `collection-overview.md` §7 says, and the card's inner text is hidden from that name's computation only by being inside the button (the button's `aria-label` is the full sentence).
 - Where the card stands alone (reveal, demo), it is an `<article aria-label="<name>, <Tier>, <series>">` with the stars' hidden text and the rank's accessible text inside.
+- Bidi isolation (T1, as C9 does for logins; `collection-overview.md` §5.6): the name and the series each sit in their own `dir="auto"` element, and in the plain strings (the article's `aria-label`, the two `title`s) each is wrapped in U+2068 … U+2069.
 - Stars: glyphs `aria-hidden`, text `<Tier>, <n> stars` (`1 star` for Common).
 - Rank: `Popularity rank <rank> of <pool>`.
 - Effects are decoration: no `aria-live`, nothing announced.

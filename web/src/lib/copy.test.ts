@@ -27,7 +27,7 @@ describe("copy", () => {
   it("contains none of the words §8 forbids", () => {
     const rendered: Array<[string, string]> = [];
     renderAll(copy, "copy", rendered);
-    expect(rendered.length).toBeGreaterThan(60);
+    expect(rendered.length).toBeGreaterThan(55);
     const offenders = rendered.filter(([, text]) => FORBIDDEN.test(text));
     expect(offenders).toEqual([]);
   });
@@ -87,12 +87,9 @@ describe("copy", () => {
     expect(copy.common.rateLimited).not.toMatch(/\d|five|ten|second|miss/i);
   });
 
-  it("isolates the login with FSI/PDI in the plain strings that cannot hold <bdi>", () => {
+  it("isolates the login with FSI/PDI in the plain string that cannot hold <bdi>", () => {
     const rtl = "\u202Egnp.exe";
     expect(copy.header.accountMenuLabel(rtl)).toBe("Account menu. Signed in as \u2068\u202Egnp.exe\u2069");
-    expect(copy.inventoryCopy.resetConfirm(rtl)).toBe(
-      "Delete every card in \u2068\u202Egnp.exe\u2069? This cannot be undone.",
-    );
   });
 
   it("interpolates the login verbatim", () => {
@@ -103,9 +100,6 @@ describe("copy", () => {
     );
     expect(copy.manageCopy.deleteBodyNoCards("Chris")).toBe(
       "This permanently deletes Chris. There is no undo.",
-    );
-    expect(copy.inventoryCopy.resetConfirm("Chris")).toBe(
-      "Delete every card in \u2068Chris\u2069? This cannot be undone.",
     );
   });
 });

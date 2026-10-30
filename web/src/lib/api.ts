@@ -1,9 +1,13 @@
 import type {
   AccountResponse,
   ChangePasswordBody,
+  CollectionResponse,
   DeleteBody,
   InviteBody,
   LoginBody,
+  OpenPackBody,
+  PackOpened,
+  PacksResponse,
   RegisterBody,
   RenameBody,
   SessionResponse,
@@ -16,9 +20,10 @@ export class ApiError extends Error {
   readonly status: number;
   readonly code: ErrorCode;
   /**
-   * How long the server asks the UI to wait: the envelope's own seconds (the
-   * sign-in breather), else the `Retry-After` header (the route rate limiter,
-   * whose `rate_limited` envelope carries none).
+   * How long the server asks the UI to wait, in seconds: the envelope's own
+   * number (the sign-in breather's `too_many_failures`, `no_pack_available`),
+   * else the `Retry-After` header, which is all a `rate_limited` answer from the
+   * route rate limiter carries (accounts.md §4.4-D, packs-page.md §9, question 3).
    */
   readonly retryAfterSeconds: number | undefined;
 
@@ -93,9 +98,11 @@ async function readJson(res: Response): Promise<unknown> {
 /**
  * `Retry-After` as whole seconds, or `undefined` when it is absent or not a
  * positive delta-seconds value that counts exactly (400 nines is `Infinity`).
- * The api only sends delta-seconds, so the HTTP-date form is not read.
+ * The api only sends delta-seconds, so the HTTP-date form is not read: a date
+ * would need the device clock. The one reader for every caller; each caller
+ * applies its own fallback and cap (`serverWait`, `rateLimitWaitSeconds`).
  */
-function readRetryAfter(headers: Headers): number | undefined {
+export function readRetryAfter(headers: Headers): number | undefined {
   const value = headers.get("retry-after")?.trim();
   if (value === undefined || !/^\d+$/.test(value)) return undefined;
   const seconds = Number(value);
@@ -154,4 +161,17 @@ export function changePassword(body: ChangePasswordBody): Promise<void> {
 
 export function deleteAccount(body: DeleteBody): Promise<void> {
   return expectNoContent("POST", "/api/account/delete", body);
+}
+
+export function getPacks(): Promise<PacksResponse> {
+  return expectJson<PacksResponse>("GET", "/api/packs");
+}
+
+/** 201 for a new opening and 200 for a replay of `requestId` carry the same body. */
+export function openPack(body: OpenPackBody): Promise<PackOpened> {
+  return expectJson<PackOpened>("POST", "/api/packs/open", body);
+}
+
+export function getCollection(): Promise<CollectionResponse> {
+  return expectJson<CollectionResponse>("GET", "/api/collection");
 }

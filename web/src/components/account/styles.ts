@@ -1,7 +1,8 @@
 /**
  * The accounts feature's class strings, complete at build time, all existing
- * utilities (accounts.md §6: no new tokens). Red is the existing semantic
- * colour of the AniList banner and the Inventory Reset button.
+ * utilities (accounts.md §6: no new tokens). Red is the app's semantic
+ * colour for errors and destructive actions: the alert banners, the field
+ * errors and the Delete account buttons.
  */
 
 export const FOCUS_RING = "focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-500";
@@ -37,6 +38,10 @@ export const INPUT_BORDER: Record<"valid" | "invalid", string> = {
 export const ACCOUNT_CONTROL = `inline-flex max-w-full items-center gap-2 rounded-xl bg-zinc-900 px-2 py-1.5 text-sm text-zinc-200 hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-zinc-900 ${PHONE_MIN_HEIGHT} ${FOCUS_RING}`;
 
 export const MENU_ITEM = `block w-full rounded-lg px-3 py-2 text-left text-sm text-zinc-200 hover:bg-zinc-800 focus:bg-zinc-800 ${PHONE_MIN_HEIGHT} focus:outline-none`;
+
+/** The modal `<dialog>` shell: the delete confirmation and the odds page (packs-page.md §3.5, §5.4). */
+export const DIALOG =
+  "pop-in m-auto max-h-[85vh] w-[calc(100%-2rem)] max-w-lg overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-100 backdrop:bg-zinc-950/70 backdrop:backdrop-blur-sm focus:outline-none";
 
 export const PANEL = "rounded-2xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-100";
 export const PANEL_HEADING = "text-lg font-bold";

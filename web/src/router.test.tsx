@@ -3,8 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SESSION_QUERY_KEY } from "./hooks/useAccountSession";
 import { ACCOUNT_PAGES, PUBLIC_PAGES } from "./lib/routes";
-import { makeAccount } from "./test/api";
-import { pageHeading, renderApp, signedOutSession } from "./test/app";
+import { makeAccount, mockFetch } from "./test/api";
+import { gameServer, pageHeading, renderApp, signedInRoutes, signedOutSession } from "./test/app";
 import { fill } from "./test/user";
 
 /**
@@ -236,21 +236,14 @@ describe("paths (§3.1 rule 2)", () => {
   });
 
   it("unreachable on an unknown path: Try again that finds a session stays there, with the signed-in header", async () => {
-    const { fetchMock, history } = renderApp(
+    const { history } = renderApp(
       { "GET /api/session": { status: 502, raw: "bad gateway" } },
       account,
       "/no-such-page",
     );
     await pageHeading("Page not found");
     expect(within(mainNav()).getByRole("link", { name: "Log in" })).toBeInTheDocument();
-    fetchMock.mockImplementation(() =>
-      Promise.resolve(
-        new Response(JSON.stringify({ signedIn: true, account }), {
-          status: 200,
-          headers: { "content-type": "application/json" },
-        }),
-      ),
-    );
+    mockFetch(signedInRoutes(account));
     await userEvent.setup().click(screen.getByRole("button", { name: "Try again" }));
     expect(await screen.findByRole("button", { name: /^Account menu/ })).toBeInTheDocument();
     expect(history.location.pathname).toBe("/no-such-page");
@@ -259,11 +252,10 @@ describe("paths (§3.1 rule 2)", () => {
   });
 
   it("keeps the game state across the not-found page", async () => {
-    const { history } = renderApp({}, account, "/packs");
+    const { routes } = gameServer();
+    const { history } = renderApp(routes, account, "/packs");
     const user = userEvent.setup();
-    const button = await screen.findByRole("button", { name: /open booster pack/i });
-    await waitFor(() => expect(button).toBeEnabled());
-    await user.click(button);
+    await user.click(await screen.findByRole("button", { name: "Open pack" }));
     await screen.findByRole("link", { name: "Collection (5)" }, { timeout: 5_000 });
     act(() => history.push("/no-such-page"));
     await pageHeading("Page not found");

@@ -1,7 +1,6 @@
 import { RouterProvider } from "@tanstack/react-router";
 import { BootFrame } from "./components/layout/BootFrame";
 import { useAccountSession } from "./hooks/useAccountSession";
-import { PoolContext, useCharacterPool } from "./hooks/useCharacterPool";
 import { useDelayedFlag } from "./hooks/useDelayedFlag";
 import type { AppRouter } from "./router";
 
@@ -16,14 +15,8 @@ const LOADING_DELAY_MS = 300;
  */
 export default function App({ router }: { router: AppRouter }) {
   const { session } = useAccountSession();
-  // The public character pool loads alongside the session check, so the pack button is ready when a player signs in.
-  const pool = useCharacterPool();
   const showLoading = useDelayedFlag(session.status === "loading", LOADING_DELAY_MS);
 
   if (session.status === "loading") return <BootFrame showLoading={showLoading} />;
-  return (
-    <PoolContext value={pool}>
-      <RouterProvider router={router} />
-    </PoolContext>
-  );
+  return <RouterProvider router={router} />;
 }

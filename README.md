@@ -1,8 +1,8 @@
 # Anime TCG
 
-A solo, non-commercial anime card-collection game. Open booster packs of five
-characters pulled from the free [AniList GraphQL API](https://docs.anilist.co/),
-each rolled for a rarity tier, and build a collection that persists in your browser.
+A solo, non-commercial anime card-collection game. Open packs of five characters
+drawn from the most popular anime on [AniList](https://docs.anilist.co/), each
+dealt a rarity tier by the server, and build a collection kept on the server.
 
 Stack: Vite 8 · React 19 · TypeScript · Tailwind CSS 4 in `web/`, served from a hardened Caddy container; Fastify 5 · PostgreSQL 16 · Drizzle in `api/`; the API contract and game constants both sides share in `shared/` (`docs/04-deployment.md`, [ADR 0009](docs/adr/0009-backend-stack.md)).
 
@@ -23,7 +23,7 @@ cp api/.env.example api/.env.local     # set SESSION_SECRET (openssl rand -base6
 npm run dev                            # api on http://localhost:3000, web on http://localhost:5173 (proxies /api)
 ```
 
-The web app alone still runs without the api (`npm run dev -w web`); nothing in the game calls `/api` yet.
+The web app needs the api: every page after sign-in reads it through the `/api` proxy.
 
 ```bash
 npm run check                 # format, lint, typecheck, unit tests, build for every workspace (the pre-push gate)
@@ -45,7 +45,7 @@ Dockerfile, Caddyfile          The web image: Vite build served by Caddy, /api p
 shared/                        @anime-tcg/shared: TypeScript only
   src/api.ts                   SessionResponse, HealthResponse (TypeBox schema + Static type)
   src/errors.ts                ERROR_CODES, ErrorEnvelope
-  src/rarity.ts                RARITIES, RARITY_LABEL, BASE_WEIGHTS, POPULARITY_INFLUENCE
+  src/rarity.ts                RARITIES, RARITY_LABEL and the server's integer odds tables
 api/                           @anime-tcg/api: Fastify 5 on Node 26
   src/server.ts                The only file that reads process.env and listens
   src/start.ts                 migrate, build, listen, drain on shutdown
@@ -57,127 +57,34 @@ api/                           @anime-tcg/api: Fastify 5 on Node 26
   src/routes/                  health (/healthz), session (/api/session)
   test/                        Route and security tests against a real Postgres
   Dockerfile                   node:26-alpine multi-stage, non-root, read-only friendly
-web/                           @anime-tcg/web: the Vite app (unchanged proof of concept)
+web/                           @anime-tcg/web: the Vite app, a client of the api
   index.html                   Vite entry, <html class="dark">
   vite.config.ts               React + Tailwind v4 plugins, /api dev proxy, shared source alias
   src/
-    main.tsx                   React root
-    index.css                  Tailwind import, rarity colour tokens, reveal/glow keyframes
-    types.ts                   Character (from API), Card (owned instance); Rarity comes from shared/
-    lib/
-      anilist.ts               GraphQL query, fetch + normalise, 24h localStorage cache
-      rarity.ts                Weighting maths: popularity tilt, roll (constants from shared/)
-      pack.ts                  openPack(): sample 5 distinct characters, assign rarity
-    hooks/
-      useCharacterPool.ts      Loads the pool once; loading / ready / error + reload()
-      useInventory.ts          The inventory array, persisted, with derived stats
-    components/
-      BoosterPack.tsx          The "Open Booster Pack" button + odds line
-      CharacterCard.tsx        Image, name, anime origin, glowing rarity frame
-      RarityBadge.tsx          Small tier pill
-      Inventory.tsx            Collection grid, grouped duplicates, rarity filter
-    App.tsx                    Wires it together: tabs, pack reveal, NEW badges
+    main.tsx, App.tsx          React root; the session check, then the router
+    router.tsx                 TanStack Router route tree and guards (ADR 0012)
+    index.css                  Tailwind import, the card and rarity tokens, the reveal entrance
+    lib/                       Pure logic: api client, game state reducer, copy modules, routes
+    hooks/                     State: the session, the game (packs, opening, collection), countdowns
+    components/                card/ (the six-tier card), packs/ (control, reveal, odds), collection/,
+                               account/, layout/
+    pages/                     One component per route
   e2e/                         Playwright
 ```
 
 ## How it works
 
-### 1. AniList integration (`web/src/lib/anilist.ts`)
+The server decides every outcome; the browser renders what it says ([ADR 0008](docs/adr/0008-server-authoritative.md)).
 
-One query, paginated:
-
-```graphql
-query CharacterPool($page: Int!, $perPage: Int!) {
-  Page(page: $page, perPage: $perPage) {
-    pageInfo {
-      hasNextPage
-    }
-    characters(sort: FAVOURITES_DESC) {
-      id
-      favourites
-      name {
-        full
-      }
-      image {
-        large
-      }
-      media(perPage: 1, sort: POPULARITY_DESC, type: ANIME) {
-        nodes {
-          title {
-            english
-            native
-            romaji
-          }
-        }
-      }
-    }
-  }
-}
-```
-
-- `sort: FAVOURITES_DESC` gives "popular characters"; `favourites` is the popularity score used by the rarity maths.
-- `media(perPage: 1, sort: POPULARITY_DESC)` returns each character's single most popular anime, so every card has one clean origin label. `romaji` is a fallback for titles with no English name.
-- Two pages of 50 (AniList's max `perPage`) = a 100-character pool. The result is cached in `localStorage` for 24 hours because AniList rate-limits to 90 requests/minute and is frequently degraded to 30 (see https://docs.anilist.co/guide/rate-limiting). "Retry" in the error banner bypasses the cache.
-
-### 2. Pack opening (`web/src/lib/pack.ts`, `web/src/App.tsx`)
-
-`openPack(pool)` does a partial Fisher–Yates shuffle to pick 5 _distinct_ characters, then calls `assignRarity` on each and stamps a `uid` and `pulledAt`. The button handler in `App.tsx`:
-
-1. snapshots which character ids were already owned (for "NEW" badges),
-2. clears `lastPack` so the reveal animation re-triggers,
-3. after a 350 ms "ripping the pack" delay, sets `lastPack` and appends the cards to the inventory.
-
-### 3. Rarity logic (`web/src/lib/rarity.ts`, constants in `shared/src/rarity.ts`)
-
-Base odds are the headline numbers: **Common 70 % · Rare 25 % · Legendary 5 %**.
-On top of that, popularity tilts the odds slightly:
-
-```
-p         = popularityScore(character)          // 0..1, log-scaled favourites rank in pool
-legendary = 0.05 + 0.10 · p · POPULARITY_INFLUENCE
-rare      = 0.25 + 0.10 · p · POPULARITY_INFLUENCE
-common    = 1 − legendary − rare
-```
-
-With `POPULARITY_INFLUENCE = 0.6`, the most popular character in the pool rolls
-~11 % Legendary / ~31 % Rare; the least popular stays at exactly 5 % / 25 %.
-Set the constant to `0` for a pure random roll with identical odds for everyone.
-
-`popularityScore` uses `log1p(favourites)` because favourites are heavy-tailed
-(the #1 character has ~10× the favourites of #100); a linear scale would give
-every character outside the top five a score of ~0.
-
-`rollRarity(weights, roll)` takes the random number as a parameter so it is
-trivially unit-testable with a seeded value.
-
-### 4. Inventory state (`web/src/hooks/useInventory.ts`)
-
-The inventory is a **flat, append-only `Card[]`**:
-
-```ts
-const [cards, setCards] = useState<Card[]>(loadInventory); // hydrated from localStorage
-
-const addCards = useCallback((newCards: Card[]) => {
-  setCards((prev) => [...prev, ...newCards]); // functional update
-}, []);
-```
-
-Why this shape:
-
-- **Every pull is its own entry** with a unique `uid`. Duplicates are real duplicates, not a counter. That keeps the write path a single concat and means nothing can get out of sync.
-- **Functional update** (`prev => [...]`) so two rapid pack-opens never overwrite each other with a stale closure.
-- **Everything else is derived** with `useMemo`: total count, unique characters, counts per rarity, and (in `Inventory.tsx`) grouping by `characterId:rarity` so three Common pulls of the same character show once with "×3" while a Legendary pull of that character is its own card.
-- A `useEffect` on `cards` writes the array to `localStorage` on every change, wrapped in `try/catch` so private-mode or quota errors degrade to in-memory only.
-- `ownedBefore(timestamp)` returns the set of character ids owned before a pack was opened; `App.tsx` uses it to badge first-time pulls as **NEW**.
-
-If this ever grew (trading, decks, thousands of cards), the natural next step is a `useReducer` with `ADD_CARDS` / `CLEAR` actions and an indexed `Map<characterId, Card[]>`. For a solo game a plain array is simpler and fast enough.
+- **Characters** come from an owner-run snapshot of AniList (`snapshot-pool`, `docs/04-deployment.md`), never from the browser: the web app makes no request to AniList's API and its CSP allows `connect-src 'self'` only. Card art is loaded from AniList's image CDN.
+- **Packs** (`docs/design/collection-packs.md`, `docs/design/packs-page.md`): `GET /api/packs` gives the allowance, the published odds and the pity counter; `POST /api/packs/open` with a `requestId` deals five cards on the server. A lost answer is retried with the same `requestId`, so it shows the pack the server dealt instead of opening a second one. The countdown to the next pack runs on the monotonic clock and asks the server once when it ends; nothing polls.
+- **The card** (`docs/design/card-and-rarity.md`): six tiers, each with its frame, stars and colours; Epic and up glow, and their glint and drift stop under `prefers-reduced-motion`.
+- **The collection** is `GET /api/collection`; the browser stores no cards, pool or odds.
 
 ### UI notes
 
 - Dark mode only (`color-scheme: dark`, zinc palette).
-- Rarity frames are a `Record<Rarity, string>` of full Tailwind class strings. Tailwind v4 only emits classes it can see at build time, so the classes are never templated.
-- Legendary cards get a pulsing amber glow (`glow-legendary` keyframes); Rare is a static sky-blue glow; Common a faint slate border. Animations respect `prefers-reduced-motion`.
-- Grid: 2 columns on phones, 3 on small screens, 5 on large (pack view); up to 6 on the collection view.
+- Tailwind v4 only emits classes it can see at build time, so per-tier classes are `Record<Rarity, string>` lookups of complete class strings, never templated.
 
 ## Attribution
 

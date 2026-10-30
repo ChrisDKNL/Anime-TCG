@@ -1,5 +1,5 @@
 import { expect, test, type APIRequestContext, type BrowserContext, type Page } from "@playwright/test";
-import { isolated, mockAniList } from "./support/fake-api";
+import { isolated, mockCardImages } from "./support/fake-api";
 
 /**
  * Test plan: a short accounts journey through Caddy on a deployed compose stack
@@ -10,7 +10,7 @@ import { isolated, mockAniList } from "./support/fake-api";
  * The second variable is a deliberate opt-in: this spec creates an account, so it must never run
  * by accident against a stack whose accounts are real (the owner's acceptance stack counts toward
  * the 10-account cap). It deletes what it creates at the end, and again after the test whatever
- * its outcome, so a failed run does not keep one of the cap's places. AniList stays mocked.
+ * its outcome, so a failed run does not keep one of the cap's places. AniList's image CDN stays mocked.
  *
  * - Register through the two steps at /register; the browser stores the session cookie as __Host-session,
  *   HttpOnly, Secure, SameSite=Lax, Path=/ and host-only (no Domain), and page script cannot read it.
@@ -37,7 +37,7 @@ test.describe("accounts journey through Caddy", () => {
   test.afterEach(async ({ page }) => deleteThrowawayAccount(page.request));
 
   test("register, cookie flags, log out, log in, delete", async ({ page, context }) => {
-    await mockAniList(page);
+    await mockCardImages(page);
     await page.goto("/");
 
     await nav(page).getByRole("link", { name: "Register" }).click();

@@ -81,7 +81,7 @@ The Account screen and its choice panel are retired (navigation-and-landing.md �
 
 ### 3.6 Normal app (signed in)
 
-Identical to today plus: the Account control in the header, `document.title` per page (`Packs · Anime TCG`, navigation-and-landing.md §3.1 rule 4; the login is not in it), the Inventory `Reset` confirm names the login (§8). The `Collection` page link keeps its `Collection (N)` label; N comes from the server's collection response. (Moving the collection and pack opening themselves to the server is roadmap work under ADR 0008 and is specced separately; this spec only requires that nothing account-scoped renders without a session.)
+Identical to today plus: the Account control in the header, `document.title` per page (`Packs · Anime TCG`, navigation-and-landing.md §3.1 rule 4; the login is not in it). There is no player `Reset` from 1c on: the collection is reset only by the owner's `reset-collection` command (collection-packs.md §5.6), and the proof of concept's button and confirm are gone (packs-page.md §3.6). The `Collection` page link keeps its `Collection (N)` label; N comes from the server's collection response. (Moving the collection and pack opening themselves to the server is roadmap work under ADR 0008 and is specced separately; this spec only requires that nothing account-scoped renders without a session.)
 
 ### 3.7 Persistence
 
@@ -179,7 +179,7 @@ The UI does not know whether any accounts exist or whether the cap is reached, a
 | signed out        | No control: the header shows `Log in` and `Register` links instead (navigation-and-landing.md §3.5 step 1)  | Go to either page                   |
 | signed in, closed | Avatar circle with the first character of the login, the login, chevron                                     | Open                                |
 | signed in, open   | Menu anchored below the button, right-aligned: `Manage account` (link), divider, `Log out`                  | Pick an item, Escape, click outside |
-| disabled          | Button `disabled` while a pack is opening                                                                   | Wait ~350 ms                        |
+| disabled          | Button `disabled` while a pack is opening                                                                   | Wait until the opening answers      |
 | logging out       | Menu closed; control disabled until the server answers (sub-second)                                         | Wait                                |
 | after Log out     | `/` replaces the page; `document.title` = `Anime TCG`; focus on the landing `h1`; live region `Logged out.` | Log in, register                    |
 
@@ -242,7 +242,7 @@ No new design tokens are needed; everything below is existing utilities. (If the
 - **Panel / dialog**: `rounded-2xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-100`; headings `text-lg font-bold`; section headings `text-sm font-semibold text-zinc-200`; body `text-sm text-zinc-400`; step indicator `text-xs text-zinc-500`.
 - **Inputs**: `rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2 text-sm text-zinc-100 placeholder:text-zinc-600` with the violet focus ring. Invalid: `border-red-800`; error text `text-xs text-red-300` beneath (no icon). Hints and the rules line: `text-xs text-zinc-500`. Invite code field: `font-mono tracking-wide`. Password fields never use `font-mono` (it makes shoulder-reading easier and looks like a code).
 - **Show/Hide toggle**: text button `text-xs font-medium text-zinc-400 hover:text-zinc-200`, violet focus ring, no icon (no new iconography in this feature).
-- **Buttons**: primary `rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-500` (the loud fuchsia→sky gradient stays reserved for the pack); secondary `rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-200 hover:bg-zinc-800`; disabled `opacity-50 cursor-not-allowed`; danger outline (`Delete account…`) is the existing Inventory `Reset` style `border border-red-900/60 text-red-300 hover:bg-red-950/50`; danger solid (final `Delete <login>`) is the existing banner `Retry` style `bg-red-800/60 text-red-200 hover:bg-red-700/60`. Red is already in use as a semantic colour, not a new accent family.
+- **Buttons**: primary `rounded-lg bg-violet-600 px-4 py-2 text-sm font-medium text-white hover:bg-violet-500` (from 1c the pack button uses this same primary, packs-page.md §6; the fuchsia→sky gradient is gone); secondary `rounded-lg border border-zinc-700 px-4 py-2 text-sm text-zinc-200 hover:bg-zinc-800`; disabled `opacity-50 cursor-not-allowed`; danger outline (`Delete account…`) is the former Inventory `Reset` style `border border-red-900/60 text-red-300 hover:bg-red-950/50`; danger solid (final `Delete <login>`) is the existing banner `Retry` style `bg-red-800/60 text-red-200 hover:bg-red-700/60`. Red is already in use as a semantic colour, not a new accent family.
 - **Wait countdown**: the disabled primary button with `tabular-nums`; the message beneath in the hint style, not the error style (it is not an error).
 - **Motion**: menu and dialog fade/scale in over 150 ms (`opacity 0→1`, `scale .98→1`); none under `prefers-reduced-motion`. Moving between the Log in and Register pages, and between the two Register steps, has no transition. The countdown number changes without animation.
 - **Nothing money-like, nothing lock-like**: no coin, wallet, cart, lock, shield or key iconography anywhere in this feature; the economy spec names and draws the currency, and a lock would be a security claim.
@@ -373,11 +373,11 @@ Exact strings. `<login>` is the account login, `<N>` a number, `<S>` the countdo
 
 **Existing copy that changes**
 
-| Element                   | Old                                                     | New                                                    |
-| ------------------------- | ------------------------------------------------------- | ------------------------------------------------------ |
-| Inventory `Reset` confirm | `Delete your entire collection? This cannot be undone.` | `Delete every card in <login>? This cannot be undone.` |
+| Element                   | Old                                                     | New                                                                         |
+| ------------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------- |
+| Inventory `Reset` confirm | `Delete your entire collection? This cannot be undone.` | removed in 1c: no player reset (collection-packs.md §5.6, packs-page.md §8) |
 
-Everything else in the current UI (tabs, pack button, odds line, empty collection, footer) is unchanged.
+Everything else in the current UI (tabs, footer) is unchanged by this spec; the pack button, odds line and empty collection are replaced in 1c (packs-page.md §8).
 
 ## 9. Open questions
 
@@ -399,7 +399,7 @@ Made by the manager on the tester's, quality-controller's and security-officer's
 
 - While a request is in flight the submit button is `aria-disabled` (not `disabled`), so it keeps focus as §7 requires; a second activation sends nothing.
 - One live region, mounted once for the app's lifetime; a repeated message is announced again.
-- Logins embedded in text are isolated: `<bdi>` in the DOM, U+2068/U+2069 in plain strings (`aria-label`, the Reset confirm; `document.title` no longer carries the login, navigation-and-landing.md §3.1 rule 4).
+- Logins embedded in text are isolated: `<bdi>` in the DOM, U+2068/U+2069 in plain strings (`aria-label`, the Reset confirm until 1c removed it; `document.title` no longer carries the login, navigation-and-landing.md §3.1 rule 4).
 - Leaving the delete confirm (Cancel or the first Escape) returns focus to `Delete account…`.
 - Form buttons: the primary button comes first in the DOM and sits on the left from `sm` up, so Tab moves left to right (`flex-row-reverse` removed).
 - Avatar and touch targets: see §6 and §7.

@@ -205,7 +205,7 @@ Compose recreates the containers from the older images. The database keeps its d
 
 Caddy sets on every response, including the ones it proxies from the api:
 
-- `Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https://s4.anilist.co; connect-src 'self' https://graphql.anilist.co; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'`
+- `Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https://s4.anilist.co; connect-src 'self'; font-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'`
 - `X-Content-Type-Options: nosniff`
 - `Referrer-Policy: strict-origin-when-cross-origin`
 - `Permissions-Policy: camera=(), microphone=(), geolocation=()`
@@ -213,7 +213,7 @@ Caddy sets on every response, including the ones it proxies from the api:
 
 The headers live in a `(site_headers)` snippet that the site and `handle_errors` both import, so Caddy's own error responses (a 405 on the shell, a 502 while the api is down) carry them too, with the error status and an empty body. A missing `/assets/*` file is answered by the asset handle itself with a plain 404 and an empty body, under the same headers. The CI `docker` job asserts this.
 
-`connect-src 'self'` already covers `/api`, which is why the api is proxied under the same origin instead of getting CORS. `style-src` is `'self'` with no `'unsafe-inline'`: React applies the `style` prop through the CSSOM, which CSP does not govern, and the production build links its CSS via `<link>` with no inline `<style>`. The dev server, which does inject `<style>` elements, never runs behind this `Caddyfile`. If SSR or a `?inline` CSS import is ever introduced, this must be revisited (a nonce or hash, not `'unsafe-inline'`). `img-src` and `connect-src` name the only remote hosts the app uses (`web/src/lib/anilist.ts`); adding a new remote host means updating `Caddyfile`, this file and `EXPECTED_CSP` in `.github/workflows/ci.yml` together.
+`connect-src 'self'` already covers `/api`, which is why the api is proxied under the same origin instead of getting CORS. `style-src` is `'self'` with no `'unsafe-inline'`: React applies the `style` prop through the CSSOM, which CSP does not govern, and the production build links its CSS via `<link>` with no inline `<style>`. The dev server, which does inject `<style>` elements, never runs behind this `Caddyfile`. If SSR or a `?inline` CSS import is ever introduced, this must be revisited (a nonce or hash, not `'unsafe-inline'`). `img-src` names the only remote host the app uses, AniList's image CDN; since the 1c web PR the browser no longer calls AniList's API (`docs/design/collection-packs.md` §8), so `connect-src` is `'self'` alone. Adding a remote host means updating `Caddyfile`, this file, `EXPECTED_CSP` in `.github/workflows/ci.yml` and `web/e2e/stack.spec.ts` together.
 
 The api adds `Cache-Control: no-store` to every response of its own (nothing from `/api` is cacheable) and its own `X-Content-Type-Options: nosniff`; helmet's remaining defaults are harmless duplicates of Caddy's. Caching of the static site: `/assets/*` is content-hashed by Vite and served with `Cache-Control: public, max-age=31536000, immutable`; `index.html` is `no-cache`, so a new deploy is picked up on the next load; a missing `/assets/*` file gets no `Cache-Control`, and a 405 keeps whatever `Cache-Control` its route had set (harmless: a response to a POST or PUT is never reused for a GET).
 

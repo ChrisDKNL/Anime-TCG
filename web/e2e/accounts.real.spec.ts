@@ -1,6 +1,6 @@
 /// <reference lib="dom" />
 import { expect, test, type Browser, type BrowserContext, type Page } from "@playwright/test";
-import { isolated, mockAniList } from "./support/fake-api";
+import { isolated, mockCardImages } from "./support/fake-api";
 
 /**
  * Test plan: the accounts journey against the real api through the Vite /api proxy
@@ -11,7 +11,7 @@ import { isolated, mockAniList } from "./support/fake-api";
  * DATABASE_URL (the app role) points at the api's database for the cleanup. Example:
  *   REAL_API_URL=http://localhost:5174 REAL_API_INVITE_CODE=e2e-invite-code E2E_PORT=5174 \
  *     npx playwright test accounts.real.spec.ts
- * The api's WEB_ORIGIN must equal REAL_API_URL (CSRF origin check). AniList stays mocked.
+ * The api's WEB_ORIGIN must equal REAL_API_URL (CSRF origin check). AniList's image CDN stays mocked.
  *
  * One serial journey on a fresh login per run, so the steps share the server's state:
  * 1. Register with the invite code typed in another case with spaces (the server trims and
@@ -19,7 +19,7 @@ import { isolated, mockAniList } from "./support/fake-api";
  * 2. Open a pack: 5 cards, Collection (5).
  * 3. Log out: the landing page at /, title reset; GET /api/session answers signed out.
  * 4. Log in with the login in a different case: signed in under the stored display login; the
- *    collection is empty again (in memory only until roadmap 1c).
+ *    collection is the server's since 1c, so the pack from step 2 is still there (Collection (5)).
  * 5. Rename: header, title and live region follow.
  * 6. Change password: the cookie is rotated and the old value is signed out; in a second browser
  *    the old password no longer signs in and the new one does; this tab survives a reload.
@@ -71,7 +71,7 @@ test.describe("accounts journey against the real api", () => {
     browser,
   }) => {
     test.setTimeout(120_000);
-    await mockAniList(page);
+    await mockCardImages(page);
     const other = await newSignedOutContext(browser);
 
     try {
@@ -93,7 +93,7 @@ test.describe("accounts journey against the real api", () => {
       });
 
       await test.step("open a pack", async () => {
-        await page.getByRole("button", { name: /open booster pack/i }).click();
+        await page.getByRole("button", { name: "Open pack", exact: true }).click();
         await expect(page.getByRole("article")).toHaveCount(5);
         await expect(page.getByRole("link", { name: "Collection (5)" })).toBeVisible();
       });
@@ -107,7 +107,8 @@ test.describe("accounts journey against the real api", () => {
         await openLogInForm(page);
         await logIn(page, LOGIN.toUpperCase(), PASSWORD_1);
         await expect(controlFor(page, LOGIN)).toBeVisible();
-        await expect(page.getByRole("link", { name: "Collection (0)" })).toBeVisible();
+        // Since 1c the collection is the server's: the pack opened before the log out is still there.
+        await expect(page.getByRole("link", { name: "Collection (5)" })).toBeVisible();
         await expectSessionCookie(page.context());
       });
 
@@ -149,7 +150,7 @@ test.describe("accounts journey against the real api", () => {
         }
 
         const otherPage = await other.newPage();
-        await mockAniList(otherPage);
+        await mockCardImages(otherPage);
         await otherPage.goto("/");
         await openLogInForm(otherPage);
         await logIn(otherPage, RENAMED, PASSWORD_1, "incorrect");

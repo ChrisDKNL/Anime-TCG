@@ -37,7 +37,16 @@ Patterns that mark code as generated rather than engineered. Reviewers reject th
 - Placeholder copy that explains the feature to the user ("Open packs, collect characters!").
 - Toasts for every action; loading spinners instead of skeletons or optimistic updates.
 
-**Known debt in this repo (as of 2026-10-28)**: the current header title is gradient text, the pack button is a three-colour gradient with an emoji, the rarity frames glow, the footer is explanatory copy. Scheduled for removal in the Sprint 1 web rework when the UI becomes a thin client (roadmap item 1b/1c); `ui-designer` defines the replacement visual system first.
+**Known debt in this repo (as of 2026-10-28)**: the current header title is gradient text, the pack button is a three-colour gradient with an emoji, the rarity frames glow, the footer is explanatory copy. The header title went in #30 and the pack button's emoji in #30; the gradient pack button, the hover effects and the old glowing card go in the 1c web PR (#38). The footer remains.
+
+**Owner exception: card frames** (Owner, 2026-10-29, `docs/design/card-and-rarity.md` §5.4). The Epic, Legendary and Mythic card frames glow, Epic and Legendary glint, and Mythic is a shifting purple pearl, overriding this section's bans on glowing borders as decoration and purple-to-pink effects, and §3's motion that does not loop. The exception is bounded:
+
+- It covers the card frame and nothing else: no glow on buttons, panels, chips, text or the page.
+- Every looping effect stops under reduced motion.
+- Rarity is never carried by the frame alone: the stars and the tier word carry it.
+- The landing demo card plays none of these effects (Owner, 2026-10-29, after #32).
+
+A review that finds any of these effects outside a card frame treats it as the vibe-coded pattern above.
 
 ## 3. Modern UI, what we build instead
 

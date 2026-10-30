@@ -1,16 +1,21 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { envelope, makeAccount, mockFetch, noContent, rateLimited, sentBody } from "../test/api";
+import { makeCollection, makePackOpened, makePacks } from "../test/fixtures";
 import {
   ApiError,
   changePassword,
   checkInvite,
   deleteAccount,
+  getCollection,
+  getPacks,
   getSession,
   isApiError,
   login,
   logout,
   NetworkError,
+  openPack,
   register,
+  readRetryAfter,
   renameLogin,
 } from "./api";
 
@@ -168,5 +173,64 @@ describe("api client", () => {
   it("a success answer without JSON is a NetworkError", async () => {
     mockFetch({ "GET /api/session": { status: 200, raw: "" } });
     await expect(getSession()).rejects.toBeInstanceOf(NetworkError);
+  });
+
+  it("GET /api/packs and GET /api/collection send no body and return the answer", async () => {
+    const fetchMock = mockFetch({
+      "GET /api/packs": { status: 200, body: makePacks() },
+      "GET /api/collection": { status: 200, body: makeCollection() },
+    });
+    await expect(getPacks()).resolves.toEqual(makePacks());
+    await expect(getCollection()).resolves.toEqual(makeCollection());
+    for (const [, init] of fetchMock.mock.calls) {
+      expect(init?.body).toBeUndefined();
+      expect(init?.credentials).toBe("same-origin");
+    }
+  });
+
+  it("POST /api/packs/open sends the requestId and nothing else; a replay's 200 is the same answer", async () => {
+    const fetchMock = mockFetch({ "POST /api/packs/open": { status: 200, body: makePackOpened() } });
+    const requestId = "0b8f3c1e-6a3d-4c55-9a47-2f0d8a6b1c11";
+    await expect(openPack({ requestId })).resolves.toEqual(makePackOpened());
+    expect(sentBody(fetchMock)).toEqual({ requestId });
+  });
+
+  it("no_pack_available carries the seconds to the next pack", async () => {
+    mockFetch({ "POST /api/packs/open": envelope(409, "no_pack_available", 420) });
+    const err = await openPack({ requestId: "x" }).catch((e: unknown) => e);
+    expect(err).toMatchObject({ status: 409, code: "no_pack_available", retryAfterSeconds: 420 });
+  });
+
+  it("rate_limited takes its wait from Retry-After, which is all a 429 carries (packs-page.md §9)", async () => {
+    mockFetch({
+      "POST /api/packs/open": { ...envelope(429, "rate_limited"), headers: { "Retry-After": "3" } },
+    });
+    const err = await openPack({ requestId: "x" }).catch((e: unknown) => e);
+    expect(err).toMatchObject({ status: 429, code: "rate_limited", retryAfterSeconds: 3 });
+
+    mockFetch({ "POST /api/packs/open": envelope(429, "rate_limited") });
+    const without = await openPack({ requestId: "x" }).catch((e: unknown) => e);
+    expect(without).toMatchObject({ code: "rate_limited", retryAfterSeconds: undefined });
+  });
+
+  it("the envelope's own number wins over the header", async () => {
+    mockFetch({
+      "POST /api/packs/open": { ...envelope(409, "no_pack_available", 420), headers: { "Retry-After": "9" } },
+    });
+    const err = await openPack({ requestId: "x" }).catch((e: unknown) => e);
+    expect(err).toMatchObject({ retryAfterSeconds: 420 });
+  });
+
+  it("reads Retry-After as whole seconds, at least 1, and ignores anything else", () => {
+    const read = (value: string) => readRetryAfter(new Headers({ "Retry-After": value }));
+    expect(read("3")).toBe(3);
+    expect(read(" 60 ")).toBe(60);
+    expect(read("0")).toBeUndefined();
+    expect(read("9".repeat(400))).toBeUndefined();
+    expect(read("1.5")).toBeUndefined();
+    expect(read("-2")).toBeUndefined();
+    expect(read("Wed, 21 Oct 2026 07:28:00 GMT")).toBeUndefined();
+    expect(read("")).toBeUndefined();
+    expect(readRetryAfter(new Headers())).toBeUndefined();
   });
 });
