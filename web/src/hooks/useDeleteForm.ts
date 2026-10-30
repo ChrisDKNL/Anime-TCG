@@ -1,11 +1,10 @@
 import { useCallback, useState, type FormEvent } from "react";
-import { common, manageCopy } from "../lib/copy";
-import { toFailure, type Failure } from "../lib/failures";
+import { manageCopy } from "../lib/copy";
+import { serverWait, toFailure, type Failure } from "../lib/failures";
 import { OK, withMessage } from "../lib/fieldState";
 import { useDeleteAccountMutation } from "./useAccountMutations";
 import { useFieldFocus } from "./useFieldFocus";
-import { useRetryWait } from "./useRetryWait";
-import { useShellContext } from "./useShell";
+import { useServerWait } from "./useServerWait";
 import { useSingleFlight } from "./useSingleFlight";
 
 interface Options {
@@ -17,11 +16,13 @@ export function useDeleteForm({ onDeleted }: Options) {
   const [password, setPassword] = useState("");
   const [field, setField] = useState(OK);
   const [unreachable, setUnreachable] = useState(false);
-  const [breather, setBreather] = useState(false);
   const { focusField, fieldRef } = useFieldFocus<"password">("password");
-  const { announce } = useShellContext();
-  const onWaitEnd = useCallback(() => announce(common.waitOver), [announce]);
-  const wait = useRetryWait(onWaitEnd);
+  const {
+    remaining: waitRemaining,
+    statusLine: waitStatus,
+    begin: beginWait,
+    clear: clearWait,
+  } = useServerWait();
   const deletion = useDeleteAccountMutation();
   const singleFlight = useSingleFlight();
 
@@ -31,6 +32,11 @@ export function useDeleteForm({ onDeleted }: Options) {
         setUnreachable(true);
         return;
       }
+      const wait = serverWait(failure);
+      if (wait !== null) {
+        beginWait(wait);
+        return;
+      }
       switch (failure.code) {
         case "wrong_password":
         case "validation_failed":
@@ -38,25 +44,21 @@ export function useDeleteForm({ onDeleted }: Options) {
           setPassword("");
           focusField("password");
           break;
-        case "too_many_failures":
-          setBreather(true);
-          if (failure.retryAfterSeconds !== undefined) wait.start(failure.retryAfterSeconds);
-          break;
         case "unauthenticated":
           break;
         default:
           setUnreachable(true);
       }
     },
-    [focusField, wait],
+    [focusField, beginWait],
   );
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
     return singleFlight(async () => {
-      if (password.length === 0 || wait.remaining !== null) return;
+      if (password.length === 0 || waitRemaining !== null) return;
       setUnreachable(false);
-      setBreather(false);
+      clearWait();
       setField(OK);
       try {
         await deletion.mutateAsync({ password });
@@ -71,8 +73,8 @@ export function useDeleteForm({ onDeleted }: Options) {
     password,
     field,
     unreachable,
-    breather,
-    waitRemaining: wait.remaining,
+    waitStatus,
+    waitRemaining,
     deleting: deletion.isPending,
     setPassword,
     fieldRef,

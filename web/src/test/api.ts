@@ -18,6 +18,7 @@ export interface MockAnswer {
   body?: unknown;
   /** Sent verbatim (a proxy error page, an empty body). */
   raw?: string;
+  headers?: Record<string, string>;
 }
 
 export type MockHandler = MockAnswer | ((init: RequestInit | undefined, url: string) => MockAnswer);
@@ -31,12 +32,19 @@ export function envelope(status: number, code: ErrorCode, retryAfterSeconds?: nu
 
 export const noContent: MockAnswer = { status: 204 };
 
+/** The route rate limiter's 429: its envelope carries no seconds, only the `Retry-After` header does (when sent). */
+export function rateLimited(retryAfter?: string): MockAnswer {
+  const answer = envelope(429, "rate_limited");
+  return retryAfter === undefined ? answer : { ...answer, headers: { "retry-after": retryAfter } };
+}
+
 function toResponse(answer: MockAnswer): Response {
-  if (answer.raw !== undefined) return new Response(answer.raw, { status: answer.status });
-  if (answer.body === undefined) return new Response(null, { status: answer.status });
+  const { status, headers } = answer;
+  if (answer.raw !== undefined) return new Response(answer.raw, { status, headers });
+  if (answer.body === undefined) return new Response(null, { status, headers });
   return new Response(JSON.stringify(answer.body), {
-    status: answer.status,
-    headers: { "content-type": "application/json" },
+    status,
+    headers: { "content-type": "application/json", ...headers },
   });
 }
 

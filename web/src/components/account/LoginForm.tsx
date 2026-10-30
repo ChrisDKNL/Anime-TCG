@@ -70,9 +70,9 @@ export function LoginForm({ onLoggedIn, guardLine = null, crossLink }: Props) {
         >
           {submitLabel}
         </SubmitButton>
-        {form.breather && (
+        {form.waitStatus !== null && (
           <p role="status" className={HINT_TEXT}>
-            {common.breather}
+            {form.waitStatus}
           </p>
         )}
       </form>

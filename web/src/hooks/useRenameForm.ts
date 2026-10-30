@@ -1,11 +1,12 @@
 import type { AccountPublic } from "@anime-tcg/shared/api";
 import { useCallback, useState, type FormEvent } from "react";
 import { common, registerCopy } from "../lib/copy";
-import { toFailure, type Failure } from "../lib/failures";
+import { serverWait, toFailure, type Failure } from "../lib/failures";
 import { OK, withMessage } from "../lib/fieldState";
 import { checkLogin } from "../lib/validation";
 import { useRenameMutation } from "./useAccountMutations";
 import { useFieldFocus } from "./useFieldFocus";
+import { useServerWait } from "./useServerWait";
 import { useSingleFlight } from "./useSingleFlight";
 
 interface Options {
@@ -13,12 +14,18 @@ interface Options {
   onRenamed: (account: AccountPublic) => void;
 }
 
-/** The Manage dialog's Login section (accounts.md §3.5.3, §4.6): same rules as Register, Save only when changed. */
+/** The Manage dialog's Login section (accounts.md §3.5.3, §4.6): same rules as Register, Save only when changed, and the rate limiter's wait. */
 export function useRenameForm({ login, onRenamed }: Options) {
   const [value, setValue] = useState(login);
   const [field, setField] = useState(OK);
   const [unreachable, setUnreachable] = useState(false);
   const { focusField, fieldRef } = useFieldFocus<"login">();
+  const {
+    remaining: waitRemaining,
+    statusLine: waitStatus,
+    begin: beginWait,
+    clear: clearWait,
+  } = useServerWait();
   const rename = useRenameMutation();
   const singleFlight = useSingleFlight();
   const changed = value.trim() !== login;
@@ -27,6 +34,11 @@ export function useRenameForm({ login, onRenamed }: Options) {
     (failure: Failure, attempted: string) => {
       if (failure.kind === "network") {
         setUnreachable(true);
+        return;
+      }
+      const wait = serverWait(failure);
+      if (wait !== null) {
+        beginWait(wait);
         return;
       }
       switch (failure.code) {
@@ -45,14 +57,15 @@ export function useRenameForm({ login, onRenamed }: Options) {
           setUnreachable(true);
       }
     },
-    [focusField],
+    [focusField, beginWait],
   );
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
     return singleFlight(async () => {
-      if (!changed) return;
+      if (!changed || waitRemaining !== null) return;
       setUnreachable(false);
+      clearWait();
       const check = checkLogin(value);
       if (check.issue !== null) {
         setField(withMessage(check.issue === "empty" ? registerCopy.emptyLogin : common.loginLength));
@@ -74,6 +87,8 @@ export function useRenameForm({ login, onRenamed }: Options) {
     field,
     unreachable,
     changed,
+    waitStatus,
+    waitRemaining,
     saving: rename.isPending,
     setValue,
     fieldRef,

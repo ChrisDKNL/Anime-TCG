@@ -2,10 +2,11 @@ import { act, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { envelope, makeAccount, mockFetch, sentBody } from "../../test/api";
+import { envelope, makeAccount, mockFetch, rateLimited, sentBody } from "../../test/api";
 import { renderWithProviders } from "../../test/render";
 import { LoginForm } from "./LoginForm";
 import { fill } from "../../test/user";
+import { expectRateLimitedWait, RATE_LIMITED } from "../../test/waits";
 
 const account = makeAccount({ login: "Chris" });
 
@@ -183,6 +184,85 @@ describe("LoginForm", () => {
     await fillAndSubmit(user);
     expect(await screen.findByText(/Five misses in a row/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Log in" })).not.toHaveAttribute("aria-disabled");
+  });
+
+  describe("rate limited (manager decision, 2026-10-30)", () => {
+    it("a 429 with Retry-After is the wait, not the unreachable banner, and the fields keep their values", async () => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
+      const { user, fetchMock } = setup({ "POST /api/session/login": rateLimited("5") });
+      await fillAndSubmit(user);
+
+      expectRateLimitedWait(await screen.findByRole("button", { name: "Try again in 5 s" }));
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(screen.getByLabelText("Login")).toHaveValue("chris");
+      expect(screen.getByLabelText("Password")).toHaveValue("pw");
+      expect(screen.getByLabelText("Password")).not.toBeDisabled();
+      await user.type(screen.getByLabelText("Password"), "{Enter}");
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+
+      act(() => {
+        vi.advanceTimersByTime(5000);
+      });
+      expect(screen.getByRole("button", { name: "Log in" })).not.toHaveAttribute("aria-disabled");
+      expect(screen.getAllByText("You can try again now.")).toHaveLength(1);
+    });
+
+    it("without Retry-After the wait is 60 s", async () => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
+      const { user } = setup({ "POST /api/session/login": rateLimited() });
+      await fillAndSubmit(user);
+
+      expect(await screen.findByRole("button", { name: "Try again in 60 s" })).toHaveAttribute(
+        "aria-disabled",
+        "true",
+      );
+      expect(screen.getByText(RATE_LIMITED)).toHaveAttribute("role", "status");
+      act(() => {
+        vi.advanceTimersByTime(59_000);
+      });
+      expect(screen.getByRole("button", { name: "Try again in 1 s" })).toBeInTheDocument();
+      act(() => {
+        vi.advanceTimersByTime(1000);
+      });
+      expect(screen.getByRole("button", { name: "Log in" })).not.toHaveAttribute("aria-disabled");
+    });
+
+    it("a Retry-After of a day counts down from the 3600 s cap", async () => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
+      const { user } = setup({ "POST /api/session/login": rateLimited("86400") });
+      await fillAndSubmit(user);
+      expectRateLimitedWait(await screen.findByRole("button", { name: "Try again in 3600 s" }));
+      act(() => {
+        vi.advanceTimersByTime(1000);
+      });
+      expect(screen.getByRole("button", { name: "Try again in 3599 s" })).toBeInTheDocument();
+    });
+
+    it("a Retry-After too large to count exactly waits 60 s, as if it were missing", async () => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
+      const { user } = setup({ "POST /api/session/login": rateLimited("9".repeat(400)) });
+      await fillAndSubmit(user);
+      expectRateLimitedWait(await screen.findByRole("button", { name: "Try again in 60 s" }));
+    });
+
+    it("the next submit after the wait clears the status line and asks the server again", async () => {
+      vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "Date"] });
+      const { user, fetchMock } = setup({ "POST /api/session/login": rateLimited("1") });
+      await fillAndSubmit(user);
+      await screen.findByRole("button", { name: "Try again in 1 s" });
+      act(() => {
+        vi.advanceTimersByTime(1000);
+      });
+      fetchMock.mockResolvedValueOnce(
+        new Response(JSON.stringify({ signedIn: true, account }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      );
+      await user.click(screen.getByRole("button", { name: "Log in" }));
+      await waitFor(() => expect(screen.queryByText(RATE_LIMITED)).not.toBeInTheDocument());
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
   });
 
   it("shows the guard line under the heading and the cross-link before the forgotten-password line", () => {

@@ -1,11 +1,11 @@
 import { useCallback, useState, type FormEvent } from "react";
 import { common, loginCopy, manageCopy, registerCopy } from "../lib/copy";
-import { toFailure, type Failure } from "../lib/failures";
+import { serverWait, toFailure, type Failure } from "../lib/failures";
 import { firstInvalid, OK, withMessage, type FieldState } from "../lib/fieldState";
 import { checkConfirmation, checkNewPassword, checkRequired } from "../lib/validation";
 import { useChangePasswordMutation } from "./useAccountMutations";
 import { useFieldFocus } from "./useFieldFocus";
-import { useRetryWait } from "./useRetryWait";
+import { useServerWait } from "./useServerWait";
 import { useShellContext } from "./useShell";
 import { useSingleFlight } from "./useSingleFlight";
 
@@ -21,11 +21,14 @@ export function useChangePasswordForm() {
   const [fields, setFields] = useState(ALL_OK);
   const [unreachable, setUnreachable] = useState(false);
   const [changed, setChanged] = useState(false);
-  const [breather, setBreather] = useState(false);
   const { focusField, fieldRef } = useFieldFocus<PasswordField>();
   const { announce } = useShellContext();
-  const onWaitEnd = useCallback(() => announce(common.waitOver), [announce]);
-  const wait = useRetryWait(onWaitEnd);
+  const {
+    remaining: waitRemaining,
+    statusLine: waitStatus,
+    begin: beginWait,
+    clear: clearWait,
+  } = useServerWait();
   const change = useChangePasswordMutation();
   const singleFlight = useSingleFlight();
 
@@ -39,15 +42,16 @@ export function useChangePasswordForm() {
         setUnreachable(true);
         return;
       }
+      const wait = serverWait(failure);
+      if (wait !== null) {
+        beginWait(wait);
+        return;
+      }
       switch (failure.code) {
         case "wrong_password":
           setFields({ ...ALL_OK, current: withMessage(manageCopy.wrongCurrent) });
           setValues((previous) => ({ ...previous, current: "" }));
           focusField("current");
-          break;
-        case "too_many_failures":
-          setBreather(true);
-          if (failure.retryAfterSeconds !== undefined) wait.start(failure.retryAfterSeconds);
           break;
         case "validation_failed":
           setFields({ ...ALL_OK, next: withMessage(common.passwordLength) });
@@ -59,16 +63,16 @@ export function useChangePasswordForm() {
           setUnreachable(true);
       }
     },
-    [focusField, wait],
+    [focusField, beginWait],
   );
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
     return singleFlight(async () => {
-      if (wait.remaining !== null) return;
+      if (waitRemaining !== null) return;
       setUnreachable(false);
       setChanged(false);
-      setBreather(false);
+      clearWait();
       const next = checkNewPassword(values.next);
       const fieldsAfterCheck: Record<PasswordField, FieldState> = {
         current: checkRequired(values.current) === null ? OK : withMessage(loginCopy.emptyPassword),
@@ -102,8 +106,8 @@ export function useChangePasswordForm() {
     fields,
     unreachable,
     changed,
-    breather,
-    waitRemaining: wait.remaining,
+    waitStatus,
+    waitRemaining,
     submitting: change.isPending,
     setValue,
     fieldRef,
