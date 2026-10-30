@@ -17,6 +17,8 @@ export interface ShellActions {
   sessionEnded: () => void;
   /** A later call got no answer: the persistent red banner with `Try again` (§4.8). */
   unreachable: () => void;
+  /** A read answered: the unreachable banner no longer holds; a session-ended banner stays. */
+  serverAnswered: () => void;
   clearNotice: () => void;
 }
 
@@ -63,6 +65,10 @@ export function useShell({ onSessionEnded }: Options = {}): {
   );
   const clearNotice = useCallback(() => setNotice("none"), []);
   const unreachable = useCallback(() => setNotice("unreachable"), []);
+  const serverAnswered = useCallback(
+    () => setNotice((previous) => (previous === "unreachable" ? "none" : previous)),
+    [],
+  );
 
   // The session is written first so the `/login` guard sees a signed-out visitor when the navigation runs.
   const sessionEnded = useCallback(() => {
@@ -72,8 +78,8 @@ export function useShell({ onSessionEnded }: Options = {}): {
   }, [queryClient, onSessionEnded]);
 
   const context = useMemo<ShellContextValue>(
-    () => ({ announce, sessionEnded, unreachable, clearNotice, notice }),
-    [announce, sessionEnded, unreachable, clearNotice, notice],
+    () => ({ announce, sessionEnded, unreachable, serverAnswered, clearNotice, notice }),
+    [announce, sessionEnded, unreachable, serverAnswered, clearNotice, notice],
   );
 
   return { state: { announcement, notice }, context };

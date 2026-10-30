@@ -23,7 +23,13 @@ const other = makeAccount({ id: "9a7b1c2d-3e4f-4a5b-8c6d-7e8f9a0b1c2d", login: "
 function renderGame(routes: Record<string, MockHandler> = {}) {
   mockFetch({ ...signedInRoutes(account), ...routes });
   const queryClient = createQueryClient();
-  const shell = { announce: vi.fn(), sessionEnded: vi.fn(), unreachable: vi.fn(), clearNotice: vi.fn() };
+  const shell = {
+    announce: vi.fn(),
+    sessionEnded: vi.fn(),
+    unreachable: vi.fn(),
+    serverAnswered: vi.fn(),
+    clearNotice: vi.fn(),
+  };
   const wrapper = ({ children }: { children: ReactNode }) => (
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );
@@ -167,8 +173,9 @@ describe("useGameState: the balance a receipt carries against wallet reads (mana
     expect(result.current!.balance).toBe(900);
   });
 
-  it("a wallet answer clears the unreachable banner", async () => {
+  it("a wallet answer clears the unreachable banner, and only that one", async () => {
     const { shell } = await withHeldWalletReads();
-    expect(shell.clearNotice).toHaveBeenCalled();
+    expect(shell.serverAnswered).toHaveBeenCalledTimes(1);
+    expect(shell.clearNotice).not.toHaveBeenCalled();
   });
 });

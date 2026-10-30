@@ -216,7 +216,7 @@ export function useGameState({ account, shell, packsShowing }: Options): Game | 
     [],
   );
 
-  const { sessionEnded, unreachable, announce, clearNotice } = shell;
+  const { sessionEnded, unreachable, announce, clearNotice, serverAnswered } = shell;
   /** A read that failed: an ended session goes to `/login`, no answer shows the banner, anything else is the page's to show. */
   const report = useCallback(
     (err: unknown) => {
@@ -229,8 +229,8 @@ export function useGameState({ account, shell, packsShowing }: Options): Game | 
   const packsQuery = useMemo(() => packsQueryOptions(owner, nextSeq, report), [owner, nextSeq, report]);
   const collectionQuery = useMemo(() => collectionQueryOptions(owner, report), [owner, report]);
   const walletQuery = useMemo(
-    () => walletQueryOptions(owner, nextSeq, report, clearNotice),
-    [owner, nextSeq, report, clearNotice],
+    () => walletQueryOptions(owner, nextSeq, report, serverAnswered),
+    [owner, nextSeq, report, serverAnswered],
   );
   const shopQuery = useMemo(() => shopQueryOptions(owner, report), [owner, report]);
   // Observed here but never fetched from here: the held answer stays in the cache for the whole
