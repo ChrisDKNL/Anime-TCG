@@ -111,7 +111,9 @@ test("Back and Forward: title and focus follow, and each entry's scroll position
   await page.goForward();
   await expect(page).toHaveURL(/\/packs$/);
   await expect.poll(() => focusedHeading(page)).toBe("Packs");
-  // The last reveal is still there, without its entrance (§3.10 step 2).
+  // The last reveal is still held, on /packs/open, without its entrance (§3.10 item 2).
+  await page.getByRole("link", { name: "See your latest pack" }).click();
+  await expect(page).toHaveURL(/\/packs\/open$/);
   await expect(page.getByRole("article")).toHaveCount(5);
   await expect(page.locator("li.animate-card-enter")).toHaveCount(0);
 });
@@ -236,8 +238,13 @@ test("the landing page: heading, How it plays and Join, with Register one step a
   await expect(
     page.getByText("2,983 characters from the 100 most popular anime on AniList, five to a pack."),
   ).toBeVisible();
-  await expect(page.getByRole("heading", { level: 2 })).toHaveText(["How it plays", "Join"]);
-  await expect(page.getByRole("term")).toHaveText(["Packs", "Rarity", "Collection"]);
+  await expect(page.getByRole("heading", { level: 2 })).toHaveText(["How it plays", "Pack odds", "Join"]);
+  await expect(page.getByRole("heading", { level: 3 })).toHaveText([
+    "Packs",
+    "Rarity",
+    "Collection",
+    "Karma",
+  ]);
   // The demo PR (§3.7): one button, the demo, and the odds table from the server; no pack opened unasked.
   await expect(page.getByRole("main").getByRole("button")).toHaveText(["Open a demo pack"]);
   await expect(page.getByRole("table", { name: "Pack odds" })).toBeVisible();

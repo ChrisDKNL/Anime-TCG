@@ -10,6 +10,9 @@ import { FOCUS_RING } from "../account/styles";
 /** `BUTTON.text` at `text-sm` (§6.1 `Pack odds`): 40 px on phone, 28 px from `sm`. */
 export const TEXT_BUTTON_SM = `h-10 sm:h-7 rounded px-1 text-sm font-medium text-zinc-400 hover:text-zinc-200 ${FOCUS_RING}`;
 
+/** The same look on a link (`See your latest pack`, `See your latest shop pack`, packs-page.md §6.1). */
+export const TEXT_LINK_SM = `inline-flex items-center ${TEXT_BUTTON_SM}`;
+
 export const SECONDARY_LINE = "text-sm text-zinc-400";
 export const ERROR_LINE = "text-sm text-red-300";
 

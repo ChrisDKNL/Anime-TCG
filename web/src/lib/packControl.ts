@@ -41,9 +41,11 @@ export interface ControlShown {
 
 export type ControlView = { kind: "blank" } | { kind: "loading" } | { kind: "loadFailed" } | ControlShown;
 
-function buttonFor(input: ControlInput, held: Held): ControlShown["button"] {
+type ButtonInput = Pick<ControlInput, "odds" | "opening" | "keyHeld" | "wait">;
+
+function buttonFor(input: ButtonInput, held: Held | null): ControlShown["button"] {
   const waiting = input.wait !== null && input.wait > 0;
-  const hasPack = input.odds !== null && held.allowance.available >= 1;
+  const hasPack = input.odds !== null && held !== null && held.allowance.available >= 1;
   const enabled = !input.opening && !waiting && (input.keyHeld || hasPack);
   let label: string = packControlCopy.open;
   if (input.opening) label = packControlCopy.opening;
@@ -82,5 +84,29 @@ export function packControlView(input: ControlInput): ControlView {
     countdown,
     pity,
     showOdds: odds !== null,
+  };
+}
+
+/** `/packs/open`'s action row (packs-page.md §3.7 steps 2 to 5): the count line and `Open pack`. */
+export interface OpeningControlView {
+  /** Null until an allowance is held. */
+  count: string | null;
+  button: { label: string; enabled: boolean };
+  /** No pack ready: the button is described by the count line, and `Back to packs` beside it leads to the countdown. */
+  describedByCount: boolean;
+}
+
+/**
+ * The opening page's control: `Open pack` under the same rules as on `/packs`
+ * (§3.3), with no countdown, pity line or odds. A line under the button never
+ * shows here, since an answer without cards replaces the page with `/packs`.
+ */
+export function openingControlView(input: ButtonInput & { held: Held | null }): OpeningControlView {
+  const { held } = input;
+  const button = buttonFor(input, held);
+  return {
+    count: held === null ? null : packControlCopy.count(held.allowance.available, held.allowance.cap),
+    button,
+    describedByCount: held !== null && !input.opening && held.allowance.available === 0,
   };
 }

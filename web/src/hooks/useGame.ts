@@ -36,11 +36,12 @@ import {
   type GameState,
   type PacksAnswer,
   type Row,
+  type ShopPack,
   type WalletAnswer,
 } from "../lib/game";
 import type { ControlsAction } from "../lib/collectionView";
 import { rethrowUnlessKnown } from "../lib/failures";
-import { revealCopy } from "../lib/packsCopy";
+import { packControlCopy, revealCopy } from "../lib/packsCopy";
 import type { ShellActions } from "./useShell";
 import { useSingleFlight } from "./useSingleFlight";
 
@@ -156,20 +157,51 @@ export interface Game {
    */
   applyBalance: (balance: number) => void;
   /**
-   * Opens a pack; `row` is the control's row now, which a generic failure's line stays tied to.
-   * Settles once the answer is applied, and rejects only on a bug in this client (not an api answer).
+   * Opens a pack; `row` is the control's row now, which a generic failure's line stays tied to, and
+   * `from` the page it was opened on: from `/packs` the previous cards go at once, from `/packs/open`
+   * they stay until the answer (packs-page.md §3.3 step 2). Settles once the answer is applied, and
+   * rejects only on a bug in this client (not an api answer).
    */
-  openPack: (row: Row) => Promise<void>;
+  openPack: (row: Row, from: OpenedFrom) => Promise<void>;
+  /**
+   * Holds the pack a purchase dealt, for `/shop/open`, until the next purchase (market-and-shop.md §3.3
+   * step 6); `landedShowing` is whether `/shop` still showed its confirmation, so that the page change
+   * to `/shop/open` follows and the cards enter there.
+   */
+  holdShopPack: (pack: ShopPack, landedShowing: boolean) => void;
+  /**
+   * The shop packs `/shop/open` has already shown: the purchase pushes that page with its pack already
+   * held, so only this tells its first showing, which runs the entrance, from a return to it.
+   */
+  shownShopPacks: WeakSet<ShopPack>;
+  /** The free packs `/packs/open` has already shown, for the same reason: Back and Forward show them without the entrance. */
+  shownReveals: WeakSet<PackOpened>;
   /** Changes the collection overview's controls (`state.overview`). */
   changeOverview: (action: ControlsAction) => void;
 }
 
+export type OpenedFrom = "packs" | "opening";
+
 interface Options {
   account: AccountPublic | null;
   shell: ShellActions;
-  /** Whether `/packs` is on screen: a reveal that lands on another page is not announced (§3.3 step 5). */
-  packsShowing: () => boolean;
+  /**
+   * Whether `/packs/open` is on screen or being navigated to: a reveal that lands on another page is
+   * neither announced nor entered (§3.3 step 5).
+   */
+  openingShowing: () => boolean;
+  /** Replaces `/packs/open` with `/packs`, after an answer without cards (packs-page.md §3.7 step 6). */
+  leaveOpening: () => void;
 }
+
+/** The line under the pack button that an answer without cards leaves, as the live region reads it after the replace. */
+const NO_CARDS_LINE = {
+  noneLeft: packControlCopy.noneLeft,
+  unavailable: packControlCopy.unavailable,
+  wait: packControlCopy.wait,
+  failed: packControlCopy.failed,
+  noAnswer: packControlCopy.noAnswer,
+} as const;
 
 /** Numbers requests in the order they are sent, for the newest-answer-wins rule (packs-page.md §3.1 step 5). */
 function requestCounter(): () => number {
@@ -190,7 +222,7 @@ function newCards(pack: PackOpened): number {
  * fetches the allowance itself. An answer that lands after its session ended
  * changes nothing.
  */
-export function useGameState({ account, shell, packsShowing }: Options): Game | null {
+export function useGameState({ account, shell, openingShowing, leaveOpening }: Options): Game | null {
   const accountId = account?.id ?? null;
   const [stored, dispatch] = useReducer(gameReducer, accountId, initialGame);
   if (stored.accountId !== accountId) dispatch({ type: "reset", accountId });
@@ -242,23 +274,24 @@ export function useGameState({ account, shell, packsShowing }: Options): Game | 
   const { mutateAsync } = useMutation({ mutationFn: openPack });
   const singleFlight = useSingleFlight();
 
+  /** Applies an answer without cards; returns the line it leaves under the button, or null (401). */
   const settleFailure = useCallback(
-    (err: unknown, of: GameOwner, seq: number, row: Row) => {
+    (err: unknown, of: GameOwner, seq: number, row: Row): keyof typeof NO_CARDS_LINE | null => {
       if (err instanceof NetworkError) {
         dispatch({ type: "noAnswer", ...of });
         unreachable();
-        return;
+        return "noAnswer";
       }
       if (!(err instanceof ApiError)) {
         // A bug in this client, not an answer: the generic failure, so the button never stays on
-        // `Opening…`, and the error is rethrown so a test or the console sees it.
+        // `Opening…`; the caller rethrows the error so a test or the console sees it.
         dispatch({ type: "failed", ...of, row });
-        throw err;
+        return "failed";
       }
       switch (err.code) {
         case "unauthenticated":
           sessionEnded();
-          return;
+          return null;
         case "no_pack_available":
           dispatch({
             type: "noneLeft",
@@ -270,37 +303,53 @@ export function useGameState({ account, shell, packsShowing }: Options): Game | 
           // Another tab or device spent the packs: one `GET` corrects the allowance, and the collection changed.
           void queryClient.refetchQueries({ queryKey: packsKey(of) });
           void queryClient.refetchQueries({ queryKey: collectionKey(of) });
-          return;
+          return "noneLeft";
         case "pool_unavailable":
           dispatch({ type: "unavailable", ...of, seq });
-          return;
+          return "unavailable";
         case "rate_limited": {
           const seconds = rateLimitWaitSeconds(err.retryAfterSeconds);
           dispatch({ type: "rateLimited", ...of, until: performance.now() + seconds * SECOND_MS });
-          return;
+          return "wait";
         }
         default:
           dispatch({ type: "failed", ...of, row });
+          return "failed";
       }
     },
     [queryClient, sessionEnded, unreachable],
   );
 
+  /**
+   * An answer without cards while `/packs/open` shows: `/packs` replaces it and shows the answer's row,
+   * and its line is read once, since a status line already there when a page renders is not reliably
+   * read (packs-page.md §3.7 step 6). On any other page nothing moves (§3.3 step 5).
+   */
+  const leaveWithLine = useCallback(
+    (line: keyof typeof NO_CARDS_LINE) => {
+      if (!openingShowing()) return;
+      leaveOpening();
+      announce(NO_CARDS_LINE[line]);
+    },
+    [openingShowing, leaveOpening, announce],
+  );
+
   const open = useCallback(
-    async (row: Row) => {
+    async (row: Row, from: OpenedFrom) => {
       if (owner === null) return;
       await singleFlight(async () => {
         // A key held from an opening that got no answer is sent again, so the retry shows that pack.
         const requestId = key ?? crypto.randomUUID();
-        dispatch({ type: "openStarted", ...owner, key: requestId });
+        dispatch({ type: "openStarted", ...owner, key: requestId, keepReveal: from === "opening" });
         const seq = nextSeq();
         try {
           const pack = await mutateAsync({ requestId });
-          dispatch({ type: "opened", ...owner, seq, receivedAt: performance.now(), pack });
+          const landedShowing = openingShowing();
+          dispatch({ type: "opened", ...owner, seq, receivedAt: performance.now(), pack, landedShowing });
           if (!isCurrent(owner)) return;
           // The server answered: a banner a lost answer raised no longer holds (packs-page.md §4.1).
           clearNotice();
-          if (packsShowing()) {
+          if (landedShowing) {
             announce(
               revealCopy.announce(
                 pack.packKind,
@@ -311,8 +360,13 @@ export function useGameState({ account, shell, packsShowing }: Options): Game | 
           }
           void queryClient.refetchQueries({ queryKey: collectionKey(owner) });
         } catch (err) {
-          if (isCurrent(owner)) settleFailure(err, owner, seq, row);
-          else rethrowUnlessKnown(err);
+          if (!isCurrent(owner)) {
+            rethrowUnlessKnown(err);
+            return;
+          }
+          const line = settleFailure(err, owner, seq, row);
+          if (line !== null) leaveWithLine(line);
+          rethrowUnlessKnown(err);
         }
       });
     },
@@ -323,13 +377,23 @@ export function useGameState({ account, shell, packsShowing }: Options): Game | 
       nextSeq,
       mutateAsync,
       isCurrent,
-      packsShowing,
+      openingShowing,
       clearNotice,
       announce,
       queryClient,
       settleFailure,
+      leaveWithLine,
     ],
   );
+
+  const holdShopPack = useCallback(
+    (pack: ShopPack, landedShowing: boolean) => {
+      if (owner !== null) dispatch({ type: "shopBought", ...owner, pack, landedShowing });
+    },
+    [owner],
+  );
+  const [shownShopPacks] = useState(() => new WeakSet<ShopPack>());
+  const [shownReveals] = useState(() => new WeakSet<PackOpened>());
 
   const changeOverview = useCallback(
     (action: ControlsAction) => {
@@ -364,6 +428,9 @@ export function useGameState({ account, shell, packsShowing }: Options): Game | 
             shopQuery,
             applyBalance,
             openPack: open,
+            holdShopPack,
+            shownShopPacks,
+            shownReveals,
             changeOverview,
           },
     [
@@ -379,6 +446,9 @@ export function useGameState({ account, shell, packsShowing }: Options): Game | 
       shopQuery,
       applyBalance,
       open,
+      holdShopPack,
+      shownShopPacks,
+      shownReveals,
       changeOverview,
     ],
   );

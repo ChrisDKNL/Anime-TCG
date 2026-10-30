@@ -17,16 +17,17 @@ import { isolated, mockCardImages, recordAniListApiCalls } from "./support/fake-
  *    snapshot's character count.
  * 2. Lost answer (§10 item 6): `route.fetch()` lets the first `POST` reach the server, then the
  *    answer is dropped. The banner and `Try again`; the retry sends the same `requestId`, the server
- *    answers 200 with exactly the cards of the dropped 201 (slot order), `2 of 3`, the countdown
- *    from 10:00, the pity line at 299, `Collection (5)`.
+ *    answers 200 with exactly the cards of the dropped 201 (slot order) on `/packs/open`, `2 of 3`,
+ *    `Collection (5)`; back on `/packs`, the countdown from 10:00 and the pity line at 299.
  * 3. 401 (§10 item 11): the cookie is cleared, `Open pack` goes to `/login` with the banner and the
  *    return path `/packs`; logging in returns there with no reveal and `2 of 3`.
  * 4. 429 (§10 item 12, §9 question 3): replays of step 2's `requestId` (which spend nothing) use up
  *    the route's budget; the real 429 carries `Retry-After` and no number in the body. The button
  *    then reads `Try again in <S> s` from that header and comes back by itself; the retry carries
  *    the same `requestId` and opens the pack: `1 of 3`.
- * 5. 409 (§10 item 9): a second browser logs in and opens the last pack; this tab's click shows
- *    `There was no pack left to open.`, `0 of 3` with a countdown, and sends one follow-up `GET`.
+ * 5. 409 (§10 item 9): a second browser logs in and opens the last pack; this tab's click on
+ *    `/packs/open` ends on `/packs` with `There was no pack left to open.`, `0 of 3` with a countdown,
+ *    and one follow-up `GET`.
  * 6. A reload: `Collection (15)`, the same as `totals.cards`; no `anime-tcg:` key in storage.
  * Throughout: no request to AniList's API and, when REAL_API_URL is a stack behind Caddy, no CSP
  * violation (the production build under `connect-src 'self'`).
@@ -177,9 +178,12 @@ test.describe("the packs page against the real api", () => {
         [...pack.cards].sort((a, b) => a.slot - b.slot).map((card) => card.character.name),
       );
       await expect(page.getByText("2 of 3 packs ready")).toBeVisible();
+      await expect(collectionLink(page)).toHaveAccessibleName("Collection (5)");
+      // The cards are on /packs/open; the countdown and the pity line stay on /packs (packs-page.md §3.7).
+      await expect(page).toHaveURL(`${REAL_API_URL}/packs/open`);
+      await main(page).getByRole("link", { name: "Back to packs" }).click();
       await expect(page.getByText(/^Next pack in (10:00|9:5\d)$/)).toBeVisible();
       await expect(page.getByText("Mythic guaranteed within 299 free packs.")).toBeVisible();
-      await expect(collectionLink(page)).toHaveAccessibleName("Collection (5)");
     });
 
     await test.step("a 401: the cookie is gone; /login, then back to /packs with no reveal", async () => {
@@ -250,6 +254,7 @@ test.describe("the packs page against the real api", () => {
       await otherBrowserOpensOnePack(browser);
       const gets = packGets.length;
       await packButton(page).click();
+      await expect(page).toHaveURL(`${REAL_API_URL}/packs`);
       await expect(
         main(page).getByRole("status").filter({ hasText: "There was no pack left to open." }),
       ).toBeVisible();

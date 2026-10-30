@@ -4,6 +4,8 @@ import {
   makeOdds,
   makePackOpened,
   makePacks,
+  makeShop,
+  makeShopReceipt,
   makeUnavailablePacks,
   makeWallet,
 } from "../test/fixtures";
@@ -39,12 +41,30 @@ const packsAnswer = (seq: number, overrides = {}): PacksAnswer => ({
 
 describe("gameReducer", () => {
   it("an opening holds its key until an answer settles it", () => {
-    const started = run(initialGame(CHRIS), { type: "openStarted", ...owner, key: REQUEST_ID });
+    const started = run(initialGame(CHRIS), {
+      type: "openStarted",
+      ...owner,
+      key: REQUEST_ID,
+      keepReveal: false,
+    });
     expect(started).toMatchObject({ opening: true, key: REQUEST_ID });
 
     const pack = makePackOpened();
-    const landed = run(started, { type: "opened", ...owner, seq: 2, receivedAt: 50, pack });
-    expect(landed).toMatchObject({ opening: false, key: null, reveal: pack, reveals: 1, line: null });
+    const landed = run(started, {
+      type: "opened",
+      ...owner,
+      seq: 2,
+      receivedAt: 50,
+      pack,
+      landedShowing: true,
+    });
+    expect(landed).toMatchObject({
+      opening: false,
+      key: null,
+      reveal: pack,
+      revealLandedShowing: true,
+      line: null,
+    });
     expect(landed.opened).toEqual({
       seq: 2,
       receivedAt: 50,
@@ -54,7 +74,12 @@ describe("gameReducer", () => {
   });
 
   it("keeps the key after no answer and after a 429, and discards it on every other answer", () => {
-    const started = run(initialGame(CHRIS), { type: "openStarted", ...owner, key: REQUEST_ID });
+    const started = run(initialGame(CHRIS), {
+      type: "openStarted",
+      ...owner,
+      key: REQUEST_ID,
+      keepReveal: false,
+    });
     expect(run(started, { type: "noAnswer", ...owner })).toMatchObject({
       key: REQUEST_ID,
       opening: false,
@@ -79,26 +104,85 @@ describe("gameReducer", () => {
     });
   });
 
-  it("a retry with a held key keeps it, and the reveal stays until the answer replaces it", () => {
+  it("an opening on /packs/open keeps the current cards until its answer; one from /packs clears them (§3.3 step 2)", () => {
     const pack = makePackOpened();
+    const landed = run(
+      initialGame(CHRIS),
+      { type: "openStarted", ...owner, key: "a", keepReveal: false },
+      { type: "opened", ...owner, seq: 1, receivedAt: 0, pack, landedShowing: true },
+    );
+    expect(run(landed, { type: "openStarted", ...owner, key: REQUEST_ID, keepReveal: true })).toMatchObject({
+      opening: true,
+      key: REQUEST_ID,
+      reveal: pack,
+    });
+    expect(run(landed, { type: "openStarted", ...owner, key: REQUEST_ID, keepReveal: false })).toMatchObject({
+      opening: true,
+      reveal: null,
+    });
+  });
+
+  it.each<[string, GameAction]>([
+    ["no answer", { type: "noAnswer", ...owner }],
+    ["a 429", { type: "rateLimited", ...owner, until: 9_000 }],
+    ["a 409", { type: "noneLeft", ...owner, seq: 3, receivedAt: 10, retryAfterSeconds: 60 }],
+    ["a 503", { type: "unavailable", ...owner, seq: 3 }],
+    ["a generic failure", { type: "failed", ...owner, row: "ready" }],
+  ])("%s leaves no cards held, so /packs/open has nothing to show (§3.13 step 3)", (_name, answer) => {
     const state = run(
       initialGame(CHRIS),
-      { type: "openStarted", ...owner, key: "a" },
-      { type: "opened", ...owner, seq: 1, receivedAt: 0, pack },
-      { type: "openStarted", ...owner, key: REQUEST_ID },
+      { type: "openStarted", ...owner, key: "a", keepReveal: false },
+      { type: "opened", ...owner, seq: 1, receivedAt: 0, pack: makePackOpened(), landedShowing: true },
+      { type: "openStarted", ...owner, key: REQUEST_ID, keepReveal: true },
+      answer,
     );
-    expect(state).toMatchObject({ opening: true, key: REQUEST_ID, reveal: pack });
+    expect(state).toMatchObject({ opening: false, reveal: null });
+  });
+
+  it("holds the pack a purchase dealt until the next one, for this session only", () => {
+    const [theme] = makeShop().themes;
+    if (theme === undefined) throw new Error("the shop fixture has a theme");
+    const first = { receipt: makeShopReceipt(), theme, poolSize: 2_983 };
+    const second = { receipt: makeShopReceipt(), theme, poolSize: null };
+    const state = run(initialGame(CHRIS), { type: "shopBought", ...owner, pack: first, landedShowing: true });
+    expect(state.shopPack).toBe(first);
+    expect(state.shopPackLandedShowing).toBe(true);
+    // One that landed after /shop was left is held all the same, and enters nowhere.
+    const later = run(state, { type: "shopBought", ...owner, pack: second, landedShowing: false });
+    expect(later.shopPack).toBe(second);
+    expect(later.shopPackLandedShowing).toBe(false);
+    expect(
+      run(state, { type: "shopBought", accountId: CHRIS, session: 1, pack: second, landedShowing: true }),
+    ).toBe(state);
+    expect(run(state, { type: "reset", accountId: CHRIS })).toMatchObject({
+      shopPack: null,
+      shopPackLandedShowing: false,
+    });
   });
 
   it("drops an action of another account or an earlier session", () => {
     const state = initialGame(CHRIS, 2);
     const pack = makePackOpened();
-    expect(run(state, { type: "opened", accountId: CHRIS, session: 1, seq: 1, receivedAt: 0, pack })).toBe(
-      state,
-    );
-    expect(run(state, { type: "openStarted", accountId: "someone-else", session: 2, key: REQUEST_ID })).toBe(
-      state,
-    );
+    expect(
+      run(state, {
+        type: "opened",
+        accountId: CHRIS,
+        session: 1,
+        seq: 1,
+        receivedAt: 0,
+        pack,
+        landedShowing: true,
+      }),
+    ).toBe(state);
+    expect(
+      run(state, {
+        type: "openStarted",
+        accountId: "someone-else",
+        session: 2,
+        key: REQUEST_ID,
+        keepReveal: false,
+      }),
+    ).toBe(state);
   });
 
   it("keeps the collection overview's controls, for this session only", () => {
@@ -117,7 +201,7 @@ describe("gameReducer", () => {
     const state = run(
       initialGame(CHRIS),
       { type: "overview", ...owner, action: { type: "toggleRarity", rarity: "epic" } },
-      { type: "openStarted", ...owner, key: REQUEST_ID },
+      { type: "openStarted", ...owner, key: REQUEST_ID, keepReveal: false },
       { type: "reset", accountId: CHRIS },
     );
     expect(state).toEqual(initialGame(CHRIS, 1));
@@ -125,7 +209,14 @@ describe("gameReducer", () => {
 
   it("never touches browser storage", () => {
     localStorage.setItem("anime-tcg:inventory:v1", "[]");
-    run(initialGame(CHRIS), { type: "opened", ...owner, seq: 1, receivedAt: 0, pack: makePackOpened() });
+    run(initialGame(CHRIS), {
+      type: "opened",
+      ...owner,
+      seq: 1,
+      receivedAt: 0,
+      pack: makePackOpened(),
+      landedShowing: true,
+    });
     expect(localStorage.length).toBe(1);
     expect(localStorage.getItem("anime-tcg:inventory:v1")).toBe("[]");
   });
@@ -138,7 +229,14 @@ describe("heldAllowance: the newest request wins (packs-page.md §3.1 step 5)", 
 
   it("an opening's answer beats an older GET, and a newer GET beats the opening", () => {
     const pack = makePackOpened({ allowance: { available: 1 }, packsUntilGuarantee: 298 });
-    const state = run(initialGame(CHRIS), { type: "opened", ...owner, seq: 5, receivedAt: 70, pack });
+    const state = run(initialGame(CHRIS), {
+      type: "opened",
+      ...owner,
+      seq: 5,
+      receivedAt: 70,
+      pack,
+      landedShowing: true,
+    });
 
     // A GET sent before the opening (seq 4) that answers after it is ignored.
     const overtaken = heldAllowance(packsAnswer(4, { allowance: makeAllowance({ available: 3 }) }), state);

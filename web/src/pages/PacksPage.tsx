@@ -1,43 +1,18 @@
-import type { PackOpened, PublishedOdds } from "@anime-tcg/shared/api";
+import { Link } from "@tanstack/react-router";
 import { PageHeading } from "../components/layout/PageHeading";
 import { PackControl } from "../components/packs/PackControl";
-import { Reveal, type RevealPack } from "../components/packs/Reveal";
+import { TEXT_LINK_SM } from "../components/packs/styles";
 import { usePacksPage } from "../hooks/usePacksPage";
-import { revealCopy } from "../lib/packsCopy";
+import { packControlCopy } from "../lib/packsCopy";
 import { pageHeading } from "../lib/routes";
 
 /**
- * The special-pack lines from the pack's stored kind and pity flag, never
- * from its cards (card-and-rarity.md §7.1); their numbers are the held odds',
- * so without a snapshot's odds there is no line to write.
- */
-function specialLines(pack: PackOpened, odds: PublishedOdds | null): string[] {
-  if (odds === null) return [];
-  const lines: string[] = [];
-  if (pack.packKind === "enchanted") lines.push(revealCopy.enchanted(odds));
-  if (pack.packKind === "radiant") lines.push(revealCopy.radiant(odds));
-  if (pack.pityMythic) lines.push(revealCopy.pityMythic(odds));
-  return lines;
-}
-
-function toReveal(pack: PackOpened, odds: PublishedOdds | null): RevealPack {
-  const heading = revealCopy.heading(pack.packKind);
-  return {
-    id: pack.openingId,
-    heading,
-    label: heading,
-    summaryLead: "",
-    cards: pack.cards,
-    franchises: pack.franchises,
-    lines: specialLines(pack, odds),
-  };
-}
-
-/**
- * `/packs` (packs-page.md §3.1): the pack control and the last reveal under
- * the page's `h1`. Every number is the server's last answer; the opening and
- * its reveal live in the root layout's game, so a pack opened here lands even
- * if the player has moved on, and coming back shows it without its entrance.
+ * `/packs` (packs-page.md §3.1, §5.1): the pack control under the page's
+ * `h1`. Every number is the server's last answer. Opening a pack moves to
+ * `/packs/open`, which shows the cards (§3.7); while they are held, the
+ * control block ends with `See your latest pack`. The opening and its cards
+ * live in the root layout's game, so a pack opened here lands even if the
+ * player has moved on.
  */
 export function PacksPage() {
   const page = usePacksPage();
@@ -51,14 +26,13 @@ export function PacksPage() {
         onCheckNextPack={page.checkNextPack}
         onReload={page.reload}
       />
-      <Reveal
-        pack={page.reveal === null ? null : toReveal(page.reveal, page.lastOdds)}
-        poolSize={page.lastOdds?.snapshot.characterCount ?? null}
-        entering={page.entering}
-        effects="full"
-        showNew
-        busy={page.opening}
-      />
+      {page.cardsHeld && (
+        <p className="mt-4 max-w-md">
+          <Link to="/packs/open" className={TEXT_LINK_SM}>
+            {packControlCopy.latest}
+          </Link>
+        </p>
+      )}
     </>
   );
 }

@@ -1,6 +1,6 @@
 import type { CharacterPublic, FranchiseRef, Rarity } from "@anime-tcg/shared/api";
 import { RARITY_LABEL } from "@anime-tcg/shared/rarity";
-import { useId, type ReactNode, type Ref } from "react";
+import { useId, type ReactNode } from "react";
 import { formatCount, listSeparator, revealCopy, summaryParts } from "../../lib/packsCopy";
 import { Card, type CardEffects } from "../card/Card";
 import { NEW_MARKER, REVEAL_GRID, TIER_TEXT } from "./styles";
@@ -42,36 +42,37 @@ interface Props {
   showNew: boolean;
   /** An opening is in flight: the previous pack stays, marked busy, until the answer replaces it. */
   busy: boolean;
-  /** The section's margin: the packs page's `mt-10`, the landing page's `mt-6`, the Shop page's `mb-8`. */
-  spacing?: string;
-  /** The heading as a focus target: the Shop page moves focus to it after a purchase (market-and-shop.md §3.3). */
-  headingRef?: Ref<HTMLHeadingElement>;
+  /**
+   * What the empty slots keep room for above them, so the grid does not move when the pack lands: the
+   * heading and the summary on `/packs/open` (packs-page.md §5.5), the summary alone on `/demo`
+   * (navigation-and-landing.md §5.4).
+   */
+  reserve: Reserve;
 }
 
-/** The empty slots before the first pack: a pack's five cards, so the first reveal moves nothing. */
+type Reserve = "heading" | "summary";
+
+const RESERVED: Record<Reserve, string> = {
+  heading: "min-h-[3.25rem]",
+  summary: "mt-1 min-h-5",
+};
+
+/** The empty slots before the cards land: a pack's five cards, so the reveal moves nothing. */
 const EMPTY_SLOTS = [0, 1, 2, 3, 4] as const;
 
 /**
  * The reveal (packs-page.md §3.4, §6.5): heading, pull summary, special
  * lines and the cards in slot order, never sorted by rarity. One component
- * for the packs page and the landing page's demo, which passes no `New`
- * markers, no lines and no effects. The entrance is the same for every pack:
- * no tier, kind or guarantee gets more motion, delay or colour than its frame.
+ * for `/packs/open`, `/shop/open` and the demo on `/demo`, which passes no
+ * `New` markers, no lines and no effects. The entrance is the same for every
+ * pack: no tier, kind or guarantee gets more motion, delay or colour than its frame.
  */
-export function Reveal({
-  pack,
-  poolSize,
-  entering,
-  effects,
-  showNew,
-  busy,
-  spacing = "mt-10",
-  headingRef,
-}: Props) {
+export function Reveal({ pack, poolSize, entering, effects, showNew, busy, reserve }: Props) {
   const headingId = useId();
   if (pack === null) {
     return (
-      <section className={spacing}>
+      <section className="mt-10">
+        <div aria-hidden="true" className={RESERVED[reserve]} />
         <div aria-hidden="true" className={`mt-4 ${REVEAL_GRID}`}>
           {EMPTY_SLOTS.map((slot) => (
             <div key={slot}>
@@ -87,14 +88,9 @@ export function Reveal({
   const cards = [...pack.cards].sort((a, b) => a.slot - b.slot);
   const newCount = showNew ? cards.filter((card) => card.isNew === true).length : 0;
   return (
-    <section aria-labelledby={pack.heading === null ? undefined : headingId} className={spacing}>
+    <section aria-labelledby={pack.heading === null ? undefined : headingId} className="mt-10">
       {pack.heading !== null && (
-        <h2
-          id={headingId}
-          ref={headingRef}
-          tabIndex={headingRef === undefined ? undefined : -1}
-          className="text-lg font-bold break-words text-zinc-100 focus:outline-none"
-        >
+        <h2 id={headingId} className="text-lg font-bold break-words text-zinc-100">
           {pack.heading}
         </h2>
       )}

@@ -130,7 +130,10 @@ test.describe("deployed stack through Caddy", () => {
   });
 
   for (const path of [
+    "/demo",
     "/packs",
+    "/packs/open",
+    "/shop/open",
     "/collection",
     "/account",
     "/login",

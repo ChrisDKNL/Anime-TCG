@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
 import { useCallback, useState } from "react";
 import { controlRow, heldAllowance, heldOdds, visibleLine, type Held } from "../lib/game";
 import { packControlView, type ControlView } from "../lib/packControl";
@@ -18,15 +19,30 @@ function countdownEnd(held: Held | null): number | null {
 }
 
 /**
+ * The packs query as a page observes it: one `GET /api/packs` each time the
+ * page is shown (packs-page.md §3.1 step 2), except while an opening is in
+ * flight. That opening's answer carries the allowance, and a `GET` sent
+ * after it could still be answered from before it on the server and show
+ * the count before the pack (manager decision, 2026-10-30).
+ */
+export function useShownPacks() {
+  const game = useGame();
+  const [fetchOnShow] = useState(!game.state.opening);
+  return useQuery({ ...game.packsQuery, refetchOnMount: fetchOnShow });
+}
+
+/**
  * `/packs` while it is on screen: its own `GET /api/packs` each time it is
  * shown, the countdown to the next pack with its one `GET` at zero, and the
  * 429 wait. Nothing here runs or fetches while another page shows (§3.2 step
- * 6); the opening itself and its result live in the layout's game.
+ * 6); the opening itself and its result live in the layout's game. Opening a
+ * pack moves to `/packs/open` (§3.3 step 2).
  */
 export function usePacksPage() {
   const game = useGame();
   const { announce } = useShellContext();
-  const packs = useQuery(game.packsQuery);
+  const packs = useShownPacks();
+  const navigate = useNavigate();
   const { state } = game;
   const held = heldAllowance(packs.data, state);
   const odds = heldOdds(packs.data, state);
@@ -79,21 +95,18 @@ export function usePacksPage() {
   });
 
   const { openPack } = game;
+  // The request and the page change in one task, so the opening shows on `/packs/open` from its first frame.
   const open = useCallback(() => {
-    if (view.kind === "control" && view.button.enabled) void openPack(view.row);
-  }, [view, openPack]);
-
-  // A reveal that lands while the page shows runs its entrance; the one already there when it mounted does not.
-  const [revealsAtMount] = useState(state.reveals);
+    if (view.kind !== "control" || !view.button.enabled) return;
+    void openPack(view.row, "packs");
+    void navigate({ to: "/packs/open" });
+  }, [view, openPack, navigate]);
 
   return {
     view,
     odds,
-    /** The last `GET`'s odds even while a 503 marks cards unavailable: the reveal's lines and rank chips read them. */
-    lastOdds: packs.data?.answer.odds ?? null,
-    reveal: state.reveal,
-    entering: state.reveals !== revealsAtMount,
-    opening: state.opening,
+    /** `See your latest pack` while the current opening's cards are held (§3.1 step 3). */
+    cardsHeld: state.reveal !== null,
     open,
     checkNextPack: () => void checkNextPack(),
     reload,

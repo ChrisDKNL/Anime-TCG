@@ -13,15 +13,25 @@ import { RootLayout } from "./components/layout/RootLayout";
 import { SignedInLayout } from "./components/layout/SignedInLayout";
 import { isSignedIn } from "./hooks/useAccountSession";
 import { focusPageHeading } from "./lib/pageFocus";
-import { HOME_PATH, pageTitle, toReturnPath, withoutTrailingSlash } from "./lib/routes";
+import {
+  HOME_PATH,
+  OPENING_PAGES,
+  pageTitle,
+  returnPathFor,
+  withoutTrailingSlash,
+  type OpeningPath,
+} from "./lib/routes";
 import { AccountPage } from "./pages/AccountPage";
 import { CollectionPage } from "./pages/CollectionPage";
+import { DemoPage } from "./pages/DemoPage";
 import { LandingPage } from "./pages/LandingPage";
 import { LoginPage } from "./pages/LoginPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
+import { PackOpeningPage } from "./pages/PackOpeningPage";
 import { PacksPage } from "./pages/PacksPage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { RegisterPage } from "./pages/RegisterPage";
+import { ShopOpenPage } from "./pages/ShopOpenPage";
 import { ShopPage } from "./pages/ShopPage";
 
 /**
@@ -33,11 +43,13 @@ import { ShopPage } from "./pages/ShopPage";
 
 interface RouterContext {
   queryClient: QueryClient;
+  /** True until the router has resolved its first location: a redirect then is part of the load (§3.2 step 3). */
+  booting: () => boolean;
 }
 
 const rootRoute = createRootRouteWithContext<RouterContext>()({ component: RootLayout });
 
-/** `/`, `/login`, `/register`: a signed-in visitor is replaced to `/packs`, return path or not (§3.3 step 7). */
+/** `/`, `/demo`, `/login`, `/register`: a signed-in visitor is replaced to `/packs`, return path or not (§3.3 step 7). */
 const publicLayout = createRoute({
   getParentRoute: () => rootRoute,
   id: "public",
@@ -61,7 +73,8 @@ const accountLayout = createRoute({
   id: "account",
   beforeLoad: ({ context, location }) => {
     if (isSignedIn(context.queryClient)) return;
-    const returnTo = toReturnPath(location.pathname);
+    // An opening page's return path is its section page (§3.13 step 7).
+    const returnTo = returnPathFor(location.pathname);
     redirect({ to: "/login", replace: true, state: returnTo === null ? {} : { returnTo }, throw: true });
   },
   component: () => (
@@ -71,15 +84,40 @@ const accountLayout = createRoute({
   ),
 });
 
+/**
+ * An opening page (§3.13). A load or a reload holds nothing, so it is replaced
+ * by its section page there and then, as a boot replace: no focus move and
+ * nothing announced (step 3). Later, the page itself replaces when it holds
+ * nothing, which is a page change like any other.
+ */
+function replaceOnLoad(path: OpeningPath) {
+  return ({ context }: { context: RouterContext }) => {
+    if (context.booting()) redirect({ to: OPENING_PAGES[path].section, replace: true, throw: true });
+  };
+}
+
 const routeTree = rootRoute.addChildren([
   publicLayout.addChildren([
     createRoute({ getParentRoute: () => publicLayout, path: "/", component: LandingPage }),
+    createRoute({ getParentRoute: () => publicLayout, path: "/demo", component: DemoPage }),
     createRoute({ getParentRoute: () => publicLayout, path: "/login", component: LoginPage }),
     createRoute({ getParentRoute: () => publicLayout, path: "/register", component: RegisterPage }),
   ]),
   accountLayout.addChildren([
     createRoute({ getParentRoute: () => accountLayout, path: "/packs", component: PacksPage }),
+    createRoute({
+      getParentRoute: () => accountLayout,
+      path: "/packs/open",
+      beforeLoad: replaceOnLoad("/packs/open"),
+      component: PackOpeningPage,
+    }),
     createRoute({ getParentRoute: () => accountLayout, path: "/shop", component: ShopPage }),
+    createRoute({
+      getParentRoute: () => accountLayout,
+      path: "/shop/open",
+      beforeLoad: replaceOnLoad("/shop/open"),
+      component: ShopOpenPage,
+    }),
     createRoute({ getParentRoute: () => accountLayout, path: "/collection", component: CollectionPage }),
     createRoute({ getParentRoute: () => accountLayout, path: "/profile", component: ProfilePage }),
     createRoute({ getParentRoute: () => accountLayout, path: "/account", component: AccountPage }),
@@ -104,7 +142,7 @@ export function createAppRouter({ queryClient, history = createBrowserHistory() 
   const router = createRouter({
     routeTree,
     history,
-    context: { queryClient },
+    context: { queryClient, booting: () => router.state.resolvedLocation === undefined },
     // `/Packs` is not `/packs` (§3.1 rule 2).
     caseSensitive: true,
     // §3.11: the top on a new page, the entry's own position on Back and Forward, without smooth scrolling.

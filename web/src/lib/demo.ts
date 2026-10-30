@@ -1,16 +1,16 @@
 import type { DemoOpened, DemoResponse } from "@anime-tcg/shared/api";
 
 /**
- * The landing page's demo pack (navigation-and-landing.md §3.7, §4.5) in two
- * parts. The browser rolls nothing: every card is the server's, and nothing
- * here is stored, sent back or kept for an account.
+ * The demo pack of `/` and `/demo` (navigation-and-landing.md §3.7, §3.14,
+ * §4.5, §4.9). The browser rolls nothing: every card is the server's, and
+ * nothing here is stored, sent back or kept for an account.
  *
- * - The **visit**: how many demo packs this page load has revealed and any
- *   429 wait. It lasts for the document's lifetime (manager decision,
- *   2026-10-30), so a link out of `/` and Back, Forward or the wordmark keep
- *   it; a reload starts it over. The root layout holds it, never storage.
- * - The **page**: the cards on screen, an opening in flight, a 503 and the
- *   failure line. It goes when `/` is left, so the cards are not kept.
+ * The **visit** is everything the demo holds: how many demo packs this page
+ * load has revealed, a 429 wait, the current cards, an opening in flight and
+ * the last answer's state. It lasts for the document's lifetime (manager
+ * decision, 2026-10-30; §3.14 step 6), so moving between `/`, `/demo` and the
+ * other public pages with links, Back or Forward keeps it; a reload or a
+ * sign-in starts it over. The root layout holds it in memory, never in storage.
  */
 export interface DemoVisit {
   /** Demo packs revealed this page load. */
@@ -19,52 +19,60 @@ export interface DemoVisit {
   waitUntil: number | null;
   /** Whether the 429 named its wait: only then does the button count it down (§8 "Wait without Retry-After"). */
   waitCounted: boolean;
-}
-
-export type DemoVisitAction = { type: "revealed" } | { type: "rateLimited"; until: number; counted: boolean };
-
-export const initialVisit: DemoVisit = { revealed: 0, waitUntil: null, waitCounted: false };
-
-export function visitReducer(visit: DemoVisit, action: DemoVisitAction): DemoVisit {
-  switch (action.type) {
-    case "revealed":
-      return { ...visit, revealed: visit.revealed + 1 };
-    case "rateLimited":
-      return { ...visit, waitUntil: action.until, waitCounted: action.counted };
-  }
-}
-
-export interface DemoPage {
-  /** The last demo pack, numbered so a new one's cards enter afresh; earlier ones are not kept. */
-  pack: { n: number; opened: DemoOpened } | null;
+  /** The current demo pack; earlier ones are not kept. */
+  pack: DemoPack | null;
   opening: boolean;
-  /** A 503: no demo packs while the page shows. */
+  /** A 503: no demo packs this page load. */
   unavailable: boolean;
+  /** The last try got no answer, or a 400, 403 or other envelope: the failure line until the next try. */
   failed: boolean;
 }
 
-export type DemoPageAction =
-  | { type: "openStarted" }
-  | { type: "opened"; opened: DemoOpened }
+export interface DemoPack {
+  /** Numbered by the visit's count, so a new pack's cards are told from the last one's. */
+  n: number;
+  opened: DemoOpened;
+  /** Whether it landed while `/demo` was showing or about to: only then do its cards enter (§3.14 step 6). */
+  landedShowing: boolean;
+}
+
+export type DemoVisitAction =
+  /** `clearCards`: opened from `/`, so `/demo` shows five empty slots until the answer (§3.14 step 3). */
+  | { type: "openStarted"; clearCards: boolean }
+  | { type: "opened"; opened: DemoOpened; landedShowing: boolean }
   | { type: "unavailable" }
-  | { type: "settled" }
+  | { type: "rateLimited"; until: number; counted: boolean }
   | { type: "failed" };
 
-export const initialPage: DemoPage = { pack: null, opening: false, unavailable: false, failed: false };
+export const initialVisit: DemoVisit = {
+  revealed: 0,
+  waitUntil: null,
+  waitCounted: false,
+  pack: null,
+  opening: false,
+  unavailable: false,
+  failed: false,
+};
 
-export function pageReducer(page: DemoPage, action: DemoPageAction): DemoPage {
+export function visitReducer(visit: DemoVisit, action: DemoVisitAction): DemoVisit {
   switch (action.type) {
     case "openStarted":
       // A failure line from the last try goes, so the next one is announced afresh.
-      return { ...page, opening: true, failed: false };
+      return { ...visit, opening: true, failed: false, pack: action.clearCards ? null : visit.pack };
     case "opened":
-      return { ...page, opening: false, pack: { n: (page.pack?.n ?? 0) + 1, opened: action.opened } };
+      // The visit counts every pack the server dealt, even one that lands after the page was left.
+      return {
+        ...visit,
+        opening: false,
+        revealed: visit.revealed + 1,
+        pack: { n: visit.revealed + 1, opened: action.opened, landedShowing: action.landedShowing },
+      };
     case "unavailable":
-      return { ...page, opening: false, unavailable: true };
-    case "settled":
-      return { ...page, opening: false };
+      return { ...visit, opening: false, unavailable: true };
+    case "rateLimited":
+      return { ...visit, opening: false, waitUntil: action.until, waitCounted: action.counted };
     case "failed":
-      return { ...page, opening: false, failed: true };
+      return { ...visit, opening: false, failed: true };
   }
 }
 
@@ -76,7 +84,7 @@ export function pageReducer(page: DemoPage, action: DemoPageAction): DemoPage {
  */
 export const DEMO_PACKS_PER_VISIT_FALLBACK = 10;
 
-/** What stands where the demo button is (§4.5): the button, the unavailable line, or after the last pack the Join offer. */
+/** What stands where the demo button is (§4.5, §4.9): the button, the unavailable line, or after the last pack the Join offer. */
 export type DemoControl =
   | {
       kind: "button";
@@ -92,7 +100,7 @@ export type DemoLabel = { kind: "open" } | { kind: "opening" } | { kind: "wait";
 
 export interface DemoView {
   control: DemoControl;
-  /** `To keep cards, register…`: under the cards on screen, until the Join offer takes its place. */
+  /** `To keep cards, register…`: under the cards on `/demo`, until the Join offer takes its place. */
   keepCards: boolean;
 }
 
@@ -102,26 +110,21 @@ export function perVisit(facts: DemoResponse | undefined): number {
 }
 
 /**
- * The view from the page, the visit, the facts (undefined while they load or
- * after they failed) and the 429 wait's seconds left (null when none runs).
- * The server's rate limit is the real bound either way (§3.8 item 5).
+ * The view from the visit, the facts (undefined while they load or after they
+ * failed) and the 429 wait's seconds left (null when none runs). The server's
+ * rate limit is the real bound either way (§3.8 item 5).
  */
-export function demoView(
-  page: DemoPage,
-  visit: DemoVisit,
-  facts: DemoResponse | undefined,
-  wait: number | null,
-): DemoView {
+export function demoView(visit: DemoVisit, facts: DemoResponse | undefined, wait: number | null): DemoView {
   const done = visit.revealed >= perVisit(facts);
-  const keepCards = page.pack !== null && !done;
+  const keepCards = visit.pack !== null && !done;
   if (done) return { control: { kind: "done" }, keepCards };
-  if (page.unavailable || facts?.odds === null) return { control: { kind: "unavailable" }, keepCards };
+  if (visit.unavailable || facts?.odds === null) return { control: { kind: "unavailable" }, keepCards };
   const waiting = wait !== null && wait > 0;
-  const label: DemoLabel = page.opening
+  const label: DemoLabel = visit.opening
     ? { kind: "opening" }
     : waiting && visit.waitCounted
       ? { kind: "wait", seconds: wait }
       : { kind: "open" };
-  const line = page.failed ? "failed" : waiting ? "wait" : null;
-  return { control: { kind: "button", label, enabled: !page.opening && !waiting, line }, keepCards };
+  const line = visit.failed ? "failed" : waiting ? "wait" : null;
+  return { control: { kind: "button", label, enabled: !visit.opening && !waiting, line }, keepCards };
 }

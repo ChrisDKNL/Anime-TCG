@@ -56,7 +56,11 @@ function strings(value: unknown, path: string, out: Array<[string, string]>): Ar
   return out;
 }
 
-const pagePaths = [...Object.keys(routes.PUBLIC_PAGES), ...Object.keys(routes.ACCOUNT_PAGES)];
+const pagePaths = [
+  ...Object.keys(routes.PUBLIC_PAGES),
+  ...Object.keys(routes.ACCOUNT_PAGES),
+  ...Object.keys(routes.OPENING_PAGES),
+];
 
 const { landingCopy, demoCopy, landingText } = navigation;
 
@@ -65,6 +69,7 @@ const landingFunctions: Array<[string, string]> = [
   ["ledeWithFacts", landingCopy.ledeWithFacts(2_983, 100)],
   ["packsRowWithFacts", landingCopy.packsRowWithFacts(600, 3)],
   ["collectionRowWithFacts", landingCopy.collectionRowWithFacts(2_983)],
+  ["stepNumber", landingCopy.stepNumber(4)],
   ["odds.figure", landingCopy.odds.figure(999_704, 1_000_000)],
   ["odds.source", landingCopy.odds.source(2_983, "2026-10-29T08:00:00.000Z")],
   ["demo.waitButton", demoCopy.waitButton(12)],
@@ -99,9 +104,25 @@ describe("navigation copy (§8)", () => {
       "Your profile isn't here yet.",
       "There's no page at this address.",
       "Every character has one of six tiers, set by how many AniList users favourited them.",
+      "Demo pack · Anime TCG",
+      "Pack opening · Anime TCG",
+      "Shop pack · Anime TCG",
+      "Back to the landing page",
+      "Five cards",
+      "Recycle duplicates for Karma and spend it on themed packs. Karma comes only from playing. It can't be bought.",
     ]) {
       expect(texts).toContain(expected);
     }
+  });
+
+  it('numbers the steps with two digits, in the order they exist (§8 "Step numbers")', () => {
+    expect([1, 2, 3, 4, 10].map(landingCopy.stepNumber)).toEqual(["01", "02", "03", "04", "10"]);
+    expect(landingText(makeDemo()).rows.map((row) => row.term)).toEqual([
+      "Packs",
+      "Rarity",
+      "Collection",
+      "Karma",
+    ]);
   });
 
   it("contains none of the words §8 forbids", () => {
@@ -131,6 +152,10 @@ describe("navigation copy (§8)", () => {
         term: "Collection",
         text: "See how much of each series you have, and how much of all 2,983 characters.",
       },
+      {
+        term: "Karma",
+        text: "Recycle duplicates for Karma and spend it on themed packs. Karma comes only from playing. It can't be bought.",
+      },
     ]);
     expect(landingCopy.odds.source(2_983, "2026-10-29T08:00:00.000Z")).toBe(
       "Drawn from 2,983 characters, as of 29 Oct 2026.",
@@ -149,6 +174,7 @@ describe("navigation copy (§8)", () => {
       "A new pack every 10 minutes, and up to 3 can pile up. Five cards each.",
       "Every character has one of six tiers, set by how many AniList users favourited them.",
       "See how much of each series you have, and of the whole pool.",
+      "Recycle duplicates for Karma and spend it on themed packs. Karma comes only from playing. It can't be bought.",
     ]);
     expect(landingText(undefined).rows[0]?.text).toBe(
       "A new pack on a timer, and a few can pile up. Five cards each.",

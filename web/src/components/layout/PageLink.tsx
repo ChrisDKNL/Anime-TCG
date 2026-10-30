@@ -1,7 +1,7 @@
-import { Link } from "@tanstack/react-router";
+import { Link, useLocation } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { useCurrentPageClick } from "../../hooks/useCurrentPageClick";
-import type { PagePath } from "../../lib/routes";
+import { sectionOf, type PagePath } from "../../lib/routes";
 import type { LinkState } from "./styles";
 
 interface Props {
@@ -14,10 +14,14 @@ interface Props {
 /**
  * A header link: a real `<a href>` the router intercepts on a plain click,
  * marked `aria-current="page"` on its own page (the router sets it), and inert
- * when it points at the page already showing.
+ * when it points at the page already showing. On an opening page its
+ * section's link keeps the current fill and reads `aria-current="true"`, the
+ * current section rather than the current page, and still goes to the
+ * section page (navigation-and-landing.md §3.13 step 6).
  */
 export function PageLink({ to, className, children }: Props) {
   const { current, onClick } = useCurrentPageClick(to);
+  const inSection = useLocation({ select: (location) => sectionOf(location.pathname) === to });
   return (
     <Link
       to={to}
@@ -26,7 +30,10 @@ export function PageLink({ to, className, children }: Props) {
       activeOptions={{ exact: true, includeSearch: false }}
       // An empty object stops the router adding its default `active` class.
       activeProps={{}}
-      className={typeof className === "string" ? className : className[current ? "current" : "other"]}
+      inactiveProps={inSection ? { "aria-current": "true" } : {}}
+      className={
+        typeof className === "string" ? className : className[current || inSection ? "current" : "other"]
+      }
     >
       {children}
     </Link>

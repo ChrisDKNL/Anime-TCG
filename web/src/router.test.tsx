@@ -2,7 +2,7 @@ import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { SESSION_QUERY_KEY } from "./hooks/useAccountSession";
-import { ACCOUNT_PAGES, PUBLIC_PAGES } from "./lib/routes";
+import { ACCOUNT_PAGES, OPENING_PAGES, PUBLIC_PAGES } from "./lib/routes";
 import { makeAccount, mockFetch } from "./test/api";
 import { gameServer, pageHeading, renderApp, signedInRoutes, signedOutSession } from "./test/app";
 import { fill } from "./test/user";
@@ -30,7 +30,9 @@ describe("the route tree", () => {
   it("holds exactly the route list's pages plus the catch-all", () => {
     const { router } = renderApp(signedOut);
     const paths = Object.keys(router.routesByPath).filter((path) => path !== "/$");
-    expect(paths.sort()).toEqual([...Object.keys(PUBLIC_PAGES), ...Object.keys(ACCOUNT_PAGES)].sort());
+    expect(paths.sort()).toEqual(
+      [...Object.keys(PUBLIC_PAGES), ...Object.keys(ACCOUNT_PAGES), ...Object.keys(OPENING_PAGES)].sort(),
+    );
     expect(Object.keys(router.routesByPath)).toContain("/$");
   });
 });
@@ -85,7 +87,25 @@ describe("the guard (§3.3)", () => {
     expect(await pageHeading("Packs")).toBeInTheDocument();
   });
 
-  it.each(["/", "/login", "/register"])("signed in at %s: replaced by /packs", async (path) => {
+  it.each([
+    ["/packs/open", "/packs", "Log in to open your packs."],
+    ["/shop/open", "/shop", "Log in to see the shop."],
+  ])(
+    "signed out at the opening page %s: replaced by /login with its section page %s as the return path (§3.13 step 7)",
+    async (path, section, line) => {
+      const { history } = renderApp({ ...signedOut, ...logIn }, account, path);
+      expect(await pageHeading("Log in")).toBeInTheDocument();
+      expect(history.location.pathname).toBe("/login");
+      expect(history.location.state).toMatchObject({ returnTo: section });
+      expect(screen.getByText(line)).toBeInTheDocument();
+      await submitLogIn();
+      // Nothing is held after a sign-in, so the player lands on the section page, never the opening page.
+      expect(await pageHeading(section === "/packs" ? "Packs" : "Shop")).toBeInTheDocument();
+      expect(history.location.pathname).toBe(section);
+    },
+  );
+
+  it.each(["/", "/demo", "/login", "/register"])("signed in at %s: replaced by /packs", async (path) => {
     const { history } = renderApp({}, account, path);
     expect(await pageHeading("Packs")).toBeInTheDocument();
     expect(history.location.pathname).toBe("/packs");
@@ -261,7 +281,7 @@ describe("paths (§3.1 rule 2)", () => {
     await pageHeading("Page not found");
     expect(screen.getByRole("link", { name: "Collection (5)" })).toBeInTheDocument();
     act(() => history.back());
-    await pageHeading("Packs");
+    await pageHeading("Pack opening");
     expect(screen.getAllByRole("article")).toHaveLength(5);
   });
 });

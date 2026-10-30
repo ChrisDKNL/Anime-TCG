@@ -408,6 +408,8 @@ describe("App game", () => {
 
     await user.click(screen.getByRole("link", { name: "Packs" }));
     await pageHeading("Packs");
+    await user.click(screen.getByRole("link", { name: "See your latest pack" }));
+    await pageHeading("Pack opening");
     const returned = within(screen.getByRole("list", { name: "Your pack" })).getAllByRole("listitem");
     expect(returned).toHaveLength(5);
     for (const item of returned) expect(item).not.toHaveClass("animate-card-enter");

@@ -6,8 +6,8 @@ import { expect, makeAccount, recordStatusTexts, signedIn, statusTexts, test } f
  * Test plan: the packs page as a client of the api (docs/design/packs-page.md, collection-packs.md §8),
  * against the scripted api's default game (3 of 3 packs, each opening the fixture pack).
  *
- * - Opening a pack shows the five cards the server dealt, `New` under the new ones, the summary and
- *   `Collection (5)`; the count and the pity line come from the answer.
+ * - Opening a pack moves to /packs/open and shows the five cards the server dealt, `New` under the
+ *   new ones, the summary and `Collection (5)`; the count and the pity line come from the answer.
  * - A reload keeps the collection: it is the server's, so `Collection (5)` is asked again and shown.
  * - The browser stores nothing: no `anime-tcg:` key is written, and the pre-accounts
  *   `anime-tcg:inventory:v1` value is neither read, changed nor deleted (accounts.md §3.1.3).
@@ -70,14 +70,18 @@ test("opens a pack the server deals, keeps nothing in the browser, and a reload 
   const open = page.getByRole("button", { name: "Open pack" });
 
   await open.click();
+  // The cards are on the opening page (packs-page.md §3.7); its h1 takes focus.
+  await expect(page).toHaveURL(/\/packs\/open$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Pack opening" })).toBeFocused();
   const reveal = page.getByRole("list", { name: "Your pack" });
   await expect(reveal.getByRole("article")).toHaveCount(5);
   await expect(reveal.getByText("New", { exact: true })).toHaveCount(5);
   await expect(page.getByText("1 Rare, 1 Uncommon and 3 Common · 5 new")).toBeVisible();
   await expect(page.getByText("2 of 3 packs ready")).toBeVisible();
-  await expect(page.getByText("Mythic guaranteed within 299 free packs.")).toBeVisible();
   await expect(page.getByRole("link", { name: "Collection (5)" })).toBeVisible();
-  await expect(open).toBeFocused();
+  // The pity line stays on /packs, with the opening's number.
+  await page.getByRole("link", { name: "Back to packs" }).click();
+  await expect(page.getByText("Mythic guaranteed within 299 free packs.")).toBeVisible();
 
   await page.reload();
   await expect(page.getByRole("link", { name: "Collection (5)" })).toBeVisible();

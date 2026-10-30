@@ -71,6 +71,10 @@ export const shopCopy = {
   tooLittleRefused: (price: number, balance: number) =>
     `This pack costs ${amount(price)}. You have ${amount(balance)}.`,
   gone: "That pack is no longer in the shop.",
+  /** `/shop` while a bought pack is held (§3.3 step 6). */
+  latest: "See your latest shop pack",
+  /** `/shop/open`'s way back; there is no buy button on that page. */
+  back: "Back to the shop",
   noCards: "There are no cards to draw from right now. Nothing changed.",
 } as const;
 

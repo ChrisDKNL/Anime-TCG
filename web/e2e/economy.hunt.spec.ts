@@ -74,6 +74,8 @@ const confirmation = (page: Page, title = "Action") =>
   page.getByRole("dialog", { name: `Buy the ${title} pack?` });
 const reveal = (page: Page, title = "Action") =>
   page.getByRole("heading", { level: 2, name: `${title} pack`, exact: true });
+/** A purchase pushes the bought pack's own page, whose h1 takes focus (market-and-shop.md §3.3 step 6). */
+const shopPackPage = (page: Page) => h1(page, "Shop pack");
 const requestIds = (api: FakeApi, key: string) =>
   api.bodies(key).map((body) => (body as { requestId: string }).requestId);
 const BUY = "POST /api/shop/buy";
@@ -171,7 +173,8 @@ test.describe("double spend from the UI", () => {
   test("a real double click on Buy for 400 Karma buys one pack", async ({ page, api }) => {
     await confirmBuy(page);
     await confirmation(page).getByRole("button", { name: "Buy for 400 Karma" }).dblclick();
-    await expect(reveal(page)).toBeFocused();
+    await expect(shopPackPage(page)).toBeFocused();
+    await expect(reveal(page)).toBeVisible();
     await expect(header(page).getByText("840 Karma")).toBeVisible();
     expect(api.count(BUY)).toBe(1);
     expect(api.game.balance).toBe(840);
@@ -186,7 +189,8 @@ test.describe("double spend from the UI", () => {
     // keyboard.down on a key already down sends keydown with repeat: true, as an auto-repeat does.
     for (let i = 0; i < 8; i++) await page.keyboard.down("Enter");
     await page.keyboard.up("Enter");
-    await expect(reveal(page)).toBeFocused();
+    await expect(shopPackPage(page)).toBeFocused();
+    await expect(reveal(page)).toBeVisible();
     await expect(header(page).getByText("840 Karma")).toBeVisible();
     await expect(confirmation(page)).toHaveCount(0);
     expect(api.count(BUY)).toBe(1);
@@ -211,7 +215,8 @@ test.describe("double spend from the UI", () => {
       }
       await expect.poll(() => api.count(BUY)).toBe(2);
       gate.release();
-      await expect(reveal(page)).toBeFocused();
+      await expect(shopPackPage(page)).toBeFocused();
+      await expect(reveal(page)).toBeVisible();
       await expect(header(page).getByText("40 Karma", { exact: true })).toBeVisible();
       await expect(confirmation(other.page).getByRole("alert")).toHaveText(
         "This pack costs 400 Karma. You have 40 Karma.",
@@ -257,7 +262,8 @@ test.describe("double spend from the UI", () => {
 
     // The buy arrives after the recycle: the server debits 1,320.
     gate.release();
-    await expect(reveal(page)).toBeFocused();
+    await expect(shopPackPage(page)).toBeFocused();
+    await expect(reveal(page)).toBeVisible();
     await expect(header(page).getByText("920 Karma")).toBeVisible();
     // The other tab shows its own last answer until a page reads the wallet again.
     await expect(header(tab).getByText("1,320 Karma")).toBeVisible();
@@ -285,11 +291,14 @@ test.describe("double spend from the UI", () => {
     gate.release();
     await expect(header(page).getByText("840 Karma")).toBeVisible();
     await expect(page.getByRole("link", { name: "Collection (5)" })).toBeVisible();
-    // Back on the Shop: no reveal of the pack bought while away, no confirmation, and no second buy.
+    // Back on the Shop: no reveal of the pack bought while away, no confirmation, and no second buy;
+    // nothing moved to /shop/open, but the pack is held for it (market-and-shop.md §3.2 item 6).
     await page.goForward();
     await expect(h1(page, "Shop")).toBeFocused();
     await expect(theme(page)).toBeVisible();
     await expect(reveal(page)).toHaveCount(0);
+    await expect(page).toHaveURL(/\/shop$/);
+    await expect(page.getByRole("link", { name: "See your latest shop pack" })).toBeVisible();
     expect(api.count(BUY)).toBe(1);
   });
 });
@@ -315,7 +324,8 @@ test.describe("the requestId lifecycle", () => {
 
     await theme(page).getByRole("button", { name: "Buy…" }).click();
     await confirmation(page).getByRole("button", { name: "Buy for 400 Karma" }).click();
-    await expect(reveal(page)).toBeFocused();
+    await expect(shopPackPage(page)).toBeFocused();
+    await expect(reveal(page)).toBeVisible();
     await expect(header(page).getByText("440 Karma")).toBeVisible();
     const [first, second] = requestIds(api, BUY);
     expect(second).not.toBe(first);
@@ -355,7 +365,8 @@ test.describe("the requestId lifecycle", () => {
     const buy = confirmation(page).getByRole("button", { name: "Buy for 400 Karma" });
     await expect(buy).toBeVisible({ timeout: 5_000 });
     await buy.click();
-    await expect(reveal(page)).toBeFocused();
+    await expect(shopPackPage(page)).toBeFocused();
+    await expect(reveal(page)).toBeVisible();
     const [first, second] = requestIds(api, BUY);
     expect(second).not.toBe(first);
   });
@@ -370,7 +381,8 @@ test.describe("the requestId lifecycle", () => {
     );
     await expect(header(page).getByText("1,240 Karma")).toBeVisible();
     await button.click();
-    await expect(reveal(page)).toBeFocused();
+    await expect(shopPackPage(page)).toBeFocused();
+    await expect(reveal(page)).toBeVisible();
     const [first, second] = requestIds(api, BUY);
     expect(second).not.toBe(first);
   });
@@ -708,7 +720,8 @@ test.describe("hostile AniList strings", () => {
     await expect(dialog.getByRole("heading", { level: 2 }).locator("bdi")).toHaveText(HOSTILE_TITLE);
     await dialog.getByRole("button", { name: "Buy for 400 Karma" }).click();
     const revealHeading = page.getByRole("heading", { level: 2, name: `${HOSTILE_TITLE} pack` });
-    await expect(revealHeading).toBeFocused();
+    await expect(shopPackPage(page)).toBeFocused();
+    await expect(revealHeading).toBeVisible();
     await expect(revealHeading.locator("bdi")).toHaveText(HOSTILE_TITLE);
     await expect
       .poll(() => statusTexts(page))
@@ -765,7 +778,8 @@ test.describe("copy", () => {
     await expect(confirmation(page)).toBeVisible();
     expectCopyClean(await visibleText(page, "header, main, dialog[open]"));
     await confirmation(page).getByRole("button", { name: "Buy for 400 Karma" }).click();
-    await expect(reveal(page)).toBeFocused();
+    await expect(shopPackPage(page)).toBeFocused();
+    await expect(reveal(page)).toBeVisible();
     expectCopyClean(await visibleText(page, "header, main"));
   });
 
@@ -842,7 +856,8 @@ test.describe("320 px", () => {
     await expect(dialog.getByRole("button", { name: "Cancel" })).toBeInViewport();
     expect(await noHorizontalScroll(page)).toBe(true);
     await dialog.getByRole("button", { name: "Buy for 400 Karma" }).click();
-    await expect(page.getByRole("heading", { level: 2, name: /pack$/ }).first()).toBeFocused();
+    await expect(shopPackPage(page)).toBeFocused();
+    await expect(page.getByRole("heading", { level: 2, name: /pack$/ }).first()).toBeVisible();
     expect(await noHorizontalScroll(page)).toBe(true);
   });
 

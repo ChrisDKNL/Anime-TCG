@@ -2,13 +2,12 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Outlet, useRouter } from "@tanstack/react-router";
 import { useCallback } from "react";
 import { useAccountSession } from "../../hooks/useAccountSession";
-import { DemoVisitContext, useDemoVisitStore } from "../../hooks/useDemoVisit";
+import { DEMO_FACTS_KEY, DemoVisitContext, useDemoVisitStore } from "../../hooks/useDemoVisit";
 import { FrameContext, type Frame } from "../../hooks/useFrame";
 import { GameContext, useGameState } from "../../hooks/useGame";
-import { DEMO_FACTS_KEY } from "../../hooks/useLandingDemo";
 import { useSignedInNavigation } from "../../hooks/useSignedInNavigation";
 import { ShellContext, useShell, type Notice } from "../../hooks/useShell";
-import { toReturnPath } from "../../lib/routes";
+import { returnPathFor } from "../../lib/routes";
 import { LiveRegion } from "../LiveRegion";
 
 /**
@@ -16,7 +15,7 @@ import { LiveRegion } from "../LiveRegion";
  * once the session check has answered and never again, so the live region,
  * the app-level banner and the signed-in account's game state outlive every
  * page change. The pages' own frames (public or signed in) render inside the
- * outlet. The landing demo's visit lives here too, so its count and wait last
+ * outlet. The demo's visit lives here too, so its count, wait and cards last
  * for the page load.
  */
 export function RootLayout() {
@@ -25,17 +24,20 @@ export function RootLayout() {
   const goSignedIn = useSignedInNavigation();
   const queryClient = useQueryClient();
 
-  // §3.5 step 8: the page that answered `unauthenticated` becomes the return path.
+  // §3.5 step 8: the page that answered `unauthenticated` becomes the return path, an opening page's section page.
   const toLogin = useCallback(() => {
-    const returnTo = toReturnPath(router.state.location.pathname);
+    const returnTo = returnPathFor(router.state.location.pathname);
     void router.navigate({ to: "/login", replace: true, state: returnTo === null ? {} : { returnTo } });
   }, [router]);
   const shell = useShell({ onSessionEnded: toLogin });
 
   const account = session.status === "signedIn" ? session.account : null;
-  const packsShowing = useCallback(() => router.state.location.pathname === "/packs", [router]);
-  const game = useGameState({ account, shell: shell.context, packsShowing });
-  const demoVisit = useDemoVisitStore();
+  // The location being shown or navigated to: an answer can land before the page it opened has mounted.
+  const openingShowing = useCallback(() => router.latestLocation.pathname === "/packs/open", [router]);
+  const leaveOpening = useCallback(() => void router.navigate({ to: "/packs", replace: true }), [router]);
+  const game = useGameState({ account, shell: shell.context, openingShowing, leaveOpening });
+  const demoShowing = useCallback(() => router.latestLocation.pathname === "/demo", [router]);
+  const demoVisit = useDemoVisitStore({ signedIn: account !== null, shell: shell.context, demoShowing });
 
   /**
    * `Try again` repeats the session check; an answer that names a session leaves `/login` (§3.2 step 4).

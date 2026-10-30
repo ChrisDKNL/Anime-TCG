@@ -22,14 +22,21 @@ const pack = (overrides: Partial<RevealPack> = {}): RevealPack => ({
   ...overrides,
 });
 
-const props = { poolSize: 2_983, entering: false, effects: "full", showNew: true, busy: false } as const;
+const props = {
+  poolSize: 2_983,
+  entering: false,
+  effects: "full",
+  showNew: true,
+  busy: false,
+  reserve: "heading",
+} as const;
 
 describe("Reveal (packs-page.md §3.4)", () => {
   it("before the first pack: five empty slots hidden from assistive tech, no heading, no list", () => {
     const { container } = render(<Reveal pack={null} {...props} />);
     expect(screen.queryByRole("heading")).not.toBeInTheDocument();
     expect(screen.queryByRole("list")).not.toBeInTheDocument();
-    const slots = container.querySelector('[aria-hidden="true"]');
+    const slots = container.querySelector('[aria-hidden="true"].grid');
     expect(slots?.children).toHaveLength(5);
     expect(container).not.toHaveTextContent(/./);
   });
@@ -99,14 +106,14 @@ describe("Reveal (packs-page.md §3.4)", () => {
     expect(screen.getAllByRole("article")[4]).not.toHaveClass("shadow-glow-epic");
   });
 
-  it("without a heading: no h2, the list named by its label, the summary after its lead, at the given spacing", () => {
+  it("without a heading: no h2, the list named by its label, the summary after its lead", () => {
     const { container } = render(
       <Reveal
         pack={pack({ heading: null, label: "Demo pack", summaryLead: "Demo pack: " })}
         {...props}
         effects="none"
         showNew={false}
-        spacing="mt-6"
+        reserve="summary"
       />,
     );
     expect(screen.queryByRole("heading")).not.toBeInTheDocument();
@@ -114,15 +121,22 @@ describe("Reveal (packs-page.md §3.4)", () => {
     expect(screen.getByText("Epic").closest("p")).toHaveTextContent(
       /^Demo pack: 1 Epic, 1 Uncommon and 3 Common$/,
     );
-    expect(container.firstElementChild).toHaveClass("mt-6");
     expect(container.firstElementChild).not.toHaveAttribute("aria-labelledby");
   });
 
-  it("keeps the empty slots in the card's 5:7 box, at the given spacing", () => {
-    const { container } = render(<Reveal pack={null} {...props} spacing="mt-6" />);
-    expect(container.firstElementChild).toHaveClass("mt-6");
-    expect(container.querySelectorAll(".aspect-\\[5\\/7\\]")).toHaveLength(5);
-  });
+  it.each([
+    ["heading", "min-h-[3.25rem]"],
+    ["summary", "min-h-5"],
+  ] as const)(
+    "keeps the empty slots in the card's 5:7 box under room for the %s, so nothing moves when the cards land",
+    (reserve, height) => {
+      const { container } = render(<Reveal pack={null} {...props} reserve={reserve} />);
+      expect(container.querySelectorAll(".aspect-\\[5\\/7\\]")).toHaveLength(5);
+      const room = container.firstElementChild?.firstElementChild;
+      expect(room).toHaveAttribute("aria-hidden", "true");
+      expect(room).toHaveClass(height);
+    },
+  );
 
   it("renders hostile names and series titles as text (T1)", () => {
     const hostile = makeOpenedCard(0, {

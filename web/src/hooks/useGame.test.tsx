@@ -6,8 +6,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type * as api from "../lib/api";
 import { openPack } from "../lib/api";
 import { createQueryClient } from "../lib/queryClient";
-import { makeAccount, mockFetch, type MockHandler } from "../test/api";
-import { signedInRoutes, WALLET } from "../test/app";
+import { envelope, makeAccount, mockFetch, type MockHandler } from "../test/api";
+import { OPEN, signedInRoutes, WALLET } from "../test/app";
 import { makeWallet } from "../test/fixtures";
 import { useGameState } from "./useGame";
 
@@ -20,7 +20,7 @@ vi.mock("../lib/api", async (importOriginal) => {
 const account = makeAccount();
 const other = makeAccount({ id: "9a7b1c2d-3e4f-4a5b-8c6d-7e8f9a0b1c2d", login: "Alex" });
 
-function renderGame(routes: Record<string, MockHandler> = {}) {
+function renderGame(routes: Record<string, MockHandler> = {}, { openingShowing = true } = {}) {
   mockFetch({ ...signedInRoutes(account), ...routes });
   const queryClient = createQueryClient();
   const shell = {
@@ -34,11 +34,13 @@ function renderGame(routes: Record<string, MockHandler> = {}) {
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
   );
   const initialProps: { signedIn: AccountPublic | null } = { signedIn: account };
+  const leaveOpening = vi.fn();
   const { result, rerender } = renderHook(
-    ({ signedIn }) => useGameState({ account: signedIn, shell, packsShowing: () => true }),
+    ({ signedIn }) =>
+      useGameState({ account: signedIn, shell, openingShowing: () => openingShowing, leaveOpening }),
     { wrapper, initialProps },
   );
-  return { result, rerender, shell, queryClient };
+  return { result, rerender, shell, queryClient, leaveOpening };
 }
 
 /** The keys of the cached queries that name `accountId`: its packs, collection and wallet answers. */
@@ -72,21 +74,84 @@ describe("useGameState: an opening that rejects with a client bug", () => {
   it("settles on the generic failure, never stays opening, and the error reaches the caller", async () => {
     const bug = new TypeError("a bug in this client");
     vi.mocked(openPack).mockRejectedValueOnce(bug);
-    const { result, shell } = renderGame();
+    const { result, shell, leaveOpening } = renderGame();
 
     await act(async () => {
-      await expect(result.current!.openPack("ready")).rejects.toBe(bug);
+      await expect(result.current!.openPack("ready", "opening")).rejects.toBe(bug);
     });
     await waitFor(() => expect(result.current!.state.opening).toBe(false));
     expect(result.current!.state.line).toEqual({ kind: "failed", row: "ready" });
     expect(result.current!.state.key).toBeNull();
     expect(shell.unreachable).not.toHaveBeenCalled();
     expect(shell.sessionEnded).not.toHaveBeenCalled();
+    // An answer without cards on /packs/open: the page goes back to /packs, and its line is read once.
+    expect(leaveOpening).toHaveBeenCalledTimes(1);
+    expect(shell.announce).toHaveBeenCalledWith("Couldn't open the pack. Try again.");
 
     // The next activation opens a pack as usual.
-    await act(() => result.current!.openPack("ready"));
+    await act(() => result.current!.openPack("ready", "opening"));
     expect(result.current!.state.reveal).not.toBeNull();
     expect(result.current!.state.line).toBeNull();
+  });
+});
+
+describe("useGameState: answers on /packs/open (packs-page.md §3.7 steps 4 and 6)", () => {
+  it.each([
+    ["a 409", envelope(409, "no_pack_available", 600), "There was no pack left to open."],
+    [
+      "a 503",
+      envelope(503, "pool_unavailable"),
+      "Cards are unavailable right now. Your packs are kept until they're back.",
+    ],
+    [
+      "a 429",
+      envelope(429, "rate_limited"),
+      "Packs take a short pause after many requests in a row. The button comes back by itself.",
+    ],
+    ["a 500", envelope(500, "internal"), "Couldn't open the pack. Try again."],
+    [
+      "no answer",
+      { status: 502, raw: "" },
+      "Couldn't reach the game server. Trying again opens this same pack, never a second one.",
+    ],
+  ] as const)("%s replaces the page with /packs and reads its line once", async (_name, answer, line) => {
+    const { result, shell, leaveOpening } = renderGame({ [OPEN]: answer });
+    await act(() => result.current!.openPack("ready", "packs"));
+    expect(leaveOpening).toHaveBeenCalledTimes(1);
+    expect(shell.announce).toHaveBeenCalledTimes(1);
+    expect(shell.announce).toHaveBeenCalledWith(line);
+    expect(result.current!.state.reveal).toBeNull();
+  });
+
+  it("an answer without cards on another page moves nothing and reads nothing (§3.3 step 5)", async () => {
+    const { result, shell, leaveOpening } = renderGame(
+      { [OPEN]: envelope(409, "no_pack_available", 600) },
+      { openingShowing: false },
+    );
+    await act(() => result.current!.openPack("ready", "packs"));
+    expect(leaveOpening).not.toHaveBeenCalled();
+    expect(shell.announce).not.toHaveBeenCalled();
+    expect(result.current!.state.line).toEqual({ kind: "noneLeft" });
+  });
+
+  it("a 401 ends the session and does not go back to /packs", async () => {
+    const { result, shell, leaveOpening } = renderGame({ [OPEN]: envelope(401, "unauthenticated") });
+    await act(() => result.current!.openPack("ready", "packs"));
+    expect(shell.sessionEnded).toHaveBeenCalledTimes(1);
+    expect(leaveOpening).not.toHaveBeenCalled();
+  });
+
+  it("the cards are read once on /packs/open, and not at all when they land on another page", async () => {
+    const showing = renderGame();
+    await act(() => showing.result.current!.openPack("ready", "packs"));
+    expect(showing.shell.announce).toHaveBeenCalledWith("Your pack: 1 Rare, 1 Uncommon and 3 Common. 5 new.");
+    expect(showing.result.current!.state.revealLandedShowing).toBe(true);
+
+    const elsewhere = renderGame({}, { openingShowing: false });
+    await act(() => elsewhere.result.current!.openPack("ready", "packs"));
+    expect(elsewhere.shell.announce).not.toHaveBeenCalled();
+    expect(elsewhere.result.current!.state.reveal).not.toBeNull();
+    expect(elsewhere.result.current!.state.revealLandedShowing).toBe(false);
   });
 });
 
