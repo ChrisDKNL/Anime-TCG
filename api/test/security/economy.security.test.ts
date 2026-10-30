@@ -366,7 +366,7 @@ describe("economy, adversarial (economy.md §14)", () => {
       expect(packs.allowance.available).toBeGreaterThanOrEqual(0);
     });
 
-    it("pins the route list: no route turns Karma into a timer pack or cards into a higher tier", async () => {
+    it("pins the route list: no route turns Karma into a timer pack or cards into a higher tier, the market's five included", async () => {
       await app.ready();
       expect(app.printRoutes({ commonPrefix: false })).toBe(
         [
@@ -385,7 +385,11 @@ describe("economy, adversarial (economy.md §14)", () => {
           "│   └── /open (POST)",
           "├── /api/collection (GET, HEAD)",
           "│   └── /recycle (POST)",
-          "└── /api/wallet (GET, HEAD)",
+          "├── /api/wallet (GET, HEAD)",
+          "├── /api/market/listings (GET, HEAD, POST)",
+          "│   ├── /:listingId/buy (POST)",
+          "│   └── /:listingId/cancel (POST)",
+          "└── /api/market/mine (GET, HEAD)",
           "",
         ].join("\n"),
       );

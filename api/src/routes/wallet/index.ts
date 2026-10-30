@@ -16,7 +16,7 @@ export const walletRoutes: FastifyPluginAsyncTypebox = async (app) => {
     },
     async (req, reply): Promise<Wallet> => {
       const { account } = await requireAccount(req, reply);
-      return app.economy.wallet(account.id);
+      return app.economy.wallet(account.id, app.clock());
     },
   );
 };

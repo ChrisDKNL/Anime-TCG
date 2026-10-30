@@ -5,6 +5,7 @@ import type { Logger } from "pino";
 import type { Db, Queryable } from "../../db/client.js";
 import { accounts, cards, ledgerEntries, recycles } from "../../db/schema.js";
 import { ApiError } from "../errors.js";
+import { cardIsListed, liveListingCount } from "../market/listings.js";
 import { type LockedBalance, postEntry } from "./ledger.js";
 import { copiesToRecycle, recycleCredit, recycleRequestHash } from "./recycle.js";
 import { karmaRules } from "./rules.js";
@@ -39,15 +40,19 @@ function requestIdReused(): ApiError {
 export class EconomyService {
   constructor(private readonly db: Db) {}
 
-  /** `activeListings` is 0 until the market exists (economy.md §11.2). */
-  async wallet(accountId: string): Promise<Wallet> {
+  /** `activeListings` counts the account's live listings at `now`, the number the listing cap counts (economy.md §11.2). */
+  async wallet(accountId: string, now: Date): Promise<Wallet> {
     const [row] = await this.db
       .select({ balance: accounts.balance })
       .from(accounts)
       .where(eq(accounts.id, accountId))
       .limit(1);
     if (row === undefined) throw signedOut();
-    return { balance: row.balance, activeListings: 0, rules: karmaRules() };
+    return {
+      balance: row.balance,
+      activeListings: await liveListingCount(this.db, accountId, now),
+      rules: karmaRules(),
+    };
   }
 
   /** `replayed` is true when `requestId` named a recycle this account already made with the same body (200, not 201). */
@@ -69,7 +74,12 @@ export class EconomyService {
       }
 
       const copies = await tx
-        .select({ id: cards.id, pulledAt: cards.pulledAt, escrowId: cards.escrowId })
+        .select({
+          id: cards.id,
+          pulledAt: cards.pulledAt,
+          escrowId: cards.escrowId,
+          listed: cardIsListed(now),
+        })
         .from(cards)
         .where(
           and(
@@ -85,7 +95,7 @@ export class EconomyService {
         copies.map((copy) => ({
           id: copy.id,
           pulledAt: copy.pulledAt,
-          listed: false,
+          listed: copy.listed,
           escrowed: copy.escrowId !== null,
         })),
         body.count,

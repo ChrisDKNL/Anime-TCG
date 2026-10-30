@@ -739,8 +739,8 @@ describe("account routes", () => {
       try {
         await timed.ready();
         const hourly = setIntervalSpy.mock.calls.filter(([, ms]) => ms === PURGE_INTERVAL_MS);
-        // The session purge registers first, the throttle purge second.
-        expect(hourly).toHaveLength(2);
+        // The session purge registers first, the throttle purge second, the market's listing expiry third.
+        expect(hourly).toHaveLength(3);
         const [tick] = hourly[1] as [() => void, number];
 
         const now = Date.now();
