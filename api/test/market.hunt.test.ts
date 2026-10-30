@@ -9,6 +9,7 @@ import {
   MARKET_WINDOW_SECONDS,
   MARKET_WINDOW_SPEND,
   MAX_BALANCE,
+  MAX_ENTRY_AMOUNT,
   RECYCLE_VALUE,
 } from "@anime-tcg/shared/economy";
 import { and, eq, inArray, isNull, sql } from "drizzle-orm";
@@ -19,6 +20,7 @@ import { main as auditMarket } from "../src/cli/audit-market.js";
 import { cards, marketListings, marketPurchases } from "../src/db/schema.js";
 import { resetCollection } from "../src/domain/collection/reset.js";
 import { auditLedger } from "../src/domain/economy/audit.js";
+import { encodeCursor } from "../src/domain/market/cursor.js";
 import {
   balanceOf,
   entryOf,
@@ -106,6 +108,10 @@ import { createTestApp, send, type SignedInClient, testConfig, testDatabaseUrl }
  * - fullwidth `％`, `＿` and `＼` fold to the LIKE specials under NFKC and must
  *   still match as text;
  * - no answer to one account names another account's login or id.
+ * Browse input outside Postgres's ranges (found as 500s, fixed in #53)
+ * - a cursor whose price key is beyond a Postgres integer or MAX_ENTRY_AMOUNT,
+ *   a newest cursor outside the epoch to year 9999, and `q` holding a control
+ *   character, U+0000 included, are each 400 `validation_failed`, never 500.
  */
 
 const SECOND = 1_000;
@@ -990,6 +996,71 @@ describe("market hunt (tester, economy.md PR 3)", () => {
       );
       const sellerMine: MarketMine = await mine(app, seller.cookie);
       expect(sellerMine.closed.map((l) => l.proceeds)).toContain(100 - feeOf(100));
+    });
+  });
+
+  describe("browse input outside Postgres's ranges is 400, not 500 (economy.md §8.4, §11.2, M2)", () => {
+    const forged = (value: unknown) => Buffer.from(JSON.stringify(value), "utf8").toString("base64url");
+    const ID0 = "00000000-0000-4000-8000-000000000000";
+    let cookie = "";
+
+    beforeAll(async () => {
+      const seller = await holding([ID.common(7)]);
+      cookie = seller.cookie;
+      await listed(app, seller, ID.common(7), 5);
+    });
+
+    it("control: a well-formed cursor at the edge of every range pages normally", async () => {
+      for (const [sort, cursor] of [
+        ["price_asc", encodeCursor({ sort: "price_asc", price: 1, id: ID0 })],
+        ["price_desc", encodeCursor({ sort: "price_desc", price: MAX_ENTRY_AMOUNT, id: ID0 })],
+        ["newest", encodeCursor({ sort: "newest", listedAt: new Date("9999-12-31T23:59:59.999Z"), id: ID0 })],
+        ["newest", encodeCursor({ sort: "newest", listedAt: new Date(0), id: ID0 })],
+      ] as const) {
+        const query = `sort=${sort}&cursor=${cursor}`;
+        const res = await browse(app, cookie, query);
+        expect(res.statusCode, query).toBe(200);
+        expect(res.json<ListingsPage>().filterFranchiseIds).toBeNull();
+      }
+    });
+
+    it("refuses a price key beyond MAX_ENTRY_AMOUNT or a Postgres integer with 400 validation_failed", async () => {
+      for (const [sort, price] of [
+        ["price_asc", 2_147_483_648],
+        ["price_desc", 2_147_483_648],
+        ["price_asc", Number.MAX_SAFE_INTEGER],
+        ["price_desc", 2_147_483_647],
+        ["price_asc", MAX_ENTRY_AMOUNT + 1],
+      ] as const) {
+        const res = await browse(app, cookie, `sort=${sort}&cursor=${forged([sort, price, ID0])}`);
+        expect(res.statusCode, `${sort} ${price}: ${res.body}`).toBe(400);
+        expect(marketErrorOf(res).code).toBe("validation_failed");
+      }
+    });
+
+    it("refuses a newest key outside the epoch to year 9999 with 400 validation_failed", async () => {
+      for (const key of [
+        new Date(-8.64e15).toISOString(),
+        new Date(-2e14).toISOString(),
+        new Date(-1).toISOString(),
+        new Date(Date.UTC(10_000, 0, 1)).toISOString(),
+      ]) {
+        const res = await browse(app, cookie, `sort=newest&cursor=${forged(["newest", key, ID0])}`);
+        expect(res.statusCode, `${key}: ${res.body}`).toBe(400);
+        expect(marketErrorOf(res).code).toBe("validation_failed");
+      }
+    });
+
+    it("refuses a search text holding U+0000 or any other control character with 400 validation_failed", async () => {
+      for (const q of ["%00", "a%00b", "%01", "%1F", "tab%09", "line%0A", "%7F", "%C2%85", "%C2%9F"]) {
+        const res = await browse(app, cookie, `q=${q}`);
+        expect(res.statusCode, `q=${q}: ${res.body}`).toBe(400);
+        expect(marketErrorOf(res).code).toBe("validation_failed");
+      }
+      // Format characters are text, as the collection's search keeps them.
+      expect(
+        (await browse(app, cookie, `q=${encodeURIComponent(String.fromCodePoint(0x202e))}`)).statusCode,
+      ).toBe(200);
     });
   });
 });
