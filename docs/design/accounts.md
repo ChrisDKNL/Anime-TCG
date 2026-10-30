@@ -170,6 +170,8 @@ The UI does not know whether any accounts exist or whether the cap is reached, a
 | error: unreachable     | Inline banner §8 "unreachable-form"                                                                                  | Retry        |
 | success                | Fields cleared, inline confirmation line `Password changed.` and live region announces                               | Continue     |
 
+**D. Rate limited (any account form; manager decision, 2026-10-30).** A 429 `rate_limited` from the route rate limiter on Register (invite check or create), Log in, Change password, Delete or the login rename is the same server-enforced wait as Log in's, never the unreachable banner: the form's submit button is disabled and reads `Try again in <S> s`, a `role="status"` line §8 "rate-limited" is shown once, `You can try again now.` is announced when it ends, and the fields keep their values. S is the `Retry-After` header in whole seconds (that envelope carries no seconds), or 60 when the header is missing.
+
 ### 4.5 Account control (header)
 
 | State             | User sees                                                                                                   | User can do                         |
@@ -318,6 +320,7 @@ Exact strings. `<login>` is the account login, `<N>` a number, `<S>` the countdo
 | Error: empty password   | `Enter your password.`                                                                                                                                                                                      |
 | Error: incorrect        | `Login or password is incorrect.`                                                                                                                                                                           |
 | login-breather (status) | `Five misses in a row. Take ten seconds, check the spelling of your login and whether caps lock is on, then try again.`                                                                                     |
+| rate-limited (status)   | `That was a lot of tries in a short time. Give it a moment, then try again.` (any account form, §4.4-D)                                                                                                     |
 | Wait over (live)        | `You can try again now.`                                                                                                                                                                                    |
 | Forgotten password line | `There is no way to recover a forgotten password yourself. Ask the owner to set a new one.` (owner-side reset confirmed 2026-10-28; the reset path is owner-only, server-side, and never exposed in the UI) |
 | Live region on success  | `Logged in. You're now on <login>.`                                                                                                                                                                         |
