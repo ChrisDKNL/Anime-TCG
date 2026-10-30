@@ -193,6 +193,11 @@ describe("migrations", () => {
         definition: "CHECK (((NOT pity) OR (kind <> 'radiant'::pack_kind)))",
       },
       {
+        conname: "pack_openings_price_check",
+        definition:
+          "CHECK ((((source = 'shop'::opening_source) = (price IS NOT NULL)) AND ((price IS NULL) OR (price > 0))))",
+      },
+      {
         conname: "pack_openings_source_check",
         definition:
           "CHECK ((((source = 'shop'::opening_source) = (theme_id IS NOT NULL)) AND ((source = 'shop'::opening_source) = (ledger_entry_id IS NOT NULL))))",
@@ -322,8 +327,8 @@ describe("migrations", () => {
       async (probe) => {
         expect((await probe.query("select balance from accounts")).rows).toEqual([{ balance: 0 }]);
         expect(
-          (await probe.query("select source, theme_id, ledger_entry_id from pack_openings")).rows,
-        ).toEqual([{ source: "timer", theme_id: null, ledger_entry_id: null }]);
+          (await probe.query("select source, theme_id, ledger_entry_id, price from pack_openings")).rows,
+        ).toEqual([{ source: "timer", theme_id: null, ledger_entry_id: null, price: null }]);
         expect(
           (await probe.query("select rarity, removed_at, removed_by_recycle, escrow_id from cards")).rows,
         ).toEqual([{ rarity: "mythic", removed_at: null, removed_by_recycle: null, escrow_id: null }]);
@@ -332,7 +337,7 @@ describe("migrations", () => {
     );
   });
 
-  it("bounds every ledger amount and balance and every recycle's count, and keys each idempotency record (0005)", async () => {
+  it("bounds every ledger amount and balance and every recycle's count and value, and keys each idempotency record (0005)", async () => {
     const checks = await db.execute<{ conname: string; definition: string }>(sql`
       select conname, pg_get_constraintdef(oid) as definition from pg_constraint
       where conrelid in ('ledger_entries'::regclass, 'recycles'::regclass) and contype = 'c'
@@ -350,6 +355,7 @@ describe("migrations", () => {
       },
       { conname: "ledger_entries_seq_check", definition: "CHECK ((seq >= 1))" },
       { conname: "recycles_count_check", definition: "CHECK (((count >= 1) AND (count <= 100)))" },
+      { conname: "recycles_unit_value_check", definition: "CHECK ((unit_value > 0))" },
     ]);
     const uniques = await db.execute<{ conname: string; definition: string }>(sql`
       select conname, pg_get_constraintdef(oid) as definition from pg_constraint

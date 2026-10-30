@@ -19,9 +19,10 @@ export interface AuditEntry {
   balanceAfter: number;
 }
 
-/** A shop opening and the ledger row its `ledger_entry_id` names (all null when it names none). */
+/** A shop opening, the price it recorded, and the ledger row its `ledger_entry_id` names (the entry's fields are null when it names none). */
 export type AuditShopOpening = {
   openingId: string;
+  price: number;
   entryAccountId: string | null;
   entryKind: LedgerKind | null;
   entryAmount: number | null;
@@ -32,6 +33,8 @@ export type AuditRecycle = {
   recycleId: string;
   rarity: Rarity;
   count: number;
+  /** Karma per card at recycle time. */
+  unitValue: number;
   entryAccountId: string;
   entryKind: LedgerKind;
   entryAmount: number;
@@ -58,7 +61,12 @@ export interface AccountFacts {
 /** Kinds whose rows item 2's first PR never writes; the market (PR 3) brings their checks. */
 const UNBUILT_KINDS: ReadonlySet<LedgerKind> = new Set(["market_purchase", "market_sale", "market_fee"]);
 
-/** What is wrong with one account, as short phrases; empty when it is consistent. */
+/**
+ * What is wrong with one account, as short phrases; empty when it is
+ * consistent. Each recycle and shop opening is checked against the value
+ * it recorded, never today's constants, so a later change of
+ * `RECYCLE_VALUE` or `THEMED_PACK_PRICE` leaves an old row correct.
+ */
 export function auditAccount(facts: AccountFacts): string[] {
   const problems: string[] = [];
   let previous = 0;
@@ -86,14 +94,14 @@ export function auditAccount(facts: AccountFacts): string[] {
     if (
       opening.entryAccountId !== facts.id ||
       opening.entryKind !== "shop_purchase" ||
-      opening.entryAmount !== -THEMED_PACK_PRICE
+      opening.entryAmount !== -opening.price
     ) {
-      problems.push(`shop opening ${opening.openingId} without its debit of ${THEMED_PACK_PRICE}`);
+      problems.push(`shop opening ${opening.openingId} without its debit of ${opening.price}`);
     }
   }
 
   for (const recycle of facts.recycles) {
-    const credit = recycle.count * RECYCLE_VALUE[recycle.rarity];
+    const credit = recycle.count * recycle.unitValue;
     if (
       recycle.entryAccountId !== facts.id ||
       recycle.entryKind !== "recycle_credit" ||
@@ -116,10 +124,37 @@ export function auditAccount(facts: AccountFacts): string[] {
   return problems;
 }
 
+/**
+ * Recycles and shop openings recorded at a value other than today's, as
+ * short phrases: information for the owner after a change of the
+ * constants, never a failure.
+ */
+export function valueChanges(facts: Pick<AccountFacts, "shopOpenings" | "recycles">): string[] {
+  const changes: string[] = [];
+  for (const opening of facts.shopOpenings) {
+    if (opening.price !== THEMED_PACK_PRICE)
+      changes.push(`shop opening ${opening.openingId} sold at ${opening.price}, today ${THEMED_PACK_PRICE}`);
+  }
+  for (const recycle of facts.recycles) {
+    const today = RECYCLE_VALUE[recycle.rarity];
+    if (recycle.unitValue !== today)
+      changes.push(`recycle ${recycle.recycleId} at ${recycle.unitValue} a card, today ${today}`);
+  }
+  return changes;
+}
+
+export interface AuditAccountReport {
+  id: string;
+  login: string;
+  lines: string[];
+}
+
 export interface AuditResult {
   accounts: number;
   entries: number;
-  failures: { id: string; login: string; problems: string[] }[];
+  failures: AuditAccountReport[];
+  /** Accounts with a value that differs from today's (`valueChanges`); they may also fail. */
+  notes: AuditAccountReport[];
 }
 
 function grouped<T extends { accountId: string }>(rows: readonly T[]): Map<string, T[]> {
@@ -152,13 +187,13 @@ export async function auditLedger(db: Db): Promise<AuditResult> {
         .from(ledgerEntries)
         .orderBy(asc(ledgerEntries.accountId), asc(ledgerEntries.seq));
       const shopOpenings = await tx.execute<AuditShopOpening & { accountId: string }>(sql`
-        select o.account_id as "accountId", o.id as "openingId", e.account_id as "entryAccountId",
+        select o.account_id as "accountId", o.id as "openingId", o.price, e.account_id as "entryAccountId",
                e.kind as "entryKind", e.amount as "entryAmount"
         from pack_openings o left join ledger_entries e on e.id = o.ledger_entry_id
         where o.source = 'shop'
       `);
       const recycled = await tx.execute<AuditRecycle & { accountId: string }>(sql`
-        select r.account_id as "accountId", r.id as "recycleId", r.rarity, r.count,
+        select r.account_id as "accountId", r.id as "recycleId", r.rarity, r.count, r.unit_value as "unitValue",
                e.account_id as "entryAccountId", e.kind as "entryKind", e.amount as "entryAmount",
                (select count(*)::int from cards c where c.removed_by_recycle = r.id) as "removedCards",
                (select count(*)::int from cards c where c.removed_by_recycle = r.id
@@ -188,9 +223,11 @@ export async function auditLedger(db: Db): Promise<AuditResult> {
       const openingsOf = grouped(shopOpenings.rows);
       const recyclesOf = grouped(recycled.rows);
       const countsOf = new Map(counts.rows.map((row) => [row.accountId, row]));
-      const failures = owners.flatMap((owner) => {
+      const failures: AuditAccountReport[] = [];
+      const notes: AuditAccountReport[] = [];
+      for (const owner of owners) {
         const tally = countsOf.get(owner.id);
-        const problems = auditAccount({
+        const facts: AccountFacts = {
           ...owner,
           entries: entriesOf.get(owner.id) ?? [],
           shopOpenings: openingsOf.get(owner.id) ?? [],
@@ -198,10 +235,13 @@ export async function auditLedger(db: Db): Promise<AuditResult> {
           unclaimedCredits: tally?.unclaimedCredits ?? 0,
           unexplainedRemovals: tally?.unexplainedRemovals ?? 0,
           escrowedCards: tally?.escrowedCards ?? 0,
-        });
-        return problems.length === 0 ? [] : [{ id: owner.id, login: owner.login, problems }];
-      });
-      return { accounts: owners.length, entries: entries.length, failures };
+        };
+        const problems = auditAccount(facts);
+        if (problems.length > 0) failures.push({ id: owner.id, login: owner.login, lines: problems });
+        const changes = valueChanges(facts);
+        if (changes.length > 0) notes.push({ id: owner.id, login: owner.login, lines: changes });
+      }
+      return { accounts: owners.length, entries: entries.length, failures, notes };
     },
     { isolationLevel: "repeatable read", accessMode: "read only" },
   );

@@ -245,6 +245,7 @@ describe("app database role", () => {
         characterId: PROBE_CHARACTER,
         rarity: "mythic",
         count: 1,
+        unitValue: 2_750,
         ledgerEntryId: entry.id,
         createdAt: now,
       })

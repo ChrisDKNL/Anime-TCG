@@ -597,6 +597,12 @@
           "type": "uuid",
           "primaryKey": false,
           "notNull": false
+        },
+        "price": {
+          "name": "price",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {},
@@ -668,6 +674,10 @@
         "pack_openings_source_check": {
           "name": "pack_openings_source_check",
           "value": "(\"pack_openings\".\"source\" = 'shop') = (\"pack_openings\".\"theme_id\" is not null) and (\"pack_openings\".\"source\" = 'shop') = (\"pack_openings\".\"ledger_entry_id\" is not null)"
+        },
+        "pack_openings_price_check": {
+          "name": "pack_openings_price_check",
+          "value": "(\"pack_openings\".\"source\" = 'shop') = (\"pack_openings\".\"price\" is not null) and (\"pack_openings\".\"price\" is null or \"pack_openings\".\"price\" > 0)"
         }
       },
       "isRLSEnabled": false
@@ -1368,6 +1378,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "unit_value": {
+          "name": "unit_value",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true
+        },
         "ledger_entry_id": {
           "name": "ledger_entry_id",
           "type": "uuid",
@@ -1446,6 +1462,10 @@
         "recycles_count_check": {
           "name": "recycles_count_check",
           "value": "\"recycles\".\"count\" between 1 and 100"
+        },
+        "recycles_unit_value_check": {
+          "name": "recycles_unit_value_check",
+          "value": "\"recycles\".\"unit_value\" > 0"
         }
       },
       "isRLSEnabled": false

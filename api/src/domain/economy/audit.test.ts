@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { describeAudit } from "../../cli/audit-ledger.js";
-import { type AccountFacts, type AuditEntry, auditAccount } from "./audit.js";
+import { RECYCLE_VALUE, THEMED_PACK_PRICE } from "@anime-tcg/shared/economy";
+import { describeAudit, describeNotes } from "../../cli/audit-ledger.js";
+import { type AccountFacts, type AuditEntry, auditAccount, valueChanges } from "./audit.js";
 
 const ID = "00000000-0000-4000-8000-000000000001";
 
@@ -19,12 +20,15 @@ function facts(overrides: Partial<AccountFacts> = {}): AccountFacts {
     login: "Auditee",
     balance: 2_354,
     entries,
-    shopOpenings: [{ openingId: "o1", entryAccountId: ID, entryKind: "shop_purchase", entryAmount: -400 }],
+    shopOpenings: [
+      { openingId: "o1", price: 400, entryAccountId: ID, entryKind: "shop_purchase", entryAmount: -400 },
+    ],
     recycles: [
       {
         recycleId: "r1",
         rarity: "mythic",
         count: 1,
+        unitValue: 2_750,
         entryAccountId: ID,
         entryKind: "recycle_credit",
         entryAmount: 2_750,
@@ -35,6 +39,7 @@ function facts(overrides: Partial<AccountFacts> = {}): AccountFacts {
         recycleId: "r2",
         rarity: "common",
         count: 2,
+        unitValue: 2,
         entryAccountId: ID,
         entryKind: "recycle_credit",
         entryAmount: 4,
@@ -110,15 +115,28 @@ describe("audit-ledger's checks (economy.md §7, §13.1)", () => {
 
   it("finds a shop opening without its debit, of another account, kind or amount", () => {
     for (const opening of [
-      { openingId: "o1", entryAccountId: null, entryKind: null, entryAmount: null },
+      { openingId: "o1", price: 400, entryAccountId: null, entryKind: null, entryAmount: null },
       {
         openingId: "o1",
+        price: 400,
         entryAccountId: "someone-else",
         entryKind: "shop_purchase" as const,
         entryAmount: -400,
       },
-      { openingId: "o1", entryAccountId: ID, entryKind: "owner_reset" as const, entryAmount: -400 },
-      { openingId: "o1", entryAccountId: ID, entryKind: "shop_purchase" as const, entryAmount: -399 },
+      {
+        openingId: "o1",
+        price: 400,
+        entryAccountId: ID,
+        entryKind: "owner_reset" as const,
+        entryAmount: -400,
+      },
+      {
+        openingId: "o1",
+        price: 400,
+        entryAccountId: ID,
+        entryKind: "shop_purchase" as const,
+        entryAmount: -399,
+      },
     ]) {
       expect(auditAccount(facts({ shopOpenings: [opening] }))).toEqual([
         "shop opening o1 without its debit of 400",
@@ -126,7 +144,33 @@ describe("audit-ledger's checks (economy.md §7, §13.1)", () => {
     }
   });
 
-  it("finds a recycle without its credit of count × RECYCLE_VALUE", () => {
+  it("checks a shop opening against the price it recorded, not today's", () => {
+    const [opening] = facts().shopOpenings;
+    if (opening === undefined) throw new Error("one opening");
+    const entries = chain(["recycle_credit", 2_750], ["shop_purchase", -450], ["recycle_credit", 4]);
+    const older = { ...opening, price: 450, entryAmount: -450 };
+    expect(auditAccount(facts({ entries, balance: 2_304, shopOpenings: [older] }))).toEqual([]);
+    expect(
+      auditAccount(
+        facts({ entries, balance: 2_304, shopOpenings: [{ ...older, price: THEMED_PACK_PRICE }] }),
+      ),
+    ).toEqual(["shop opening o1 without its debit of 400"]);
+  });
+
+  it("checks a recycle against the value per card it recorded, not today's", () => {
+    const [mythic, common] = facts().recycles;
+    if (mythic === undefined || common === undefined) throw new Error("two recycles");
+    const entries = chain(["recycle_credit", 2_750], ["shop_purchase", -400], ["recycle_credit", 6]);
+    const older = { ...common, unitValue: 3, entryAmount: 6 };
+    expect(auditAccount(facts({ entries, balance: 2_356, recycles: [mythic, older] }))).toEqual([]);
+    expect(
+      auditAccount(
+        facts({ entries, balance: 2_356, recycles: [mythic, { ...older, unitValue: RECYCLE_VALUE.common }] }),
+      ),
+    ).toEqual(["recycle r2 without its credit of 4"]);
+  });
+
+  it("finds a recycle without its credit of count × unit_value", () => {
     const [mythic, common] = facts().recycles;
     if (mythic === undefined || common === undefined) throw new Error("two recycles");
     expect(auditAccount(facts({ recycles: [{ ...mythic, entryAmount: 2_749 }, common] }))).toEqual([
@@ -170,9 +214,32 @@ describe("audit-ledger's checks (economy.md §7, §13.1)", () => {
   });
 });
 
+describe("values other than today's (economy.md §13.1)", () => {
+  it("notes nothing when every row was recorded at today's values", () => {
+    expect(valueChanges(facts())).toEqual([]);
+    expect(valueChanges(facts({ shopOpenings: [], recycles: [] }))).toEqual([]);
+  });
+
+  it("notes each shop opening and recycle recorded at another value, as information", () => {
+    const base = facts();
+    const [opening] = base.shopOpenings;
+    const [mythic, common] = base.recycles;
+    if (opening === undefined || mythic === undefined || common === undefined) throw new Error("fixture");
+    expect(
+      valueChanges({
+        shopOpenings: [{ ...opening, price: 450 }],
+        recycles: [mythic, { ...common, unitValue: 1 }],
+      }),
+    ).toEqual([
+      `shop opening o1 sold at 450, today ${THEMED_PACK_PRICE}`,
+      `recycle r2 at 1 a card, today ${RECYCLE_VALUE.common}`,
+    ]);
+  });
+});
+
 describe("the report", () => {
   it("prints the one line of a consistent ledger", () => {
-    expect(describeAudit({ accounts: 10, entries: 1_234, failures: [] })).toEqual([
+    expect(describeAudit({ accounts: 10, entries: 1_234, failures: [], notes: [] })).toEqual([
       "Ledger consistent: 10 accounts, 1234 entries.",
     ]);
   });
@@ -186,12 +253,21 @@ describe("the report", () => {
           {
             id: ID,
             login: "a\u001b[2J‮",
-            problems: ["balance 1 but the entries sum to 0", "3 cards in escrow"],
+            lines: ["balance 1 but the entries sum to 0", "3 cards in escrow"],
           },
         ],
+        notes: [],
       }),
     ).toEqual([
       `Account "a\\u001b[2J\\u202e" (${ID}): balance 1 but the entries sum to 0; 3 cards in escrow.`,
     ]);
+  });
+
+  it("prints one note line per account with another day's value, and none without", () => {
+    const notes = [{ id: ID, login: "Auditee", lines: ["shop opening o1 sold at 450, today 400"] }];
+    expect(describeNotes({ accounts: 1, entries: 2, failures: [], notes })).toEqual([
+      `Note: Account "Auditee" (${ID}): shop opening o1 sold at 450, today 400.`,
+    ]);
+    expect(describeNotes({ accounts: 1, entries: 2, failures: [], notes: [] })).toEqual([]);
   });
 });

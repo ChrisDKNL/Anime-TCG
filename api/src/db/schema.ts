@@ -370,6 +370,8 @@ export const packOpenings = pgTable(
     ledgerEntryId: uuid("ledger_entry_id")
       .unique("pack_openings_ledger_entry_unique")
       .references(() => ledgerEntries.id),
+    /** The Karma the shop charged, as it was that day, so a later price change leaves the audit exact; null for a timer pack. */
+    price: integer("price"),
   },
   (table) => [
     unique("pack_openings_account_request_unique").on(table.accountId, table.requestId),
@@ -377,6 +379,10 @@ export const packOpenings = pgTable(
     check(
       "pack_openings_source_check",
       sql`(${table.source} = 'shop') = (${table.themeId} is not null) and (${table.source} = 'shop') = (${table.ledgerEntryId} is not null)`,
+    ),
+    check(
+      "pack_openings_price_check",
+      sql`(${table.source} = 'shop') = (${table.price} is not null) and (${table.price} is null or ${table.price} > 0)`,
     ),
   ],
 );
@@ -400,6 +406,8 @@ export const recycles = pgTable(
       .references(() => characters.id),
     rarity: rarity("rarity").notNull(),
     count: integer("count").notNull(),
+    /** Karma per card at recycle time (`RECYCLE_VALUE[rarity]` that day): the credit is `count × unit_value`. */
+    unitValue: integer("unit_value").notNull(),
     ledgerEntryId: uuid("ledger_entry_id")
       .notNull()
       .unique("recycles_ledger_entry_unique")
@@ -409,6 +417,7 @@ export const recycles = pgTable(
   (table) => [
     unique("recycles_account_request_unique").on(table.accountId, table.requestId),
     check("recycles_count_check", sql`${table.count} between 1 and ${sql.raw(String(MAX_RECYCLE_COUNT))}`),
+    check("recycles_unit_value_check", sql`${table.unitValue} > 0`),
   ],
 );
 

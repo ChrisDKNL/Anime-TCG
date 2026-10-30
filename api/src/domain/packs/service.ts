@@ -3,7 +3,7 @@ import type { Rarity } from "@anime-tcg/shared/rarity";
 import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import type { Logger } from "pino";
 import type { Db, Queryable } from "../../db/client.js";
-import { accounts, cards, ledgerEntries, packOpenings } from "../../db/schema.js";
+import { accounts, cards, packOpenings } from "../../db/schema.js";
 import { ApiError } from "../errors.js";
 import { currentSnapshot, describeCharacters, franchiseRefs, tierPool } from "../pool/catalog.js";
 import { perRarity } from "../pool/tiers.js";
@@ -41,7 +41,7 @@ export interface OpeningRequest {
   openedAt: Date;
 }
 
-/** How the shop paid for a pack (economy.md §8.6): the theme it was dealt from and the price's ledger row. */
+/** How the shop paid for a pack (economy.md §8.6): the theme it was dealt from, the price charged and its ledger row. */
 export interface ShopPayment {
   themeId: string;
   ledgerEntryId: string;
@@ -108,7 +108,12 @@ export async function dealPack(
       openedAt: request.openedAt,
       ...(shop === undefined
         ? {}
-        : { source: "shop" as const, themeId: shop.themeId, ledgerEntryId: shop.ledgerEntryId }),
+        : {
+            source: "shop" as const,
+            themeId: shop.themeId,
+            ledgerEntryId: shop.ledgerEntryId,
+            price: shop.price,
+          }),
     })
     .returning({ id: packOpenings.id });
   if (opening === undefined) throw new Error("opening insert returned no row");
@@ -311,10 +316,9 @@ export async function storedOpening(
       kind: packOpenings.kind,
       pity: packOpenings.pity,
       themeId: packOpenings.themeId,
-      debit: ledgerEntries.amount,
+      price: packOpenings.price,
     })
     .from(packOpenings)
-    .leftJoin(ledgerEntries, eq(ledgerEntries.id, packOpenings.ledgerEntryId))
     .where(and(eq(packOpenings.accountId, accountId), eq(packOpenings.requestId, requestId)))
     .limit(1);
   if (opening === undefined) return null;
@@ -330,9 +334,9 @@ export async function storedOpening(
     kind: opening.kind,
     pity: opening.pity,
     shop:
-      opening.themeId === null || opening.debit === null
+      opening.themeId === null || opening.price === null
         ? null
-        : { themeId: opening.themeId, price: -opening.debit },
+        : { themeId: opening.themeId, price: opening.price },
     cards: rows,
   };
 }

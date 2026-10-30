@@ -226,6 +226,12 @@ describe("economy routes (economy.md §8, §11.3, §14)", () => {
         expect(await ledgerOf(app, client.account.id)).toEqual([
           { seq: 1, kind: "recycle_credit", amount: 6, balanceAfter: 6 },
         ]);
+        expect(
+          await app.db
+            .select({ count: recycles.count, unitValue: recycles.unitValue })
+            .from(recycles)
+            .where(eq(recycles.id, receipt.recycleId)),
+        ).toEqual([{ count: 3, unitValue: RECYCLE_VALUE.common }]);
         expect(await entryOf(app, client.cookie, ID.common(1))).toMatchObject({
           count: 1,
           listed: 0,
@@ -469,10 +475,11 @@ describe("economy routes (economy.md §8, §11.3, §14)", () => {
             source: packOpenings.source,
             themeId: packOpenings.themeId,
             entry: packOpenings.ledgerEntryId,
+            price: packOpenings.price,
           })
           .from(packOpenings)
           .where(eq(packOpenings.id, receipt.pack.openingId));
-        expect(opening).toMatchObject({ source: "shop", themeId: COMEDY });
+        expect(opening).toMatchObject({ source: "shop", themeId: COMEDY, price: THEMED_PACK_PRICE });
         expect((await ledgerOf(app, client.account.id)).at(-1)).toEqual({
           seq: 2,
           kind: "shop_purchase",
@@ -740,6 +747,55 @@ describe("economy routes (economy.md §8, §11.3, §14)", () => {
           } without its credit of 2750.\n`,
         ]);
         await app.db.delete(accounts).where(eq(accounts.id, victim.account.id));
+      });
+
+      it("checks each row against the value it recorded, and notes a value other than today's without failing", async () => {
+        const client = await earner();
+        expect((await buyPack(app, client.cookie, COMEDY)).statusCode).toBe(201);
+        const [recycled] = await app.db
+          .select({ id: recycles.id })
+          .from(recycles)
+          .where(eq(recycles.accountId, client.account.id));
+        const [opened] = await app.db
+          .select({ id: packOpenings.id })
+          .from(packOpenings)
+          .where(and(eq(packOpenings.accountId, client.account.id), eq(packOpenings.source, "shop")));
+        if (recycled === undefined || opened === undefined) throw new Error("a recycle and a shop opening");
+        const out = (chunks: string[]) => ({ write: (text: string) => chunks.push(text) });
+        // The app role may not rewrite history, so the owner's role plays the older constants.
+        const owner = createDb(migrationsDatabaseUrl());
+        const recordedAt = async (unitValue: number, price: number) => {
+          await owner.update(recycles).set({ unitValue }).where(eq(recycles.id, recycled.id));
+          await owner.update(packOpenings).set({ price }).where(eq(packOpenings.id, opened.id));
+        };
+        try {
+          // As if both happened under older constants: a Mythic worth 2 000 and a pack at 450, the ledger to match.
+          await recordedAt(2_000, 450);
+          for (const [seq, amount, balanceAfter] of [
+            [1, 2_000, 2_000],
+            [2, -450, 1_550],
+          ] as const)
+            await owner
+              .update(ledgerEntries)
+              .set({ amount, balanceAfter })
+              .where(and(eq(ledgerEntries.accountId, client.account.id), eq(ledgerEntries.seq, seq)));
+          await owner.update(accounts).set({ balance: 1_550 }).where(eq(accounts.id, client.account.id));
+          const note = `Note: Account "${client.account.login}" (${client.account.id}): shop opening ${opened.id} sold at 450, today ${THEMED_PACK_PRICE}; recycle ${recycled.id} at 2000 a card, today ${RECYCLE_VALUE.mythic}.\n`;
+          const stdout: string[] = [];
+          expect(await auditMain([], testDbUrl(), { stdout: out(stdout), stderr: out([]) })).toBe(0);
+          expect(stdout.at(-1)).toBe(note);
+
+          // A recorded value its ledger row does not match is a failure, whatever today's constants say.
+          await recordedAt(1_999, 449);
+        } finally {
+          await owner.$client.end();
+        }
+        const stderr: string[] = [];
+        expect(await auditMain([], testDbUrl(), { stdout: out([]), stderr: out(stderr) })).toBe(1);
+        expect(stderr).toEqual([
+          `Account "${client.account.login}" (${client.account.id}): shop opening ${opened.id} without its debit of 449; recycle ${recycled.id} without its credit of 1999.\n`,
+        ]);
+        await app.db.delete(accounts).where(eq(accounts.id, client.account.id));
       });
 
       it("exits 1 with usage for an argument and when DATABASE_URL is not set", async () => {

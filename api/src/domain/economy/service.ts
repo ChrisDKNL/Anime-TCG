@@ -1,4 +1,5 @@
 import type { RecycleBody, RecycleReceipt, Wallet } from "@anime-tcg/shared/api";
+import { RECYCLE_VALUE } from "@anime-tcg/shared/economy";
 import { and, eq, inArray, isNull } from "drizzle-orm";
 import type { Logger } from "pino";
 import type { Db, Queryable } from "../../db/client.js";
@@ -98,6 +99,7 @@ export class EconomyService {
           characterId: body.characterId,
           rarity: body.rarity,
           count: body.count,
+          unitValue: RECYCLE_VALUE[body.rarity],
           ledgerEntryId: entry.id,
           createdAt: now,
         })
