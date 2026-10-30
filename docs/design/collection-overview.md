@@ -78,19 +78,21 @@ All four run in the browser over the entries the server returned. They are displ
 1. The query and every searched field are normalised the same way, in this order: Unicode NFKC (folds full-width letters), lower-case, NFD, remove U+0300–U+036F (Latin accents), NFC, trim, collapse whitespace runs to one space. Kana voiced marks (U+3099, U+309A) are outside the removed range, so `か` does not match `が`.
 2. The normalised query is split on spaces into terms. An empty query is no search.
 3. An entry matches when **every term** is a substring of **at least one** of: the character name, the character's native name, and the title and the native title of **each** of the character's franchises (`franchiseIds`, resolved through the response's `franchises`).
-4. Punctuation counts: `d. luffy` matches Monkey D. Luffy, `d luffy` does not. The field accepts at most 100 characters.
+4. Punctuation counts: it is kept, so `d.luffy` does not match Monkey D. Luffy (`monkey d. luffy` has no `d.luffy` in it), while `d. luffy` and `d luffy` do, each term on its own (step 3: `d` is in `d.`). The field accepts at most 100 characters.
 5. Each entry's normalised fields are computed once per collection answer, not per keystroke (§5.5).
 
-| Query         | Matches                                                         | Why                                    |
-| ------------- | --------------------------------------------------------------- | -------------------------------------- |
-| `spike`       | Spike Spiegel                                                   | substring of the name                  |
-| `bebop spike` | Spike Spiegel (Cowboy Bebop)                                    | each term is in some field             |
-| `titan`       | every character of Attack on Titan, whichever season they're in | the franchise title covers its seasons |
-| `pokemon`     | characters from "Pokémon"                                       | accents removed                        |
-| `ＬＵＦＦＹ`  | Monkey D. Luffy                                                 | NFKC folds full-width                  |
-| `進撃`        | characters from 進撃の巨人                                      | native franchise title                 |
-| `ルフィ`      | Monkey D. Luffy (native name モンキー・D・ルフィ)               | native character name                  |
-| `luffy zoro`  | nothing, unless one entry contains both terms across its fields | terms are AND, not OR                  |
+| Query         | Matches                                                         | Why                                        |
+| ------------- | --------------------------------------------------------------- | ------------------------------------------ |
+| `spike`       | Spike Spiegel                                                   | substring of the name                      |
+| `bebop spike` | Spike Spiegel (Cowboy Bebop)                                    | each term is in some field                 |
+| `titan`       | every character of Attack on Titan, whichever season they're in | the franchise title covers its seasons     |
+| `pokemon`     | characters from "Pokémon"                                       | accents removed                            |
+| `ＬＵＦＦＹ`  | Monkey D. Luffy                                                 | NFKC folds full-width                      |
+| `進撃`        | characters from 進撃の巨人                                      | native franchise title                     |
+| `ルフィ`      | Monkey D. Luffy (native name モンキー・D・ルフィ)               | native character name                      |
+| `luffy zoro`  | nothing, unless one entry contains both terms across its fields | terms are AND, not OR                      |
+| `d luffy`     | Monkey D. Luffy                                                 | each term is a substring: `d` is in `d.`   |
+| `d.luffy`     | nothing                                                         | punctuation counts: no field has `d.luffy` |
 
 **Filters**
 

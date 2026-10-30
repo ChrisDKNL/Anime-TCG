@@ -49,15 +49,13 @@ describe("matchesTerms (§3.3 step 3 and the examples table)", () => {
     ["ＬＵＦＦＹ", luffy, true],
     ["進撃", eren, true],
     ["ルフィ", luffy, true],
-    ["d. luffy", luffy, true],
-    ["d.luffy", luffy, false],
     ["luffy zoro", luffy, false],
+    ["d luffy", luffy, true],
+    ["d.luffy", luffy, false],
+    // Step 4's third example, beside the table's two.
+    ["d. luffy", luffy, true],
   ])("%s", (query, fields, expected) => {
     expect(matchesTerms(fields, searchTerms(query))).toBe(expected);
-  });
-
-  it("matches each term on its own: `d luffy` matches, as `d` is in `d.` (rule 3 over the table's example)", () => {
-    expect(matchesTerms(luffy, searchTerms("d luffy"))).toBe(true);
   });
 
   it("no terms match everything", () => {
