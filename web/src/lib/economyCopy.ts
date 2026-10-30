@@ -116,5 +116,6 @@ export const recycleCopy = {
   recycled: (count: number, name: string, credited: number, balance: number) =>
     `Recycled ${plural(count, "copy", "copies")} of ${name} for ${amount(credited)}. You have ${amount(balance)}.`,
   valueChanged: (value: number) => ` Each duplicate now recycles for ${amount(value)}.`,
-  ceiling: `Your ${CURRENCY_NAME} is at its ceiling, so nothing was recycled.`,
+  // "balance" here only, so the name stays after a number or in a label (manager decision, 2026-10-30).
+  ceiling: "Your balance is at its ceiling, so nothing was recycled.",
 } as const;

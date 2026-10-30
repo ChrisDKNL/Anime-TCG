@@ -53,17 +53,25 @@ describe("economy copy words (collection-overview.md §8, market-and-shop.md §8
   });
 
   it("contains none of the forbidden words, money words or casino nudges", () => {
-    expect(rendered.filter((text) => FORBIDDEN_WORDS.some((word) => word.test(text)))).toEqual([]);
+    // The one string allowed the word "balance" (manager decision, 2026-10-30), and only that word.
+    const balanceWord = /\bbalance\b/i;
+    const flagged = rendered.filter((text) =>
+      FORBIDDEN_WORDS.some(
+        (word) => word.test(text) && !(text === recycleCopy.ceiling && word.source === balanceWord.source),
+      ),
+    );
+    expect(flagged).toEqual([]);
+    expect(rendered.filter((text) => balanceWord.test(text))).toEqual([recycleCopy.ceiling]);
   });
 
-  it("names the currency only through the one constant, after a number or in the section's name", () => {
+  it("names the currency only through the one constant, after a number or in a label", () => {
     expect(CURRENCY_NAME).toBe("Karma");
     expect(balanceCopy.name).toBe(CURRENCY_NAME);
     expect(amount(1_240)).toBe("1,240 Karma");
     expect(amount(0)).toBe("0 Karma");
     for (const text of rendered) {
       for (const match of text.matchAll(/(\S*) Karma\b/g)) {
-        expect(match[1], text).toMatch(/^(?:[\d,]+|for|Your)$/);
+        expect(match[1], text).toMatch(/^(?:[\d,]+|for)$/);
       }
     }
   });
@@ -123,7 +131,7 @@ describe("recycle copy (collection-overview.md §8)", () => {
     expect(recycleCopy.somethingChanged).toBe(
       "Something changed since you opened this card. Check the numbers and try again.",
     );
-    expect(recycleCopy.ceiling).toBe("Your Karma is at its ceiling, so nothing was recycled.");
+    expect(recycleCopy.ceiling).toBe("Your balance is at its ceiling, so nothing was recycled.");
     expect(recycleCopy.recycling).toBe("Recycling…");
   });
 
