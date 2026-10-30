@@ -148,6 +148,8 @@ describe("snapshot-pool against a local AniList stand-in (collection-packs.md §
         "(13 mythic, 37 legendary, 75 epic, 125 rare, 156 uncommon, 219 common); 0 skipped; 0 capped in 0 franchises; " +
         "0 changed tier, 0 dropped, 625 added; " +
         `${FETCH_REQUESTS} AniList requests.`,
+      "Genre themes on offer: 1 of 1 genres:",
+      '  "Action" (genre-action)',
     ]);
   });
 
@@ -333,6 +335,26 @@ describe("snapshot-pool as a command", () => {
     expect(await app.db.select({ id: poolSnapshots.id }).from(poolSnapshots)).toEqual(before);
   });
 
+  it("--stdin --dry-run lists the genre themes the snapshot would offer, and each genre it would not with its short tiers (economy.md §8.6)", async () => {
+    const pool = standardPool();
+    // Every entry Action, the odd ones also Comedy, the first alone also Sports: Sports is short.
+    pool.entries = pool.entries.map((entry, index) => ({
+      ...entry,
+      genres: ["Action", ...(index % 2 === 0 ? ["Comedy"] : []), ...(index === 0 ? ["Sports"] : [])],
+    }));
+    const result = await run(["--stdin", "--dry-run"], snapshotText(pool));
+    expect(result.code).toBe(0);
+    const lines = result.stdout.split("\n");
+    expect(lines.slice(1, 5)).toEqual([
+      "Genre themes on offer: 2 of 3 genres:",
+      '  "Action" (genre-action)',
+      '  "Comedy" (genre-comedy)',
+      "Genres not on offer:",
+    ]);
+    expect(lines[5]).toMatch(/^ {2}"Sports": [a-z]+ [0-4] of 5(, [a-z]+ [0-4] of 5)*$/);
+    expect(lines[6]).toMatch(/^Franchises /);
+  });
+
   it("--stdin activates a file as source 'file' with its takenAt", async () => {
     const result = await run(["--stdin"], snapshotText(standardPool()));
     expect(result.code).toBe(0);
@@ -341,7 +363,8 @@ describe("snapshot-pool as a command", () => {
     expect(result.stdout).toBe(
       `Snapshot ${version} active: 100 entries in 100 franchises, 600 characters ` +
         "(12 mythic, 36 legendary, 72 epic, 120 rare, 150 uncommon, 210 common); " +
-        "0 skipped; 0 capped in 0 franchises; 0 changed tier, 0 dropped, 600 added; read from a file.\n",
+        "0 skipped; 0 capped in 0 franchises; 0 changed tier, 0 dropped, 600 added; read from a file.\n" +
+        'Genre themes on offer: 1 of 1 genres:\n  "Action" (genre-action)\n',
     );
     const [row] = await app.db.select().from(poolSnapshots).where(eq(poolSnapshots.id, version));
     expect(row).toMatchObject({

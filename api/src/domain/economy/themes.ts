@@ -61,12 +61,44 @@ export function eligible(sizes: PerRarity): boolean {
   return RARITIES.every((tier) => sizes[tier] >= PACK_SIZE);
 }
 
+/** Why a genre of the snapshot is not on offer as a theme. */
+export type GenreRefusal =
+  /** The tiers that hold fewer than `PACK_SIZE` of its characters, with how many they hold. */
+  | { kind: "short"; tiers: { tier: Rarity; size: number }[] }
+  /** Another genre's name makes the same id. */
+  | { kind: "collision"; id: string }
+  /** Nothing of its name is left for an id. */
+  | { kind: "no_id" }
+  /** Its id would not fit a purchase body. */
+  | { kind: "id_too_long"; id: string };
+
+export interface RefusedGenre {
+  /** As AniList names it; printed through `quote`. */
+  genre: string;
+  refusal: GenreRefusal;
+}
+
+/** What `snapshot-pool` reports of a snapshot's genres (economy.md §8.6). */
+export interface GenreThemes {
+  themes: Theme[];
+  /** Ordered by genre. */
+  refused: RefusedGenre[];
+}
+
 /**
  * Every eligible genre theme, ordered by id. Two genres whose slugs collide
  * would name one id for two sets, so neither is offered; nor is a genre
  * whose id would not fit a purchase body.
  */
 export function buildThemes(genres: readonly GenreMember[], franchises: readonly FranchiseMember[]): Theme[] {
+  return buildGenreThemes(genres, franchises).themes;
+}
+
+/** `buildThemes`, with every genre it does not offer and why. */
+export function buildGenreThemes(
+  genres: readonly GenreMember[],
+  franchises: readonly FranchiseMember[],
+): GenreThemes {
   const byGenre = new Map<string, Map<number, Rarity>>();
   for (const { characterId, tier, genre } of genres) {
     const set = byGenre.get(genre) ?? new Map<number, Rarity>();
@@ -78,24 +110,42 @@ export function buildThemes(genres: readonly GenreMember[], franchises: readonly
     franchisesOf.set(member.characterId, [...(franchisesOf.get(member.characterId) ?? []), member]);
   }
 
+  const refused: RefusedGenre[] = [];
   const genresById = new Map<string, string[]>();
   for (const genre of byGenre.keys()) {
     const slug = genreSlug(genre);
-    if (slug === null) continue;
+    if (slug === null) {
+      refused.push({ genre, refusal: { kind: "no_id" } });
+      continue;
+    }
     const id = `${GENRE_PREFIX}${slug}`;
     genresById.set(id, [...(genresById.get(id) ?? []), genre]);
   }
 
   const themes: Theme[] = [];
   for (const [id, named] of genresById) {
+    if (named.length !== 1) {
+      for (const genre of named) refused.push({ genre, refusal: { kind: "collision", id } });
+      continue;
+    }
     const [genre] = named;
     const set = genre === undefined ? undefined : byGenre.get(genre);
-    if (named.length !== 1 || genre === undefined || set === undefined || id.length > THEME_ID_MAX_LENGTH)
+    if (genre === undefined || set === undefined) continue;
+    if (id.length > THEME_ID_MAX_LENGTH) {
+      refused.push({ genre, refusal: { kind: "id_too_long", id } });
       continue;
+    }
     const ids = [...set.keys()].sort((a, b) => a - b);
     const tiers = perRarity((tier) => ids.filter((characterId) => set.get(characterId) === tier));
     const tierSizes = perRarity((tier) => tiers[tier].length);
-    if (!eligible(tierSizes)) continue;
+    if (!eligible(tierSizes)) {
+      const short = RARITIES.filter((tier) => tierSizes[tier] < PACK_SIZE).map((tier) => ({
+        tier,
+        size: tierSizes[tier],
+      }));
+      refused.push({ genre, refusal: { kind: "short", tiers: short } });
+      continue;
+    }
     const rankOf = new Map<number, number>();
     for (const characterId of ids) {
       for (const member of franchisesOf.get(characterId) ?? [])
@@ -106,7 +156,11 @@ export function buildThemes(genres: readonly GenreMember[], franchises: readonly
       .map(([franchiseId]) => franchiseId);
     themes.push({ id, title: genre, tiers, tierSizes, franchiseIds });
   }
-  return themes.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const byText = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+  return {
+    themes: themes.sort((a, b) => byText(a.id, b.id)),
+    refused: refused.sort((a, b) => byText(a.genre, b.genre)),
+  };
 }
 
 /**
@@ -115,6 +169,11 @@ export function buildThemes(genres: readonly GenreMember[], franchises: readonly
  * deals it as.
  */
 export async function snapshotThemes(db: Queryable, snapshotId: number): Promise<Theme[]> {
+  return (await snapshotGenreThemes(db, snapshotId)).themes;
+}
+
+/** `snapshotThemes`, with every genre of the snapshot it does not offer and why. */
+export async function snapshotGenreThemes(db: Queryable, snapshotId: number): Promise<GenreThemes> {
   const genres = await db.execute<{ characterId: number; tier: Rarity; genre: string }>(sql`
     select distinct m.character_id as "characterId", c.tier, g.genre
     from pool_snapshot_memberships m
@@ -135,5 +194,5 @@ export async function snapshotThemes(db: Queryable, snapshotId: number): Promise
     join pool_snapshot_franchises f on f.snapshot_id = s.snapshot_id and f.franchise_id = s.franchise_id
     where m.snapshot_id = ${snapshotId}
   `);
-  return buildThemes(genres.rows, franchises.rows);
+  return buildGenreThemes(genres.rows, franchises.rows);
 }

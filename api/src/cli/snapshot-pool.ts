@@ -1,5 +1,7 @@
+import { PACK_SIZE } from "@anime-tcg/shared/economy";
 import { pino, type DestinationStream } from "pino";
 import { createDb, type Db } from "../db/client.js";
+import { type GenreRefusal, THEME_ID_MAX_LENGTH } from "../domain/economy/themes.js";
 import { type ActivationSummary, activateSnapshot } from "../domain/pool/activate.js";
 import { AniListClient } from "../domain/pool/anilist.js";
 import { buildSnapshot, type SnapshotPlan, SnapshotRefused } from "../domain/pool/build.js";
@@ -44,14 +46,21 @@ function logBuild(log: FetchLog, plan: SnapshotPlan): void {
 }
 
 function logActivation(log: FetchLog, summary: ActivationSummary, startedAt: number): void {
-  const { franchises, ...rest } = summary;
+  const { franchises, themes, ...rest } = summary;
   const cappedByFranchise = Object.fromEntries(
     franchises
       .filter((franchise) => franchise.capped > 0)
       .map((franchise) => [franchise.id, franchise.capped]),
   );
   log.info(
-    { ...rest, franchises: franchises.length, cappedByFranchise, durationMs: Date.now() - startedAt },
+    {
+      ...rest,
+      franchises: franchises.length,
+      cappedByFranchise,
+      themesOnOffer: themes.onOffer.length,
+      genresRefused: themes.refused.length,
+      durationMs: Date.now() - startedAt,
+    },
     "snapshot built",
   );
 }
@@ -114,9 +123,42 @@ export async function snapshotFromFile(
   return { summary, requests: null };
 }
 
+function describeRefusal(refusal: GenreRefusal): string {
+  switch (refusal.kind) {
+    case "short":
+      return refusal.tiers.map(({ tier, size }) => `${tier} ${size} of ${PACK_SIZE}`).join(", ");
+    case "collision":
+      return `another genre makes the same id, ${refusal.id}`;
+    case "no_id":
+      return "no theme id can be made of its name";
+    case "id_too_long":
+      return `its id is longer than ${THEME_ID_MAX_LENGTH} characters`;
+  }
+}
+
 /**
- * What the command prints. Titles are AniList's strings, so they are
- * printed through `quote` and nothing in one reaches the terminal unescaped.
+ * The shop's genre themes the snapshot offers, and every genre it does not
+ * with why: for a genre too small, each tier short of a pack's worth
+ * (economy.md §8.6, QC should-fix 2026-10-30).
+ */
+export function describeThemes(themes: ActivationSummary["themes"]): string[] {
+  const total = themes.onOffer.length + themes.refused.length;
+  const lines = [
+    `Genre themes on offer: ${themes.onOffer.length} of ${total} genres${themes.onOffer.length > 0 ? ":" : "."}`,
+    ...themes.onOffer.map((theme) => `  ${quote(theme.title)} (${theme.id})`),
+  ];
+  if (themes.refused.length === 0) return lines;
+  return [
+    ...lines,
+    "Genres not on offer:",
+    ...themes.refused.map(({ genre, refusal }) => `  ${quote(genre)}: ${describeRefusal(refusal)}`),
+  ];
+}
+
+/**
+ * What the command prints. Titles and genres are AniList's strings, so they
+ * are printed through `quote` and nothing in one reaches the terminal
+ * unescaped.
  */
 export function describeOutcome({ summary, requests }: SnapshotOutcome): string[] {
   const t = summary.tierCounts;
@@ -126,9 +168,11 @@ export function describeOutcome({ summary, requests }: SnapshotOutcome): string[
     `${summary.skipped} skipped; ${summary.capped} capped in ${summary.cappedFranchises} franchises; ` +
     `${summary.changedTier} changed tier, ${summary.dropped} dropped, ${summary.added} added; ` +
     (requests === null ? "read from a file." : `${requests} AniList requests.`);
-  if (!summary.dryRun) return [`Snapshot ${summary.version} active: ${body}`];
+  if (!summary.dryRun)
+    return [`Snapshot ${summary.version} active: ${body}`, ...describeThemes(summary.themes)];
   return [
     `Dry run, nothing activated. The snapshot would hold ${body}`,
+    ...describeThemes(summary.themes),
     `Franchises (${summary.franchisesMerged} merged and ${summary.franchisesSplit} split since the current snapshot):`,
     ...summary.franchises.map(
       (f) =>

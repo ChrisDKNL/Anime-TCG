@@ -159,7 +159,22 @@ docker compose --env-file .env.production.local --profile production exec -T api
   node api/dist/cli/snapshot-pool.js               # build from the pages the dry run fetched, and activate
 ```
 
-It prints one line, for example `Snapshot 2 active: 100 entries in 77 franchises, 2983 characters (60 mythic, 179 legendary, 358 epic, 596 rare, 746 uncommon, 1044 common); 0 skipped; 2190 capped in 18 franchises; 31 changed tier, 12 dropped, 55 added; 291 AniList requests.`; `--dry-run` prints the same counts and the franchise list instead, each franchise with its kept characters and, when the cap trimmed it, how many it cut (`8. "ONE PIECE" (21): 1 entry, 60 characters (755 capped)`; titles are quoted the way the reset commands quote a login, so a control or format character AniList sends prints as `\uXXXX`), and writes no snapshot. `capped` counts the characters the cap left out of the pool; they are not errors and are not in `skipped`. The `snapshot built` log line on stderr carries the same counts and `cappedByFranchise` (franchise id to characters cut). Progress goes to stderr as JSON log lines every 25 requests.
+It prints a line of counts, for example `Snapshot 2 active: 100 entries in 77 franchises, 2983 characters (60 mythic, 179 legendary, 358 epic, 596 rare, 746 uncommon, 1044 common); 0 skipped; 2190 capped in 18 franchises; 31 changed tier, 12 dropped, 55 added; 291 AniList requests.`, then the Karma shop's genre themes the snapshot offers and every genre it does not, with why: for a genre too small, each tier that holds fewer than a pack's 5 characters (`docs/design/economy.md` §8.6). Genres are quoted the way titles are. On the real snapshot that reads:
+
+```
+Genre themes on offer: 13 of 17 genres:
+  "Action" (genre-action)
+  "Adventure" (genre-adventure)
+  ...
+  "Thriller" (genre-thriller)
+Genres not on offer:
+  "Ecchi": mythic 2 of 5
+  "Mecha": mythic 4 of 5
+  "Music": common 0 of 5, ...
+  "Sports": mythic 1 of 5
+```
+
+`--dry-run` prints the same counts and genre themes, then the franchise list, each franchise with its kept characters and, when the cap trimmed it, how many it cut (`8. "ONE PIECE" (21): 1 entry, 60 characters (755 capped)`; titles are quoted the way the reset commands quote a login, so a control or format character AniList sends prints as `\uXXXX`), and writes no snapshot. `capped` counts the characters the cap left out of the pool; they are not errors and are not in `skipped`. The `snapshot built` log line on stderr carries the same counts and `cappedByFranchise` (franchise id to characters cut). Progress goes to stderr as JSON log lines every 25 requests.
 
 - **Pace**: one request every 2.5 s (24 a minute, below AniList's degraded 30), never in parallel. Expect about 210 to 310 requests, 9 to 13 minutes. More than 1 000 needed, or more than 40 for the franchise relations, is refused (exit 1) rather than built from a partial answer.
 - **Resume**: every page is stored as it arrives. A 429 waits its `Retry-After` (60 s without one, 15 minutes at most); other failures back off 2, 4, 8, 16 and 32 s. After five retries of one request the command stops with exit code 2 (`Paused after 118 of about 240 requests; run again to resume.`); running it again continues from the first missing page. A fetch that began more than 24 hours ago is started over so a snapshot never mixes rankings from days apart; `--restart` starts over on demand. A dry run keeps the fetched pages, so the run after it sends no request.

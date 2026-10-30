@@ -3,7 +3,15 @@ import { PITY_PACKS, RADIANT_ODDS, RARITIES, type Rarity } from "@anime-tcg/shar
 import { describe, expect, it } from "vitest";
 import { countersAfter, planPack } from "../packs/roll.js";
 import { sameShopRequest } from "./shop.js";
-import { buildThemes, eligible, type FranchiseMember, type GenreMember, genreSlug } from "./themes.js";
+import { describeThemes } from "../../cli/snapshot-pool.js";
+import {
+  buildGenreThemes,
+  buildThemes,
+  eligible,
+  type FranchiseMember,
+  type GenreMember,
+  genreSlug,
+} from "./themes.js";
 
 /** `perTier` characters of every tier in `genre`, ids from `base`, each in franchise `base + tier index`. */
 function members(genre: string, base: number, perTier: number | Partial<Record<Rarity, number>>) {
@@ -83,6 +91,73 @@ describe("genre themes", () => {
       [],
     );
     expect(themes.map((theme) => theme.id)).toEqual([`genre-${"y".repeat(58)}`]);
+  });
+
+  it("says why each genre it does not offer is refused: the short tiers, a collision, no id, an id too long", () => {
+    const action = members("Action", 1_000, 5);
+    const ecchi = members("Ecchi", 2_000, { mythic: 2 });
+    const music = members("Music", 3_000, { common: 0, uncommon: 3 });
+    const one = members("Sci-Fi", 4_000, 5);
+    const two = members("Sci Fi", 5_000, 5);
+    const symbols = members("???", 6_000, 5);
+    const long = members("x".repeat(59), 7_000, 5);
+    const all = [action, ecchi, music, one, two, symbols, long];
+    const { themes, refused } = buildGenreThemes(
+      all.flatMap((set) => set.genres),
+      all.flatMap((set) => set.franchises),
+    );
+    expect(themes.map((theme) => theme.id)).toEqual(["genre-action"]);
+    expect(refused).toEqual([
+      { genre: "???", refusal: { kind: "no_id" } },
+      { genre: "Ecchi", refusal: { kind: "short", tiers: [{ tier: "mythic", size: 2 }] } },
+      {
+        genre: "Music",
+        refusal: {
+          kind: "short",
+          tiers: [
+            { tier: "common", size: 0 },
+            { tier: "uncommon", size: 3 },
+          ],
+        },
+      },
+      { genre: "Sci Fi", refusal: { kind: "collision", id: "genre-sci-fi" } },
+      { genre: "Sci-Fi", refusal: { kind: "collision", id: "genre-sci-fi" } },
+      { genre: "x".repeat(59), refusal: { kind: "id_too_long", id: `genre-${"x".repeat(59)}` } },
+    ]);
+    // What snapshot-pool prints of them: every name quoted, each short tier with its count.
+    expect(
+      describeThemes({
+        onOffer: themes.map(({ id, title }) => ({ id, title })),
+        refused: refused.slice(0, 4),
+      }),
+    ).toEqual([
+      "Genre themes on offer: 1 of 5 genres:",
+      '  "Action" (genre-action)',
+      "Genres not on offer:",
+      '  "???": no theme id can be made of its name',
+      `  "Ecchi": mythic 2 of ${PACK_SIZE}`,
+      `  "Music": common 0 of ${PACK_SIZE}, uncommon 3 of ${PACK_SIZE}`,
+      '  "Sci Fi": another genre makes the same id, genre-sci-fi',
+    ]);
+  });
+
+  it("prints a hostile genre quoted and escaped, and an offer of none without a list", () => {
+    expect(
+      describeThemes({
+        onOffer: [],
+        refused: [
+          { genre: "a\u001b[2J\u202e", refusal: { kind: "short", tiers: [{ tier: "mythic", size: 0 }] } },
+        ],
+      }),
+    ).toEqual([
+      "Genre themes on offer: 0 of 1 genres.",
+      "Genres not on offer:",
+      `  "a\\u001b[2J\\u202e": mythic 0 of ${PACK_SIZE}`,
+    ]);
+    expect(describeThemes({ onOffer: [{ id: "genre-action", title: "Action" }], refused: [] })).toEqual([
+      "Genre themes on offer: 1 of 1 genres:",
+      '  "Action" (genre-action)',
+    ]);
   });
 
   it("keeps a hostile genre name as the title, to be rendered as text", () => {
