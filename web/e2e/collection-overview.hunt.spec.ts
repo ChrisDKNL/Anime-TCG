@@ -57,6 +57,8 @@ import {
  * - Real keystrokes 200 ms apart announce nothing while typing and the results line once, 500 ms
  *   after the last; typing back to the opening line announces nothing; a no-match line says
  *   `No results`; Escape, a held key's auto-repeat and a paste each end in one announcement.
+ * - A refetch that changes the line announces nothing (§4.1 "refreshing"); the player's next
+ *   change is heard.
  *
  * Search (§3.3) in a real browser: accents, case, full-width, punctuation (`d luffy` matches,
  * `d.luffy` does not), CJK names and titles, kana voiced marks, whitespace runs, the empty result
@@ -499,6 +501,33 @@ test.describe("the live region while typing (page.clock)", () => {
     await page.clock.pauseAt(Date.now() + 60_000);
     await search(page).focus();
   }
+
+  test("a refetch that changes the results line says nothing; the player's next change is heard (§4.1 refreshing)", async ({
+    page,
+    api,
+  }) => {
+    // Regression (manager decision, 2026-10-30): the page's own refetch drops Spike, so the line
+    // goes from 5 to 4 results with no change by the player.
+    const fewer = makeOverviewCollection();
+    fewer.entries = fewer.entries.filter((entry) => entry.character.id !== 1);
+    const gate = deferred();
+    api.on("GET /api/collection", ok(makeOverviewCollection()), async () => {
+      await gate.promise;
+      return ok(fewer);
+    });
+    await recordStatusTexts(page);
+    await page.clock.install();
+    await viaPacks(page);
+    await expect(resultsLine(page)).toHaveText("5 results");
+    gate.release();
+    await expect(resultsLine(page)).toHaveText("4 results");
+    await page.clock.runFor(5_000);
+    expect(await resultAnnouncements(page)).toEqual([]);
+    await search(page).fill("gon");
+    await expect(resultsLine(page)).toHaveText("1 result");
+    await page.clock.runFor(500);
+    await expect.poll(() => resultAnnouncements(page)).toEqual(["1 result"]);
+  });
 
   test("keystrokes 200 ms apart announce nothing; the line once, 500 ms after the last", async ({ page }) => {
     await loadedWithStoppedClock(page);

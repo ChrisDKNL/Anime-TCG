@@ -171,13 +171,20 @@ function CardsView({
     resultsLine?.focus({ preventScroll: true });
   });
 
+  // The player's changes, counted so the live region hears the results line after those only (§4.1, §7).
+  const [asked, setAsked] = useState(0);
+  const change = (action: ControlsAction) => {
+    setAsked((n) => n + 1);
+    onChange(action);
+  };
+
   const line = resultsCopy.line(results.length, page, pages);
-  useResultsAnnouncement(results.length === 0 ? resultsCopy.none : line, resultsRef);
+  useResultsAnnouncement(results.length === 0 ? resultsCopy.none : line, asked, resultsRef);
 
   const shown = open === null ? pageEntries : open.frozen.flatMap(({ key }) => byKey.get(key) ?? []);
   const clear = () => {
     focusAfter({ to: "results", scroll: false });
-    onChange({ type: "clearFilters" });
+    change({ type: "clearFilters" });
   };
 
   return (
@@ -186,7 +193,7 @@ function CardsView({
         controls={controls}
         options={model.seriesOptions}
         disabled={false}
-        onChange={onChange}
+        onChange={change}
         onCleared={() => focusAfter({ to: "results", scroll: false })}
       />
       <p id={RESULTS_ID} ref={resultsRef} tabIndex={-1} className={RESULTS_LINE}>
@@ -213,7 +220,7 @@ function CardsView({
           pages={pages}
           onPage={(next) => {
             focusAfter({ to: "results", scroll: true });
-            onChange({ type: "page", page: next });
+            change({ type: "page", page: next });
           }}
         />
       )}

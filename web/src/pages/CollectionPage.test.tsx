@@ -147,6 +147,23 @@ describe("the Cards view: toolbar, results and grid (§3.3, §4.2)", () => {
     expect(spike.querySelector(".card-frame-epic")).toHaveClass("shadow-glow-epic", "card-glint-hover");
   });
 
+  it("a refetch that changes the results line announces nothing (§4.1 refreshing)", async () => {
+    const fewer = makeOverviewCollection();
+    fewer.entries = fewer.entries.filter((entry) => entry.character.id !== 3);
+    const { user, queryClient } = await openCollection(sequence(overview, { status: 200, body: fewer }));
+    const announced: string[] = [];
+    const observer = new MutationObserver(() => announced.push(liveRegion().textContent ?? ""));
+    observer.observe(liveRegion(), { childList: true, characterData: true, subtree: true });
+    await queryClient.refetchQueries({ queryKey: ["collection"] });
+    await waitFor(() => expect(results()).toHaveTextContent("4 results"), { timeout: ASYNC_TIMEOUT });
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    expect(announced.filter((text) => /results?$/.test(text))).toEqual([]);
+    // A change the player makes is still heard.
+    await user.click(screen.getByRole("button", { name: "Epic", pressed: false }));
+    await waitFor(() => expect(liveRegion()).toHaveTextContent(/^\d+ results?$/), { timeout: 2_000 });
+    observer.disconnect();
+  });
+
   it("search updates per keystroke without a request, and the live region hears the line after 500 ms", async () => {
     const { fetchMock, user } = await openCollection();
     const asked = callsTo(fetchMock, COLLECTION).length;
