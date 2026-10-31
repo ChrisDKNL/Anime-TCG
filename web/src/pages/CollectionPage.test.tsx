@@ -137,6 +137,11 @@ describe("the Cards view: toolbar, results and grid (§3.3, §4.2)", () => {
     ]);
     expect(screen.getByRole("combobox", { name: "Series" })).toHaveDisplayValue("All series");
     expect(screen.getByRole("checkbox", { name: "Duplicates only" })).not.toBeChecked();
+    // visual-identity.md §5.4: the Volt ring, not the browser's own.
+    expect(screen.getByRole("checkbox", { name: "Duplicates only" })).toHaveClass(
+      "focus:outline-none",
+      "focus-visible:ring-volt",
+    );
     expect(screen.getByRole("combobox", { name: "Sort" })).toHaveDisplayValue("Rarity, rarest first");
     expect(screen.queryByRole("button", { name: "Clear filters" })).not.toBeInTheDocument();
     expect(results()).toHaveTextContent("5 results");

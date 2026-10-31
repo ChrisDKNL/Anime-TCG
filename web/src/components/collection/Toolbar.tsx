@@ -10,7 +10,7 @@ import {
   type ControlsAction,
   type OverviewControls,
 } from "../../lib/collectionView";
-import { INPUT, INPUT_BORDER } from "../account/styles";
+import { FOCUS_RING, INPUT, INPUT_BORDER } from "../account/styles";
 import { TEXT_BUTTON_SM } from "../packs/styles";
 import { ALL_CHIP, CONTROL_LABEL, TIER_CHIP } from "./styles";
 
@@ -155,7 +155,7 @@ export function Toolbar({ controls, options, disabled, onChange, onCleared }: Pr
               checked={controls.duplicatesOnly}
               disabled={disabled}
               onChange={(event) => onChange({ type: "duplicatesOnly", on: event.target.checked })}
-              className="size-4 accent-volt"
+              className={`size-4 accent-volt ${FOCUS_RING}`}
             />
             {toolbarCopy.duplicatesOnly}
           </label>
