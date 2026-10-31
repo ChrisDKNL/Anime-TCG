@@ -411,6 +411,26 @@ describe("buying (§3.5)", () => {
     expect(callsTo(fetchMock, BUY_ONE)).toHaveLength(1);
   });
 
+  it("market_limit with retryAfterSeconds 0: the 60 s fallback, so the date is a minute away and the confirm waits", async () => {
+    const { user } = await confirmBuy({
+      [BUY_ONE]: {
+        status: 409,
+        body: { error: { code: "market_limit", message: "m", limit: "pair", retryAfterSeconds: 0 } },
+      },
+    });
+    const before = Date.now();
+    await user.click(confirmButton());
+    const line = await within(dialog()).findByRole("alert");
+    const [, hh, mm] = /at (\d\d):(\d\d)\.$/.exec(line.textContent ?? "") ?? [];
+    const shown = new Date(before + 60_000);
+    const allowed = [shown, new Date(before + 120_000)].map((at) =>
+      [at.getHours(), at.getMinutes()].join(":"),
+    );
+    expect(allowed).toContain([Number(hh), Number(mm)].join(":"));
+    expect(confirmButton()).toHaveAttribute("aria-disabled", "true");
+    expect(within(dialog()).queryByText(/The game server couldn't finish this/)).toBeNull();
+  });
+
   it.each([
     ["seller_proceeds", "This seller can't take more sales right now. Try again on"],
     ["pair", "You've bought as much from this seller as the market allows for now. Try again on"],

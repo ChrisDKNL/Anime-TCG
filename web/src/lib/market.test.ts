@@ -214,8 +214,12 @@ describe("market_limit (§3.5 step 4)", () => {
     expect(limitBlock("pair", 30, now)?.until).toBe(31_000);
   });
 
-  it("without seconds waits the fallback; without a limit is no block at all", () => {
-    expect(limitBlock("pair", undefined, now)?.until).toBe(1_000 + RATE_LIMITED_FALLBACK_SECONDS * 1000);
+  it("without seconds, or with 0 or invalid ones, waits the fallback; without a limit is no block at all", () => {
+    for (const seconds of [undefined, 0, -5, 1.5, Number.NaN, Infinity]) {
+      const block = limitBlock("pair", seconds, now);
+      expect(block?.until, String(seconds)).toBe(1_000 + RATE_LIMITED_FALLBACK_SECONDS * 1000);
+      expect(block?.freesAt.getTime(), String(seconds)).toBe(now.wall + RATE_LIMITED_FALLBACK_SECONDS * 1000);
+    }
     expect(limitBlock(undefined, 30, now)).toBeNull();
   });
 

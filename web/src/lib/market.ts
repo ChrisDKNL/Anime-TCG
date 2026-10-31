@@ -262,7 +262,11 @@ export function limitBlock(
   now: { wall: number; monotonic: number },
 ): LimitBlock | null {
   if (limit === undefined) return null;
-  const seconds = retryAfterSeconds ?? RATE_LIMITED_FALLBACK_SECONDS;
+  // 0, missing or not a whole number counts as missing: the fallback (manager decision, 2026-10-30).
+  const seconds =
+    retryAfterSeconds !== undefined && Number.isSafeInteger(retryAfterSeconds) && retryAfterSeconds >= 1
+      ? retryAfterSeconds
+      : RATE_LIMITED_FALLBACK_SECONDS;
   return {
     limit,
     freesAt: new Date(now.wall + seconds * SECOND_MS),

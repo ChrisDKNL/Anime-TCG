@@ -413,6 +413,32 @@ describe("api client", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it.each(["0", "-1", "1.5", '"60"', "null", "1e400"])(
+    "market_limit with seconds %s is still market_limit, the seconds missing",
+    async (seconds) => {
+      const id = listingId(1);
+      mockFetch({
+        [`POST /api/market/listings/${id}/buy`]: {
+          status: 409,
+          raw: `{"error":{"code":"market_limit","message":"m","limit":"pair","retryAfterSeconds":${seconds}}}`,
+        },
+      });
+      const err = await buyListing(id, "k").catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ApiError);
+      expect(err).toMatchObject({ code: "market_limit", limit: "pair", retryAfterSeconds: undefined });
+    },
+  );
+
+  it("any other code with seconds that do not count is still not the envelope", async () => {
+    mockFetch({
+      "POST /api/packs/open": {
+        status: 409,
+        raw: '{"error":{"code":"no_pack_available","message":"m","retryAfterSeconds":0}}',
+      },
+    });
+    await expect(openPack({ requestId: "k" })).rejects.toBeInstanceOf(NetworkError);
+  });
+
   it("market_limit carries which limit it hit and its seconds; an unknown limit is not the envelope", async () => {
     const id = listingId(1);
     mockFetch({

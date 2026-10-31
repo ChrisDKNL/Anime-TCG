@@ -56,7 +56,9 @@ export class ApiError extends Error {
     this.name = "ApiError";
     this.status = status;
     this.code = error.code;
-    this.retryAfterSeconds = error.retryAfterSeconds ?? retryAfterHeader;
+    // Only seconds that count exactly; a market_limit's invalid ones reach here and are missing.
+    const own = isWholeSeconds(error.retryAfterSeconds) ? error.retryAfterSeconds : undefined;
+    this.retryAfterSeconds = own ?? retryAfterHeader;
     this.balance = error.balance;
     this.limit = error.limit;
   }
@@ -105,7 +107,10 @@ function isMarketLimit(value: unknown): value is MarketLimit {
 function isErrorEnvelope(value: unknown): value is ErrorEnvelope {
   if (!isRecord(value) || !isRecord(value.error)) return false;
   const { code, message, retryAfterSeconds, balance, limit } = value.error;
-  const retryOk = retryAfterSeconds === undefined || isWholeSeconds(retryAfterSeconds);
+  // A market_limit is still the refusal it names when its seconds are 0 or not a number: they count as
+  // missing, and the wait falls back (manager decision, 2026-10-30). Elsewhere they void the envelope.
+  const retryOk =
+    retryAfterSeconds === undefined || isWholeSeconds(retryAfterSeconds) || code === "market_limit";
   const balanceOk = balance === undefined || isBalance(balance);
   const limitOk = limit === undefined || isMarketLimit(limit);
   return isErrorCode(code) && typeof message === "string" && retryOk && balanceOk && limitOk;
