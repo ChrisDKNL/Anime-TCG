@@ -16,16 +16,15 @@ Personal trades do not exist yet; the old local-profile trade row is superseded.
    - Fair value comes from the tiers' published reference values.
    - A trade inside the band has a gift value of zero, so normal haggling never touches the limits.
    - The spec sets the band (about 25 %) and the exact formula, including how a pure gift counts (something given for nothing).
-3. **Two limits, both on gifts received:**
+3. **Two limits, both on gifts received.** The per-receiver limit stops several accounts each gifting a little into one main account.
    - **per pair:** what A gives B;
    - **per receiver:** what B receives from everyone together.
-     The second one stops several accounts each gifting a little into one main account.
 4. **Rolling 30 days.** A gift counts against the limits for 30 days after the transfer.
 5. **At a limit, only unfair trades are blocked.** A trade or purchase that would push the pair or the receiver over a limit is refused before anything moves, with a reason the client can show. Fair trades between the same players still go through.
 6. **The existing controls stay.**
    - The market's price bounds, fee and 7-day window limits (C24) are unchanged.
    - Karma moved by a personal trade counts against the same 7-day spend and receipt windows as a market purchase, so personal trades never become an uncapped channel.
-   - The gift limits are **not** raised by the Karma upgrades' trade budget (ADR 0015).
+   - No Karma upgrade raises the gift limits or the market's money limits (ADR 0015 §5: the market upgrade is listing slots only).
 7. **Server-authoritative.**
    - Gift values and limit checks are computed only on the server, inside the settling transaction, under the same locking as the market (C24).
    - The client never computes a gift value or a limit.
