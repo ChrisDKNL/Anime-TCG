@@ -1,10 +1,10 @@
 import type { ReactNode } from "react";
 import { useFrame } from "../../hooks/useFrame";
 import { banners } from "../../lib/copy";
-import { footerCopy, headerCopy } from "../../lib/navigationCopy";
+import { fontsCopy, footerCopy, headerCopy } from "../../lib/navigationCopy";
 import { focusPageHeading, PAGE_HEADING_ID } from "../../lib/pageFocus";
-import { ALERT_BANNER, FOCUS_RING, STATUS_BANNER } from "../account/styles";
-import { SKIP_LINK } from "./styles";
+import { ALERT_BANNER, STATUS_BANNER } from "../account/styles";
+import { FOOTER_LINK, SKIP_LINK } from "./styles";
 
 interface Props {
   /** The header's contents: the wordmark, the `Main` navigation and, signed in, the Account control. */
@@ -14,11 +14,14 @@ interface Props {
   skipLink?: boolean;
 }
 
+/** Written into the build by `web/font-licenses.ts`, and answered by the dev server too. */
+const FONT_LICENSES_PATH = "/licenses/fonts.txt";
+
 /** The frame every page shares: skip link, header, the app-level banners, `<main>` and the footer. */
 export function PageFrame({ header, children, skipLink = true }: Props) {
   const frame = useFrame();
   return (
-    <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_rgb(76_29_149_/_0.25),_transparent_60%)]">
+    <div className="min-h-screen">
       <div className="relative mx-auto flex max-w-6xl flex-col gap-8 px-4 py-8 sm:px-6">
         {skipLink && (
           // The heading takes focus without the URL changing: the app never writes a hash (§3.6 step 6).
@@ -56,17 +59,22 @@ export function PageFrame({ header, children, skipLink = true }: Props) {
 
         <main>{children}</main>
 
-        <footer className="mt-8 text-center text-xs text-zinc-600">
-          {footerCopy.before}
-          <a
-            href="https://anilist.co"
-            target="_blank"
-            rel="noreferrer"
-            className={`rounded underline decoration-zinc-700 underline-offset-2 hover:text-zinc-400 ${FOCUS_RING}`}
-          >
-            {footerCopy.link}
-          </a>
-          {footerCopy.after}
+        <footer className="mt-8 flex flex-col gap-1 text-center text-xs text-ink-400">
+          <p>
+            {footerCopy.before}
+            <a href="https://anilist.co" target="_blank" rel="noreferrer" className={FOOTER_LINK}>
+              {footerCopy.link}
+            </a>
+            {footerCopy.after}
+          </p>
+          {/* OFL §2: the fonts' licence travels with them (visual-identity.md §4.1, §11.1). */}
+          <p>
+            {fontsCopy.before}
+            <a href={FONT_LICENSES_PATH} className={FOOTER_LINK}>
+              {fontsCopy.link}
+            </a>
+            {fontsCopy.after}
+          </p>
         </footer>
       </div>
     </div>

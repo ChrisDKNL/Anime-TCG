@@ -17,7 +17,7 @@ export function NotFoundPage() {
   const signedIn = useOptionalGame() !== null;
   const body = (
     <div className="max-w-md py-12">
-      <PageHeading text={NOT_FOUND.heading} />
+      <PageHeading text={NOT_FOUND.heading} eyebrow={NOT_FOUND.eyebrow} />
       <p className="text-sm text-zinc-400">{notFoundCopy.line}</p>
       <Link to={signedIn ? "/packs" : "/"} className={`${LINK_BUTTON.secondary} mt-6`}>
         {signedIn ? notFoundCopy.signedInLink : notFoundCopy.signedOutLink}

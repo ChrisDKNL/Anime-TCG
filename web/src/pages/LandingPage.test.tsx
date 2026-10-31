@@ -60,10 +60,11 @@ afterEach(() => {
 });
 
 describe("the hero (§3.7 item 1)", () => {
-  it("the display h1, the lede from the facts, one button and its disclosure; no reveal on the page", async () => {
+  it("the display h1 at the hero size under its eyebrow, the lede from the facts, one button and its disclosure; no reveal on the page", async () => {
     renderLanding();
     const heading = await pageHeading("Anime TCG");
-    expect(heading).toHaveClass("text-4xl", "font-black", "sm:text-5xl", "lg:text-6xl");
+    expect(heading).toHaveClass("display-tight", "text-hero", "sm:text-[4.5rem]", "lg:text-[6rem]");
+    expect(within(hero()).getByText("Anime character cards")).toHaveAttribute("aria-hidden", "true");
     expect(await screen.findByText(LEDE)).toBeInTheDocument();
     expect(await demoButton()).not.toHaveAttribute("aria-disabled");
     expect(screen.getByText(DISCLOSURE)).toBeInTheDocument();

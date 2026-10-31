@@ -9,23 +9,36 @@
 
 const SITE = "Anime TCG";
 
+/**
+ * A page's `h1` and the eyebrow above it (visual-identity.md §10.1): sentence case here, shown
+ * uppercase. An opening page's eyebrow is the one of the page its pack came from.
+ */
+interface PageNames {
+  heading: string;
+  eyebrow: string;
+}
+
 /** Pages that need a session (§3 "account page"). */
 export const ACCOUNT_PAGES = {
-  "/packs": { heading: "Packs", guardLine: "Log in to open your packs." },
-  "/shop": { heading: "Shop", guardLine: "Log in to see the shop." },
-  "/market": { heading: "Market", guardLine: "Log in to see the market." },
-  "/collection": { heading: "Collection", guardLine: "Log in to see your collection." },
-  "/profile": { heading: "Profile", guardLine: "Log in to see your profile." },
-  "/account": { heading: "Manage account", guardLine: "Log in to manage your account." },
-} as const satisfies Record<string, { heading: string; guardLine: string }>;
+  "/packs": { heading: "Packs", eyebrow: "Timer packs", guardLine: "Log in to open your packs." },
+  "/shop": { heading: "Shop", eyebrow: "Themed packs", guardLine: "Log in to see the shop." },
+  "/market": { heading: "Market", eyebrow: "Player trades", guardLine: "Log in to see the market." },
+  "/collection": {
+    heading: "Collection",
+    eyebrow: "Your cards",
+    guardLine: "Log in to see your collection.",
+  },
+  "/profile": { heading: "Profile", eyebrow: "Player", guardLine: "Log in to see your profile." },
+  "/account": { heading: "Manage account", eyebrow: "Settings", guardLine: "Log in to manage your account." },
+} as const satisfies Record<string, PageNames & { guardLine: string }>;
 
 /** Pages only a signed-out visitor sees; a signed-in one is replaced to `/packs` (§3.3 step 7). */
 export const PUBLIC_PAGES = {
-  "/": { heading: SITE },
-  "/demo": { heading: "Demo pack" },
-  "/login": { heading: "Log in" },
-  "/register": { heading: "Register" },
-} as const satisfies Record<string, { heading: string }>;
+  "/": { heading: SITE, eyebrow: "Anime character cards" },
+  "/demo": { heading: "Demo pack", eyebrow: "Try a pack" },
+  "/login": { heading: "Log in", eyebrow: "Welcome back" },
+  "/register": { heading: "Register", eyebrow: "Invite only" },
+} as const satisfies Record<string, PageNames>;
 
 export type AccountPath = keyof typeof ACCOUNT_PAGES;
 
@@ -36,15 +49,19 @@ export type AccountPath = keyof typeof ACCOUNT_PAGES;
  * section page instead.
  */
 export const OPENING_PAGES = {
-  "/packs/open": { heading: "Pack opening", section: "/packs" },
-  "/shop/open": { heading: "Shop pack", section: "/shop" },
-} as const satisfies Record<string, { heading: string; section: AccountPath }>;
+  "/packs/open": { heading: "Pack opening", eyebrow: "Timer packs", section: "/packs" },
+  "/shop/open": { heading: "Shop pack", eyebrow: "Themed packs", section: "/shop" },
+} as const satisfies Record<string, PageNames & { section: AccountPath }>;
 
 export type PublicPath = keyof typeof PUBLIC_PAGES;
 export type OpeningPath = keyof typeof OPENING_PAGES;
 export type PagePath = AccountPath | OpeningPath | PublicPath;
 
-export const NOT_FOUND = { heading: "Page not found", title: `Page not found · ${SITE}` } as const;
+export const NOT_FOUND = {
+  heading: "Page not found",
+  eyebrow: "404",
+  title: `Page not found · ${SITE}`,
+} as const;
 
 /** The header's page links, in order (§3.5 step 2). `/profile` has none until roadmap item 4 (§9 decision 2). */
 export const NAV_LINKS = [
@@ -60,7 +77,7 @@ export const HOME_PATH = "/packs" satisfies AccountPath;
 /** `Anime TCG` while booting and on `/`; otherwise the page name first (§3.1 rule 4). */
 export const BOOT_TITLE = SITE;
 
-const PAGES: Record<PagePath, { heading: string }> = { ...PUBLIC_PAGES, ...ACCOUNT_PAGES, ...OPENING_PAGES };
+const PAGES: Record<PagePath, PageNames> = { ...PUBLIC_PAGES, ...ACCOUNT_PAGES, ...OPENING_PAGES };
 const ACCOUNT_PATHS = Object.keys(ACCOUNT_PAGES) as AccountPath[];
 const OPENING_PATHS = Object.keys(OPENING_PAGES) as OpeningPath[];
 const PUBLIC_PATHS = Object.keys(PUBLIC_PAGES) as PublicPath[];
@@ -125,6 +142,10 @@ export function pageTitle(pathname: string): string {
 
 export function pageHeading(path: PagePath): string {
   return PAGES[path].heading;
+}
+
+export function pageEyebrow(path: PagePath): string {
+  return PAGES[path].eyebrow;
 }
 
 /**

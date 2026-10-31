@@ -67,8 +67,11 @@ describe("App boot", () => {
     // No page renders before the answer, the landing page included (§3.2 step 1).
     expect(screen.getByText("Anime TCG")).toBeInTheDocument();
     expect(screen.queryByRole("heading")).not.toBeInTheDocument();
-    // The footer's AniList credit is the only link; the header has no page links yet.
-    expect(screen.getAllByRole("link").map((link) => link.textContent)).toEqual(["AniList"]);
+    // The footer's AniList credit and fonts licence are the only links; the header has no page links yet.
+    expect(screen.getAllByRole("link").map((link) => link.textContent)).toEqual([
+      "AniList",
+      "SIL Open Font License",
+    ]);
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
     expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
     expect(screen.queryByText("Loading…")).not.toBeInTheDocument();

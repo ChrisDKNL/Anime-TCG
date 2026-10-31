@@ -30,6 +30,13 @@ export const footerCopy = {
   after: " API.",
 } as const;
 
+/** The second footer line (visual-identity.md §11.1); the licence name links to the fonts' licence file. */
+export const fontsCopy = {
+  before: "Fonts: Bricolage Grotesque, Figtree, Martian Mono (",
+  link: "SIL Open Font License",
+  after: ").",
+} as const;
+
 export const crossLinkCopy = {
   toRegister: "No account yet?",
   toLogIn: "Already registered?",

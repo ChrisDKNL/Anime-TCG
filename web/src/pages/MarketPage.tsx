@@ -8,7 +8,7 @@ import { MarketActionsContext, useMarketActionsState } from "../hooks/useMarketA
 import type { MarketView } from "../lib/market";
 import { browseCopy } from "../lib/marketCopy";
 import { PAGE_HEADING_ID } from "../lib/pageFocus";
-import { pageHeading } from "../lib/routes";
+import { pageEyebrow, pageHeading } from "../lib/routes";
 
 const VIEWS: readonly MarketView[] = ["browse", "mine"];
 const VIEW_LABELS: Readonly<Record<MarketView, string>> = {
@@ -35,7 +35,7 @@ export function MarketPage() {
 
   return (
     <>
-      <PageHeading text={pageHeading("/market")} />
+      <PageHeading text={pageHeading("/market")} eyebrow={pageEyebrow("/market")} />
       <MarketActionsContext value={actions}>
         <section aria-labelledby={PAGE_HEADING_ID}>
           <ViewSwitch

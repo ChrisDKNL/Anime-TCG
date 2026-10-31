@@ -691,6 +691,11 @@ test.describe("scroll (§3.11)", () => {
 
     await page.reload();
     await expect(h1(page, "Packs")).toBeVisible();
+    // The precondition the title names: the layout holds the collection again before Back. Without this
+    // wait, Back could beat the sign-in's collection request and restore onto a page still too short.
+    await expect(mainNav(page).getByRole("link", { name: /^Collection/ })).toHaveAccessibleName(
+      "Collection (20)",
+    );
     await page.goBack();
     await expect(page).toHaveURL(/\/collection$/);
     await expect.poll(() => focusedHeading(page)).toBe("Collection");

@@ -214,4 +214,12 @@ describe("navigation copy (§8)", () => {
       "Non-commercial fan project. Character images and titles © their respective owners, served via the AniList API.",
     );
   });
+
+  it("names the three fonts and their licence on the footer's second line, the licence as its link", () => {
+    const { before, link, after } = navigation.fontsCopy;
+    expect(`${before}${link}${after}`).toBe(
+      "Fonts: Bricolage Grotesque, Figtree, Martian Mono (SIL Open Font License).",
+    );
+    expect(link).toBe("SIL Open Font License");
+  });
 });

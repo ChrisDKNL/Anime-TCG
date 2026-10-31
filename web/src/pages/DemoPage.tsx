@@ -7,7 +7,7 @@ import { Reveal, type RevealPack } from "../components/packs/Reveal";
 import { SECONDARY_LINE } from "../components/packs/styles";
 import { useLandingDemo } from "../hooks/useLandingDemo";
 import { demoCopy } from "../lib/navigationCopy";
-import { pageHeading } from "../lib/routes";
+import { pageEyebrow, pageHeading } from "../lib/routes";
 
 /** The demo's cards in the shared reveal: no heading, no `New`, no special lines (§3.7 item 1.4). */
 function toReveal(n: number, opened: DemoOpened): RevealPack {
@@ -38,7 +38,7 @@ export function DemoPage() {
 
   return (
     <>
-      <PageHeading text={pageHeading("/demo")} />
+      <PageHeading text={pageHeading("/demo")} eyebrow={pageEyebrow("/demo")} />
       <DemoControl
         control={control}
         finishedHere={demo.finishedHere}

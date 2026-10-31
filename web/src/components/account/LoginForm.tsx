@@ -2,11 +2,11 @@ import type { AccountPublic } from "@anime-tcg/shared/api";
 import type { ReactNode } from "react";
 import { useLoginForm } from "../../hooks/useLoginForm";
 import { common, loginCopy } from "../../lib/copy";
-import { pageHeading } from "../../lib/routes";
+import { pageEyebrow, pageHeading } from "../../lib/routes";
 import { PageHeading } from "../layout/PageHeading";
 import { FormBanner } from "./FormBanner";
 import { PasswordField, SubmitButton, TextField } from "./fields";
-import { BODY_TEXT, BUTTON, HINT_TEXT, PANEL_HEADING } from "./styles";
+import { BODY_TEXT, BUTTON, HINT_TEXT } from "./styles";
 
 interface Props {
   onLoggedIn: (account: AccountPublic) => void;
@@ -36,7 +36,7 @@ export function LoginForm({ onLoggedIn, guardLine = null, crossLink }: Props) {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <PageHeading text={pageHeading("/login")} className={`${PANEL_HEADING} focus:outline-none`} />
+        <PageHeading text={pageHeading("/login")} eyebrow={pageEyebrow("/login")} className="" />
         {guardLine !== null && <p className={`mt-1 ${BODY_TEXT}`}>{guardLine}</p>}
       </div>
       <form noValidate onSubmit={(event) => void form.submit(event)} className="flex flex-col gap-4">

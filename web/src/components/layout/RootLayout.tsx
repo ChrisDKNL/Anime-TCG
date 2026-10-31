@@ -5,6 +5,7 @@ import { useAccountSession } from "../../hooks/useAccountSession";
 import { DEMO_FACTS_KEY, DemoVisitContext, useDemoVisitStore } from "../../hooks/useDemoVisit";
 import { FrameContext, type Frame } from "../../hooks/useFrame";
 import { GameContext, useGameState } from "../../hooks/useGame";
+import { NavigatedContext } from "../../hooks/usePageEnter";
 import { useSignedInNavigation } from "../../hooks/useSignedInNavigation";
 import { ShellContext, useShell, type Notice } from "../../hooks/useShell";
 import { returnPathFor } from "../../lib/routes";
@@ -38,6 +39,9 @@ export function RootLayout() {
   const game = useGameState({ account, shell: shell.context, openingShowing, leaveOpening });
   const demoShowing = useCallback(() => router.latestLocation.pathname === "/demo", [router]);
   const demoVisit = useDemoVisitStore({ signedIn: account !== null, shell: shell.context, demoShowing });
+  // The router sets the resolved location after a page has rendered, so while the first page of a load
+  // renders it is unset, and while a later one renders it is the page being left.
+  const navigated = useCallback(() => router.state.resolvedLocation !== undefined, [router]);
 
   /**
    * `Try again` repeats the session check; an answer that names a session leaves `/login` (§3.2 step 4).
@@ -63,7 +67,9 @@ export function RootLayout() {
       <FrameContext value={frame}>
         <GameContext value={game}>
           <DemoVisitContext value={demoVisit}>
-            <Outlet />
+            <NavigatedContext value={navigated}>
+              <Outlet />
+            </NavigatedContext>
           </DemoVisitContext>
         </GameContext>
       </FrameContext>
