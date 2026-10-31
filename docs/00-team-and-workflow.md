@@ -8,6 +8,7 @@ How work moves from idea to `main` in this repository, and who does what. The ma
 | ------------------ | -------------------- | --------------------------------- | ---------------------------------------- | ------------------------------------------- |
 | Manager            | (main session)       | PRs, roadmap, ADRs                | Sequences the gate, presents to the user | Merges; pushes to `main`; skips a gate      |
 | Designer           | `ui-designer`        | `docs/design/*.md`, design tokens | —                                        | Implements components                       |
+| Mockup artist      | `mockup-artist`      | `docs/mockups/<slug>/`, Artifacts | Renders the spec at real sizes           | Edits app code, specs or tokens             |
 | Senior engineer    | `senior-engineer`    | Feature code + unit tests         | —                                        | Self-certifies; merges                      |
 | Tester             | `tester`             | e2e/integration/regression tests  | Finds gaps in engineer's tests           | Writes production code; skips/weakens tests |
 | Quality controller | `quality-controller` | Reports only                      | Runs the full gate; reviews the diff     | Edits code; passes on "looks fine"          |
@@ -32,6 +33,7 @@ idea ──► roadmap entry ──► [1] spec ──► [2] build ──► [3
 | Step | Owner                | Artifact                                                                   | Done when                                           |
 | ---- | -------------------- | -------------------------------------------------------------------------- | --------------------------------------------------- |
 | 1    | `ui-designer`        | `docs/design/<feature>.md`                                                 | Open questions answered by the user                 |
+| 1b   | `mockup-artist`      | Artifact mockup with 2–4 variants, source in `docs/mockups/<slug>/`        | The owner picked a variant; the spec records it     |
 | 2    | `senior-engineer`    | Branch `feat/<slug>` with code + unit tests; `npm run check` green locally | Hand-off note lists what is _not_ covered           |
 | 3    | `tester`             | `e2e/<feature>.spec.ts` (+ regression tests)                               | Real test output in the report                      |
 | 4    | `quality-controller` | QC report (`VERDICT: PASS`)                                                | All commands exit 0; findings addressed or accepted |

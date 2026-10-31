@@ -21,6 +21,7 @@ In this repository you are the **manager/orchestrator**, not every specialist at
 | Agent                | Owns                                                                                               | Can write code?            |
 | -------------------- | -------------------------------------------------------------------------------------------------- | -------------------------- |
 | `ui-designer`        | Design specs in `docs/design/`, UX flows, visual system (tokens in `src/index.css`), accessibility | Specs + design tokens only |
+| `mockup-artist`      | Visual mockups of proposals as private claude.ai Artifacts, 2–4 variants for the owner to choose   | Throwaway mockups only     |
 | `senior-engineer`    | Implementation on a feature branch, including unit tests for what it builds                        | Yes                        |
 | `tester`             | Test strategy, e2e/integration tests in `e2e/`, regression tests for bugs, exploratory testing     | Tests only                 |
 | `quality-controller` | Runs the full gate (`npm run check` + e2e) and reviews the diff against conventions. Reports only  | No (read-only by design)   |
@@ -32,7 +33,7 @@ Full instructions in `.claude/agents/<name>.md`. Team design and the feature lif
 
 Every non-trivial change moves through these in order. Each step's artifact must exist before the next starts.
 
-1. **Spec** — `ui-designer` writes `docs/design/<feature>.md` (what, why, states, edge cases, a11y). For non-UI work the manager writes a short spec in the same folder.
+1. **Spec** — `ui-designer` writes `docs/design/<feature>.md` (what, why, states, edge cases, a11y). For non-UI work the manager writes a short spec in the same folder. For anything the owner judges by eye, `mockup-artist` publishes a mockup with variants (`docs/mockups/<slug>/`) before the owner answers the spec's open questions; the chosen variant goes back into the spec.
 2. **Build** — `senior-engineer` implements on a branch with unit tests. Pre-commit runs lint-staged; pre-push runs `npm run check`.
 3. **Test** — `tester` adds/updates e2e coverage and hunts for what the unit tests miss.
 4. **Quality control** — `quality-controller` runs everything and reviews. A fail goes back to step 2, never forward.
