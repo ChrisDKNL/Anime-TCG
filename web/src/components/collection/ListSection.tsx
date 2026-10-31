@@ -25,7 +25,7 @@ import { ERROR_LINE, SECONDARY_LINE, TEXT_LINK_SM } from "../packs/styles";
  * `BUTTON.text` at `text-sm` for a label that holds an AniList name: it grows instead of a fixed height,
  * and an unbroken name wraps anywhere, so it never widens the dialog (collection-overview.md §5.6).
  */
-const MARKET_LINK = `min-h-11 rounded px-1 text-left text-sm font-medium text-zinc-400 [overflow-wrap:anywhere] hover:text-zinc-200 sm:min-h-7 ${FOCUS_RING}`;
+const MARKET_LINK = `min-h-11 rounded px-1 text-left text-sm font-medium text-ink-400 [overflow-wrap:anywhere] hover:text-ink-200 sm:min-h-7 ${FOCUS_RING}`;
 
 interface SectionProps {
   entry: CollectionEntry;

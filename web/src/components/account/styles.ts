@@ -58,7 +58,7 @@ export const ACCOUNT_CONTROL = `inline-flex min-h-11 max-w-full items-center gap
  * 44 px on phone (visual-identity.md §6.1), as every control. Keyboard focus shows the Volt ring (§5.4): the
  * night-800 fill alone is about 1.2:1 against the menu.
  */
-export const MENU_ITEM = `block w-full rounded-lg px-3 py-2 text-left text-sm text-zinc-200 hover:bg-zinc-800 focus:bg-zinc-800 min-h-11 sm:min-h-0 ${FOCUS_RING}`;
+export const MENU_ITEM = `block w-full rounded-lg px-3 py-2 text-left text-sm text-ink-200 hover:bg-night-800 focus:bg-night-800 min-h-11 sm:min-h-0 ${FOCUS_RING}`;
 
 const DIALOG_SHELL =
   "pop-in m-auto max-h-[85vh] w-[calc(100%-2rem)] overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900 p-6 text-zinc-100 backdrop:bg-zinc-950/70 backdrop:backdrop-blur-sm focus:outline-none";
