@@ -387,17 +387,17 @@ No new tokens. Everything below uses existing utilities, `web/src/components/acc
 
 ### 6.1 Header
 
-- **Wordmark**: `Anime TCG` as a link, `text-xl font-black tracking-tight text-zinc-100`, no gradient (it was gradient text, debt in `docs/06-engineering-standards.md` §2), the violet focus ring. Not a heading.
+- **Wordmark**: _Superseded by `visual-identity.md` §10.2 (PR 1, `feat/identity-tokens`):_ the display face at 800, 85 % wide, 20 px, `ink-100` (`display-tight text-xl font-extrabold text-ink-100`). Was: `Anime TCG` as a link, `text-xl font-black tracking-tight text-zinc-100`, no gradient (it was gradient text, debt in `docs/06-engineering-standards.md` §2), the violet focus ring. Not a heading.
 - **Subtitle removed**: `Open packs, collect characters. Data from AniList.` is explanatory copy (§2 debt). The AniList credit lives in the footer, which gains a link on `AniList` (§8).
-- **Page links**: the former tab group's look, unchanged: the group `flex gap-1 rounded-xl bg-zinc-900 p-1`; each link `rounded-lg px-4 py-1.5 text-sm font-medium` (`px-2` on phone with four links), current `bg-zinc-700 text-white`, others `text-zinc-400 hover:text-zinc-200`, the violet focus ring, `min-h-10 sm:min-h-0`. The current page is shown by the fill and announced by `aria-current`; nothing else changes on hover.
+- **Page links**: _Superseded by `visual-identity.md` §10.2 (PR 1, `feat/identity-tokens`):_ plain links, sans 600 14 px, `ink-400`, hover `ink-100`, no box; the current page `ink-100` with a 2 px Volt line at the foot of its 44 px target. Was: the former tab group's look, unchanged: the group `flex gap-1 rounded-xl bg-zinc-900 p-1`; each link `rounded-lg px-4 py-1.5 text-sm font-medium` (`px-2` on phone with four links), current `bg-zinc-700 text-white`, others `text-zinc-400 hover:text-zinc-200`, the violet focus ring, `min-h-10 sm:min-h-0`. The current page is shown by the fill and announced by `aria-current`; nothing else changes on hover.
 - **Signed out**: `Log in` in `BUTTON.text` at `text-sm`, `Register` in `BUTTON.secondary`, both links.
-- The page's radial violet background is debt for `visual-system.md`; this feature leaves it.
+- _Superseded by `visual-identity.md` §10.1, §11.1 (PR 1, `feat/identity-tokens`):_ the page is flat `night-950`; the radial violet background is gone.
 
 ### 6.2 Landing page
 
 No new tokens: the rarity text tokens and the frame colours of `card-and-rarity.md` §10 and the existing utilities cover every part. Where kyara's look conflicts with `docs/06-engineering-standards.md` §2 and §3, the rule wins (§12 lists each case).
 
-- **Type** (kyara leads with a very heavy display face at a large size; the weight and size are taken, the typeface is not: no web font, since the CSP and §3.12 item 6 keep the page to same-origin and AniList images, and the system has one type family): `h1` `text-4xl leading-none font-black tracking-tight text-zinc-100 sm:text-5xl lg:text-6xl`; lede `text-base text-zinc-300 sm:text-lg`; section `h2`s `text-lg font-bold text-zinc-100`.
+- **Type**: _Superseded by `visual-identity.md` §4 (PR 1, `feat/identity-tokens`):_ three self-hosted families (display, sans, mono); the `h1` is the page header of §10.1 at the `hero` size. Was: (kyara leads with a very heavy display face at a large size; the weight and size are taken, the typeface is not: no web font, since the CSP and §3.12 item 6 keep the page to same-origin and AniList images, and the system has one type family): `h1` `text-4xl leading-none font-black tracking-tight text-zinc-100 sm:text-5xl lg:text-6xl`; lede `text-base text-zinc-300 sm:text-lg`; section `h2`s `text-lg font-bold text-zinc-100`.
 - `Open a demo pack`: `BUTTON.primary`. It is an ordinary primary action, not the 1c pack control and not louder than it: no gradient, no emoji, no size bump, no shadow, no hover scale or lift, no glow, no pill shape (kyara's call to action is a glowing pill that rises on hover; ours is the app's flat button).
 - `Back to the landing page` on `/demo`: a link with `BUTTON.secondary`'s classes. The `h1` `Demo pack` as every account page's `h1` (§6.3).
 - Disclosure line and keep-cards line: `text-sm text-zinc-400`, the `register` link inside it `text-zinc-200 underline decoration-zinc-600 underline-offset-2 hover:text-white`.
@@ -418,9 +418,9 @@ No new tokens: the rarity text tokens and the frame colours of `card-and-rarity.
 
 ### 6.3 Other pages
 
-- `h1` on account pages, `/account`, `/profile`, not-found: `text-xl font-bold text-zinc-100`, `focus:outline-none` (it receives programmatic focus only, like today's account heading).
-- `/login`, `/register`: the existing `PANEL_HEADING` on the `h1`.
-- Skip link: `sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-20` with `BUTTON.secondary` and `bg-zinc-950`.
+- `h1` on every page: _Superseded by `visual-identity.md` §10.1 (PR 1, `feat/identity-tokens`):_ the page header, a mono eyebrow over the display title at the `title` size, `focus:outline-none`. Was: `h1` on account pages, `/account`, `/profile`, not-found: `text-xl font-bold text-zinc-100`, `focus:outline-none` (it receives programmatic focus only, like today's account heading).
+- `/login`, `/register`: the page header of `visual-identity.md` §10.1 inside the panel (was `PANEL_HEADING` on the `h1`); `Register`'s step line sits under the title.
+- Skip link: `sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-20` with `BUTTON.secondary` (its own `night-850` fill since `visual-identity.md` PR 1).
 - Not-found and profile lines `text-sm text-zinc-400`; their links `BUTTON.secondary`.
 
 ## 7. Accessibility
