@@ -93,8 +93,16 @@ async function confirmBuy(page: Page, name: string) {
   ).toBeFocused();
 }
 
+/** The one storage use the app may make: TanStack Router's scroll offsets (accepted in #30). */
+const SCROLL_KEY = "tsr-scroll-restoration-v1_3";
+
 async function expectNothingStored(page: Page) {
-  expect(await page.evaluate(() => [localStorage.length, sessionStorage.length])).toEqual([0, 0]);
+  const stored = await page.evaluate(() => ({
+    local: Object.keys(localStorage),
+    session: Object.keys(sessionStorage),
+  }));
+  expect(stored.local).toEqual([]);
+  expect(stored.session.filter((key) => key !== SCROLL_KEY)).toEqual([]);
   expect(new URL(page.url()).search).toBe("");
   expect(new URL(page.url()).hash).toBe("");
 }

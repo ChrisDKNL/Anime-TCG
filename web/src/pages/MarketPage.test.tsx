@@ -671,7 +671,8 @@ describe("no address state (§3.2 item 4)", () => {
     await main().findByText("No listings match these filters.");
     expect(history.location.pathname).toBe("/market");
     expect(history.location.search).toBe("");
-    expect(localStorage.length).toBe(0);
-    expect(sessionStorage.length).toBe(0);
+    expect(Object.keys(localStorage)).toEqual([]);
+    // The router's scroll offsets are the one storage use accepted (#30, market-and-shop.md §3.2 item 4).
+    expect(Object.keys(sessionStorage).filter((key) => key !== "tsr-scroll-restoration-v1_3")).toEqual([]);
   });
 });
