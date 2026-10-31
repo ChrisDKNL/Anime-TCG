@@ -274,7 +274,7 @@ export function limitBlock(
   };
 }
 
-/** The buyer's own limits hold for every listing; the seller's and the pair's only for that seller's. */
+/** The buyer's own limits hold for every listing; the seller's and the pair's only for that listing. */
 export function blocksEveryListing(limit: MarketLimit): boolean {
   return limit === "buyer_purchases" || limit === "buyer_spend";
 }
