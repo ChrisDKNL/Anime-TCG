@@ -1,0 +1,812 @@
+<title>Anime TCG Redesign Pages</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,200..800&family=Figtree:wght@300..900&family=Martian+Mono:wght@100..800&display=swap">
+<!-- Throwaway mockup by mockup-artist. Generated from one source; edit freely, nothing in web/ depends on it. -->
+<style>
+/* ===== APP KIT: the proposed identity (visual-identity.md §4, §5, §6, §12). Always dark, as the app is (§2). ===== */
+:root {
+  /* §12.1 */
+  --night-950: #07080f; --night-900: #0e1020; --night-850: #151830; --night-800: #1d2140; --night-700: #2a2f55; --night-600: #3a4070;
+  --ink-100: #eef0fa; --ink-200: #dde0ee; --ink-300: #c3c7dc; --ink-400: #9aa0bd; --ink-500: #6e7493;
+  --volt: #c8f031; --volt-hover: #d9f86a; --volt-press: #b3d924; --volt-ink: #07080f; --ion: #5cd6f5; --danger: #ff9b8f;
+  --sleeve-night: #1f2a44; --sleeve-plum: #2b1f3d; --sleeve-pine: #13322e; --sleeve-rust: #3a2418; --sleeve-olive: #2e2e14; --sleeve-petrol: #1a2f3f;
+  --sleeve-radiant: #f3eeff; --sleeve-radiant-ink: #3a2f66;
+  /* card-and-rarity.md §10 (unchanged, from web/src/index.css) */
+  --r-common: #9a9da6; --r-uncommon: #3cc7a9; --r-rare: #6f95ec; --r-epic: #e04563; --r-legendary: #f5b84a; --r-mythic: #b79ff0;
+  --rt-common: #9a9da6; --rt-uncommon: #3cc7a9; --rt-rare: #6f95ec; --rt-epic: #e45b76; --rt-legendary: #f5b84a; --rt-mythic: #b79ff0;
+  --card-ink: #eceaf3; --card-ink-muted: #bcb8c9; --card-ink-subtle: #a6a3b6; --card-chip: rgb(18 19 32 / 0.9); --card-glint: rgb(255 255 255 / 0.5);
+  --glow-epic: 0 0 24px rgb(224 69 99 / 0.4); --glow-legendary: 0 0 30px rgb(245 184 74 / 0.45); --glow-mythic: 0 0 34px rgb(170 140 240 / 0.5);
+  --tell-rare: 0 0 16px rgb(111 149 236 / 0.35);
+  --frame-common: #686b73; --frame-uncommon: #2fb79c; --frame-rare: #2a4fa8;
+  --frame-epic: conic-gradient(from 45deg, #8e1730, #e04563, #8e1730, #c22c4b, #8e1730);
+  --frame-legendary: conic-gradient(from 45deg, #a8641a, #f5b84a, #c27b22, #ffd57a, #a8641a);
+  --frame-mythic: linear-gradient(120deg, #b79ff0, #ece3ff, #8f6fe0, #d9cdfb, #a88ff0, #f3eeff, #b79ff0);
+  --flat-common: #686b73; --flat-uncommon: #2fb79c; --flat-rare: #2a4fa8; --flat-epic: #c22c4b; --flat-legendary: #c27b22; --flat-mythic: #a88ff0;
+  --card-face:
+    radial-gradient(circle at 20% 15%, rgba(255, 255, 255, 0.8) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 75% 22%, rgba(255, 255, 255, 0.6) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 55% 35%, rgba(255, 255, 255, 0.5) 0 1px, transparent 1.5px),
+    linear-gradient(180deg, #1b1e36, #121320 65%);
+  /* §12.5 */
+  --card-back-field:
+    radial-gradient(circle at 12% 30%, rgb(255 255 255 / .3) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 84% 64%, rgb(255 255 255 / .3) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 30% 86%, rgb(255 255 255 / .25) 0 1px, transparent 1.5px),
+    var(--card-face);
+  --sleeve-sheen: linear-gradient(100deg, transparent 30%, rgb(255 255 255 / .06) 45%, transparent 60%);
+  --stage-bg: radial-gradient(120% 80% at 50% 110%, #151830 0%, #07080f 60%);
+  /* §12.4, §9.3 */
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1); --ease-in-out-sine: cubic-bezier(0.37, 0, 0.63, 1); --ease-snap: cubic-bezier(0.5, 0, 0.1, 1);
+  /* §12.2. Google Fonts serves the same OFL families the spec self-hosts from npm. */
+  --f-display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --f-sans: "Figtree", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --f-mono: "Martian Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* A frame is a fake viewport: container queries stand in for the app's media queries (sm 640, lg 1024). */
+.vp { container: vp / size; position: relative; overflow: hidden; background: var(--night-950); }
+.app { font-family: var(--f-sans); color: var(--ink-100); background: var(--night-950); font-size: 16px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+.app *, .app *::before, .app *::after { box-sizing: border-box; }
+.app :where(h1, h2, h3, p, ol, ul, figure, table) { margin: 0; }
+.app :where(ol, ul) { padding: 0; list-style: none; }
+.app :where(button) { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+.app :where(a) { color: inherit; text-decoration: none; }
+.app :focus { outline: none; }
+.app :focus-visible { outline: 2px solid var(--volt); outline-offset: 2px; }
+.app .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Type roles (§4.2). `font-optical-sizing: none` keeps opsz at its default, as the npm wdth.css build (no opsz axis) would. */
+.d { font-family: var(--f-display); font-weight: 800; font-stretch: 85%; font-optical-sizing: none; }
+.t-hero { font-size: 48px; line-height: .9; letter-spacing: -.02em; }
+.t-title { font-size: 36px; line-height: .95; letter-spacing: -.015em; }
+.t-section { font-size: 24px; line-height: 1.05; letter-spacing: -.01em; font-weight: 750; font-stretch: 90%; }
+@container vp (min-width: 640px) { .t-hero { font-size: 72px; } .t-title { font-size: 48px; } .t-section { font-size: 28px; } }
+@container vp (min-width: 1024px) { .t-hero { font-size: 96px; } .t-title { font-size: 56px; } }
+.t-tier { font-family: var(--f-display); font-weight: 800; font-stretch: 75%; font-optical-sizing: none; font-size: clamp(3.5rem, 18cqw, 10rem); line-height: .85; letter-spacing: .01em; text-transform: uppercase; }
+.t-sub { font-size: 17px; line-height: 1.3; font-weight: 700; }
+.t-small { font-size: 14px; line-height: 1.45; }
+.t-xs { font-size: 12px; line-height: 1.4; font-weight: 500; }
+.eyebrow { font-family: var(--f-mono); font-size: 11px; line-height: 1.2; letter-spacing: .12em; font-weight: 500; text-transform: uppercase; color: var(--ink-400); }
+@container vp (min-width: 640px) { .eyebrow { font-size: 12px; } }
+.num { font-family: var(--f-mono); font-size: 13px; line-height: 1.2; font-weight: 500; font-variant-numeric: tabular-nums; }
+.tab { font-variant-numeric: tabular-nums; }
+.tx-common { color: var(--rt-common); } .tx-uncommon { color: var(--rt-uncommon); } .tx-rare { color: var(--rt-rare); }
+.tx-epic { color: var(--rt-epic); } .tx-legendary { color: var(--rt-legendary); } .tx-mythic { color: var(--rt-mythic); }
+
+/* Buttons (§10.4) */
+.btn { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 0 20px; border-radius: 10px; font: 700 15px/1 var(--f-sans); white-space: nowrap; }
+@container vp (min-width: 640px) { .btn { min-height: 44px; } }
+.btn-primary { background: var(--volt); color: var(--volt-ink); }
+.btn-primary:hover { background: var(--volt-hover); } .btn-primary:active { background: var(--volt-press); }
+.btn-primary[aria-disabled="true"] { background: var(--night-800); color: var(--ink-500); cursor: not-allowed; }
+.btn-secondary { background: var(--night-850); border: 1px solid var(--night-600); color: var(--ink-100); font-weight: 600; }
+.btn-secondary:hover { background: var(--night-800); } .btn-secondary:active { border-color: var(--ink-400); }
+.btn-text { color: var(--ink-300); font: 600 14px/1.2 var(--f-sans); min-height: 44px; display: inline-flex; align-items: center; }
+.btn-text:hover { color: var(--ink-100); text-decoration: underline; }
+.link-u { color: var(--ink-200); text-decoration: underline; text-decoration-color: var(--night-600); text-underline-offset: 2px; }
+
+/* ===== The card face (card-and-rarity.md §3, unchanged; type families from §6.3 / §7.1) ===== */
+.card { position: relative; display: block; aspect-ratio: 5 / 7; width: 100%; border-radius: 12px; padding: 5px; }
+.card.sz-stage { border-radius: 14px; padding: 6px; }
+.card .face { display: flex; flex-direction: column; height: 100%; min-width: 0; overflow: hidden; border-radius: 8px; background: var(--card-face); }
+.card.sz-stage .face { border-radius: 9px; }
+.card .head { display: flex; flex-direction: column; gap: 3px; padding: 9px 10px 7px; min-width: 0; }
+.card.sz-stage .head { gap: 4px; padding: 12px 13px 9px; }
+.card .nm { display: block; font: 700 13px/1.2 var(--f-sans); color: var(--card-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card.sz-stage .nm { font-size: 17px; }
+.card .st { display: block; font-size: 11px; letter-spacing: 2px; line-height: 1; white-space: nowrap; font-variant-emoji: text; }
+.card.sz-stage .st { font-size: 14px; letter-spacing: 3px; }
+.card .art { position: relative; flex: 1; min-height: 0; margin: 0 8px; border-radius: 6px; overflow: hidden; }
+.card.sz-stage .art { margin: 0 11px; border-radius: 8px; }
+.card .art svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.card .rk { position: absolute; bottom: 7px; left: 7px; border-radius: 3px; padding: 1px 4px; background: var(--card-chip); font: 500 11px/1.25 var(--f-mono); color: var(--card-ink-subtle); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.card.sz-stage .rk { bottom: 9px; left: 9px; border-radius: 4px; padding: 1px 5px; font-size: 13px; }
+.card .sr-line { display: block; padding: 9px 10px; font: 500 12px/1.2 var(--f-sans); color: var(--card-ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card.sz-stage .sr-line { padding: 12px 13px; font-size: 15px; }
+.fr-common { background: var(--frame-common); } .fr-uncommon { background: var(--frame-uncommon); } .fr-rare { background: var(--frame-rare); }
+.fr-epic { background: var(--frame-epic); } .fr-legendary { background: var(--frame-legendary); }
+.fr-mythic { background: var(--frame-mythic); background-size: 300% 300%; background-position: 0% 40%; }
+.gl-epic { box-shadow: var(--glow-epic); } .gl-legendary { box-shadow: var(--glow-legendary); } .gl-mythic { box-shadow: var(--glow-mythic); }
+.fx-glint::after { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; background: linear-gradient(105deg, transparent 42%, var(--card-glint) 50%, transparent 56%); background-size: 260% 100%; background-position: 130% 0; animation: card-glint 5.5s ease-in-out infinite; animation-delay: calc(var(--ph, 0) * -1s); }
+.fx-pearl { animation: card-pearl 7s ease-in-out infinite; animation-delay: calc(var(--ph, 0) * -1s); }
+@keyframes card-glint { 0%, 60% { background-position: 130% 0; } 100% { background-position: -130% 0; } }
+@keyframes card-pearl { 0%, 100% { background-position: 0% 40%; } 50% { background-position: 100% 60%; } }
+.rm .fx-glint::after { content: none; } .rm .fx-pearl { animation: none; }
+
+/* ===== The card back: the Orbit (§7.2). Sizes scale with the card (container units of the back). ===== */
+.back { container-type: inline-size; position: relative; aspect-ratio: 5 / 7; width: 100%; border-radius: 12px; padding: 5px; background: var(--night-600); }
+.back.sz-stage { border-radius: 14px; padding: 6px; }
+.back .field { position: relative; height: 100%; border-radius: 8px; background: var(--card-back-field); overflow: hidden; }
+.back .orb { position: absolute; left: 50%; top: 42%; width: 62cqw; transform: translate(-50%, -50%); }
+.back .wm { position: absolute; left: 0; right: 0; top: 80%; transform: translateY(-50%); text-align: center; }
+.back .wm b { display: block; font: 800 7.2cqw/1 var(--f-display); font-stretch: 85%; font-optical-sizing: none; color: var(--ink-300); }
+.back .wm i { display: block; margin-top: 1.6cqw; font: 500 4.45cqw/1.2 var(--f-mono); letter-spacing: .12em; text-transform: uppercase; font-style: normal; color: var(--ink-400); }
+.back.t-common { background: var(--flat-common); } .back.t-uncommon { background: var(--flat-uncommon); } .back.t-rare { background: var(--flat-rare); box-shadow: var(--tell-rare); }
+.back.t-epic { background: var(--flat-epic); } .back.t-legendary { background: var(--flat-legendary); }
+.back.t-mythic { background: var(--frame-mythic); background-size: 300% 300%; background-position: 0% 40%; }
+.back .glow { position: absolute; inset: 0; border-radius: inherit; pointer-events: none; }
+.back.t-epic .glow { box-shadow: var(--glow-epic); } .back.t-legendary .glow { box-shadow: var(--glow-legendary); } .back.t-mythic .glow { box-shadow: var(--glow-mythic); }
+.back.breathe .glow { animation: tell-breathe 1.6s var(--ease-in-out-sine) infinite; }
+.back.breathe.t-mythic { animation: card-pearl 7s ease-in-out infinite; }
+.rm .back.breathe .glow, .rm .back.breathe.t-mythic { animation: none; }
+@keyframes tell-breathe { 0%, 100% { opacity: .6; } 50% { opacity: 1; } }
+.orb svg { display: block; width: 100%; height: auto; overflow: visible; }
+
+/* ===== Sleeves (§8) ===== */
+.sleeve { container-type: inline-size; position: relative; aspect-ratio: 5 / 7.6; width: 100%; border-radius: 14px; overflow: hidden; color: var(--ink-100); }
+.sleeve .sbody { position: absolute; inset: 0; background: var(--sleeve-sheen), var(--sc, var(--sleeve-night)); }
+.sleeve .seam { position: absolute; left: 0; right: 0; top: 0; height: 12%; background: repeating-linear-gradient(90deg, var(--night-600) 0 1px, transparent 1px 5px) 0 30% / 100% 40% no-repeat, linear-gradient(rgb(0 0 0 / .02), rgb(0 0 0 / .02)), var(--sc, var(--sleeve-night)); filter: brightness(.98); }
+.sleeve .tear { position: absolute; left: 0; top: calc(12% - 2px); height: 2px; width: calc(var(--tear, 0) * 100%); background: var(--volt); }
+.sleeve .orb { position: absolute; left: 50%; top: 40%; width: 58cqw; transform: translate(-50%, -50%); }
+.sleeve .nb { position: absolute; left: 0; right: 0; bottom: 0; height: 28%; padding: 0 9cqw; display: flex; flex-direction: column; justify-content: center; }
+.sleeve .nb b { font: 800 11.1cqw/1 var(--f-display); font-stretch: 80%; font-optical-sizing: none; letter-spacing: -.01em; }
+.sleeve .nb i { font: 500 max(6.5px, 4.6cqw)/1.25 var(--f-mono); letter-spacing: .12em; text-transform: uppercase; font-style: normal; color: var(--ink-400); margin-top: 2.6cqw; }
+.sleeve .km { position: absolute; right: 6cqw; top: calc(12% + 5cqw); padding: 1.5cqw 3cqw; border-radius: 8px; background: rgb(7 8 15 / .6); font: 500 max(6.5px, 4.6cqw)/1.2 var(--f-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-100); }
+.sleeve.radiant { color: var(--sleeve-radiant-ink); }
+.sleeve.radiant .sbody, .sleeve.radiant .seam { --sc: var(--sleeve-radiant); }
+.sleeve.radiant .nb i { color: var(--sleeve-radiant-ink); }
+
+/* ===== Header, chips, tab bar (§10.2, §10.3) ===== */
+.hdr { position: sticky; top: 0; z-index: 5; height: 56px; background: var(--night-900); display: flex; align-items: center; gap: 12px; padding: 0 16px; }
+@container vp (min-width: 640px) { .hdr { padding: 0 24px; } }
+.hdr .in { display: flex; align-items: center; gap: 12px; width: 100%; max-width: 72rem; margin: 0 auto; min-width: 0; }
+.wordmark { font: 800 20px/1 var(--f-display); font-stretch: 85%; font-optical-sizing: none; color: var(--ink-100); white-space: nowrap; min-height: 44px; display: inline-flex; align-items: center; }
+.navlinks { display: none; gap: 4px; margin-left: 16px; }
+@container vp (min-width: 640px) { .navlinks { display: flex; } }
+.navlinks a { gap: 4px; position: relative; min-height: 44px; display: inline-flex; align-items: center; padding: 0 10px; font: 600 14px/1 var(--f-sans); color: var(--ink-400); }
+.navlinks a:hover { color: var(--ink-200); }
+.navlinks a[aria-current="page"] { color: var(--ink-100); }
+.navlinks a[aria-current="page"]::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: 8px; height: 2px; background: var(--volt); }
+.chips { display: flex; gap: 8px; margin-left: auto; align-items: center; }
+.chip { height: 32px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border-radius: 8px; background: var(--night-850); border: 1px solid var(--night-700); white-space: nowrap; }
+.chip .num { color: var(--ink-100); }
+.chip.karma .num { color: var(--ion); }
+.chip .w { font: 500 12px/1 var(--f-sans); color: var(--ink-400); }
+@container vp (max-width: 359px) { .chip.karma .w { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); } }
+.karma-plain { margin-left: auto; white-space: nowrap; font-size: 14px; }
+.karma-plain .num { color: var(--ion); font-size: 14px; }
+.karma-plain .w { color: var(--ink-400); }
+.acct { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 8px 0 6px; border-radius: 10px; background: var(--night-850); font: 600 14px/1 var(--f-sans); color: var(--ink-200); }
+.acct .av { width: 28px; height: 28px; border-radius: 50%; background: var(--night-700); display: inline-flex; align-items: center; justify-content: center; font: 700 12px/1 var(--f-sans); color: var(--ink-100); text-transform: uppercase; }
+.acct .nmx { display: none; }
+@container vp (min-width: 640px) { .acct .nmx { display: inline; } }
+@container vp (max-width: 639px) { .acct { padding: 0 8px; width: 44px; justify-content: center; } }
+.hdr-out { display: flex; gap: 12px; margin-left: auto; align-items: center; }
+.hdr-out .btn-secondary { min-height: 40px; padding: 0 14px; font-size: 14px; }
+
+.tabbar { position: sticky; bottom: 0; z-index: 6; height: 64px; background: var(--night-900); box-shadow: 0 -1px 0 var(--night-700); display: grid; grid-template-columns: repeat(5, 1fr); align-items: end; }
+.tabbar a { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; height: 64px; color: var(--ink-400); font: 600 11px/1 var(--f-sans); }
+.tabbar a svg { width: 22px; height: 22px; }
+.tabbar a[aria-current="page"] { color: var(--ink-100); }
+.tabbar a[aria-current="page"]:not(.centre)::before { content: ""; position: absolute; top: 6px; width: 16px; height: 2px; background: var(--volt); }
+.tabbar a:active svg { transform: translateY(1px); }
+.tabbar .centre { justify-content: flex-end; padding-bottom: 9px; }
+.tabbar .centre .disc { position: absolute; top: -12px; left: 50%; margin-left: -28px; width: 56px; height: 56px; border-radius: 50%; background: var(--volt); color: var(--volt-ink); display: flex; align-items: center; justify-content: center; }
+.tabbar .centre .disc svg { width: 20px; height: 28px; }
+.tabbar .centre .cnt { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; background: var(--night-950); color: var(--ink-100); font: 500 10px/18px var(--f-mono); text-align: center; }
+.tabbar .centre[aria-current="page"] { color: var(--ink-100); }
+@container vp (min-width: 640px) { .tabbar { display: none; } }
+
+.page { max-width: 72rem; margin: 0 auto; padding-left: 16px; padding-right: 16px; }
+@container vp (min-width: 640px) { .page { padding-left: 24px; padding-right: 24px; } }
+.ph .eyebrow { margin-bottom: 8px; }
+.ph .stat { margin-top: 10px; font-size: 14px; color: var(--ink-300); }
+.ftr { margin-top: 80px; padding: 24px 16px 32px; border-top: 1px solid var(--night-700); text-align: center; font-size: 12px; line-height: 1.5; color: var(--ink-400); }
+.ftr p + p { margin-top: 6px; }
+.ftr a { text-decoration: underline; text-underline-offset: 2px; }
+
+/* ===== Annotations ===== */
+.nis { outline: 1.5px dashed #ff6bd6; outline-offset: 3px; position: relative; }
+.nis-tag, .spec-tag { position: absolute; z-index: 30; font: 600 9.5px/1 var(--f-mono); letter-spacing: .02em; padding: 3px 5px; border-radius: 3px; white-space: nowrap; pointer-events: none; text-transform: none; }
+.nis-tag { background: #ff6bd6; color: #1a0016; top: -14px; left: -2px; }
+.spec-tag { background: rgb(255 255 255 / .9); color: #10131f; }
+.no-ann .nis { outline: none; } .no-ann .nis-tag, .no-ann .spec-tag { display: none; }
+
+.app.col { display: flex; flex-direction: column; min-height: 100%; }
+.app.col > main { flex: 1 0 auto; }
+
+/* ===== Mockup chrome (the tool around the frames). Theme-aware; the frames themselves are always the app's dark. ===== */
+/* Layout: a control strip over a column of real-size frames, the owner's decisions underneath. */
+:root {
+  --c-bg: #eceef4; --c-panel: #ffffff; --c-fg: #161827; --c-muted: #555b75; --c-line: #d3d6e3; --c-accent: #2f3a9e; --c-accent-ink: #ffffff; --c-soft: #e2e5f0;
+  --c-a: #2f3a9e; --c-b: #8a3b12;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --c-bg: #101119; --c-panel: #191b27; --c-fg: #e6e8f2; --c-muted: #a1a6bf; --c-line: #2d3044; --c-accent: #aab4ff; --c-accent-ink: #10121f; --c-soft: #23263a; --c-a: #aab4ff; --c-b: #f0a874; color-scheme: dark; } }
+:root[data-theme="dark"] { --c-bg: #101119; --c-panel: #191b27; --c-fg: #e6e8f2; --c-muted: #a1a6bf; --c-line: #2d3044; --c-accent: #aab4ff; --c-accent-ink: #10121f; --c-soft: #23263a; --c-a: #aab4ff; --c-b: #f0a874; color-scheme: dark; }
+body { background: var(--c-bg); color: var(--c-fg); font: 15px/1.5 var(--f-sans); margin: 0; }
+.wrap { max-width: 1520px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 64px; }
+.top h1 { font: 800 30px/1.05 var(--f-display); font-stretch: 85%; letter-spacing: -.015em; margin: 0; text-wrap: balance; }
+.top .kick { font: 500 11px/1.2 var(--f-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--c-muted); margin: 0 0 6px; }
+.top p.sub { margin: 8px 0 0; color: var(--c-muted); max-width: 70ch; }
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 50; margin: 16px 0 20px; background: var(--c-panel); border: 1px solid var(--c-line); border-radius: 12px; padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 60; background: var(--c-bg); }
+.grp { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.grp > .lbl { font: 500 10.5px/1.2 var(--f-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--c-muted); }
+.seg { display: inline-flex; background: var(--c-soft); border-radius: 8px; padding: 3px; gap: 2px; flex-wrap: wrap; }
+.seg button { font: 600 13px/1 var(--f-sans); color: var(--c-muted); background: none; border: 0; border-radius: 6px; padding: 8px 10px; cursor: pointer; white-space: nowrap; }
+.seg button[aria-pressed="true"] { background: var(--c-panel); color: var(--c-fg); box-shadow: 0 1px 2px rgb(0 0 0 / .12); }
+.seg button:focus-visible, .chk input:focus-visible, select:focus-visible, textarea:focus-visible, .pickbtn:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
+.seg button .v { font-family: var(--f-mono); font-weight: 600; margin-right: 4px; }
+.chk { display: inline-flex; align-items: center; gap: 6px; font: 600 13px/1 var(--f-sans); cursor: pointer; }
+select { font: 600 13px/1 var(--f-sans); color: var(--c-fg); background: var(--c-soft); border: 0; border-radius: 8px; padding: 8px 10px; }
+.frames { display: flex; flex-direction: column; gap: 28px; }
+.row { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-start; }
+.row > .fcell { flex: 0 0 auto; min-width: 0; max-width: 100%; }
+.fcell.grow { flex: 1 1 100%; width: 100%; }
+[hidden] { display: none !important; }
+.fl { font: 500 11px/1.2 var(--f-mono); color: var(--c-muted); margin-bottom: 8px; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.fl b { color: var(--c-fg); font-weight: 600; }
+.fl .tagv { font-weight: 700; padding: 2px 6px; border-radius: 4px; color: var(--c-accent-ink); }
+.fw { position: relative; border-radius: 6px; box-shadow: 0 0 0 1px var(--c-line), 0 10px 30px rgb(0 0 0 / .18); overflow: hidden; }
+.fw > .vp { position: absolute; top: 0; left: 0; }
+.vp > .scroller { height: 100%; overflow: auto; overscroll-behavior: contain; }
+.today-img { display: block; width: 100%; height: auto; }
+.today-none { padding: 32px; color: #9aa0bd; font: 15px/1.5 var(--f-sans); }
+.cmp { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 28px; }
+.decide { margin-top: 40px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 20px; }
+.dcard { background: var(--c-panel); border: 1px solid var(--c-line); border-radius: 12px; padding: 18px 20px; min-width: 0; }
+.dcard h2 { font: 800 21px/1.15 var(--f-display); font-stretch: 85%; margin: 0 0 4px; }
+.dcard .q { color: var(--c-muted); margin: 0 0 12px; font-size: 14px; }
+.opt { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; padding: 10px 0; border-top: 1px solid var(--c-line); }
+.opt input { margin-top: 4px; accent-color: var(--c-accent); width: 16px; height: 16px; }
+.opt b { font-weight: 700; } .opt .tr { grid-column: 2; color: var(--c-muted); font-size: 14px; }
+.opt .rec { font: 600 10px/1 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; padding: 3px 5px; border-radius: 4px; background: var(--c-soft); color: var(--c-muted); margin-left: 6px; vertical-align: 2px; }
+textarea { width: 100%; box-sizing: border-box; min-height: 64px; margin-top: 10px; font: 14px/1.4 var(--f-sans); color: var(--c-fg); background: var(--c-bg); border: 1px solid var(--c-line); border-radius: 8px; padding: 8px 10px; resize: vertical; }
+.pickrow { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+.pickbtn { font: 700 14px/1 var(--f-sans); background: var(--c-accent); color: var(--c-accent-ink); border: 0; border-radius: 8px; padding: 10px 16px; cursor: pointer; }
+.pickbtn[disabled] { opacity: .5; cursor: default; }
+.saved { font-size: 13px; color: var(--c-muted); }
+.chatline { margin-top: 10px; font: 12px/1.4 var(--f-mono); background: var(--c-soft); border-radius: 6px; padding: 8px 10px; overflow-wrap: anywhere; }
+.legend { margin-top: 40px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 20px 32px; font-size: 14px; color: var(--c-muted); }
+.legend h3 { font: 500 11px/1.2 var(--f-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--c-fg); margin: 0 0 8px; }
+.legend ul { margin: 0; padding-left: 18px; } .legend li { margin: 4px 0; }
+.legend code { font: 12px var(--f-mono); }
+.nis-key { display: inline-block; width: 22px; height: 12px; outline: 1.5px dashed #ff6bd6; vertical-align: -1px; margin-right: 4px; }
+@media (prefers-reduced-motion: reduce) { .vp * { transition: none !important; } }
+
+/* ===== Landing (§11.2) ===== */
+.hero { position: relative; overflow: hidden; padding: 24px 0 48px; }
+@container vp (min-width: 640px) { .hero { padding: 48px 0 72px; } }
+@container vp (min-width: 1024px) { .hero { padding: 64px 0 88px; } }
+.hero .stars { position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(circle at 12% 30%, rgb(255 255 255 / .3) 0 1px, transparent 1.5px), radial-gradient(circle at 84% 64%, rgb(255 255 255 / .3) 0 1px, transparent 1.5px), radial-gradient(circle at 30% 86%, rgb(255 255 255 / .25) 0 1px, transparent 1.5px);
+  background-size: 190px 170px; }
+.hero .horizon { position: absolute; left: 50%; top: 68%; width: 160cqw; aspect-ratio: 1; transform: translateX(-50%); border: 1.5px solid var(--night-700); border-radius: 50%; pointer-events: none; }
+.hero-in { position: relative; display: grid; grid-template-areas: "head" "art" "body"; row-gap: 20px; }
+@container vp (min-width: 640px) { .hero-in { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "head art" "body art"; column-gap: 32px; row-gap: 20px; align-items: end; } }
+@container vp (min-width: 1024px) { .hero-in { column-gap: 64px; } }
+.hero .head { grid-area: head; } .hero .body { grid-area: body; align-self: start; }
+.hero .head .eyebrow { margin-bottom: 8px; }
+.hero .lede { max-width: 36rem; color: var(--ink-300); font-size: 16px; }
+@container vp (min-width: 640px) { .hero .lede { font-size: 18px; } }
+.hero .cta { margin-top: 20px; display: flex; flex-direction: column; gap: 10px; align-items: stretch; max-width: 36rem; }
+@container vp (min-width: 640px) { .hero .cta { align-items: flex-start; } }
+.hero .disc { font-size: 14px; color: var(--ink-400); }
+.artcol { grid-area: art; position: relative; justify-self: center; }
+@container vp (min-width: 640px) { .artcol { align-self: center; } }
+.artcol .fan { position: absolute; width: var(--cw); top: 0; transform-origin: 50% 85%; }
+.artcol .slv { position: absolute; width: var(--sw); left: 50%; transform: translateX(-50%); }
+/* sizes: desktop reveal size 180 px; phone cards 110 px, sleeve 96 px (§11.2) */
+.artcol { --cw: 110px; --sw: 96px; width: 230px; height: var(--ah); }
+.artcol.fanA { --ah: 250px; } .artcol.fanB { --ah: 168px; width: 120px; }
+@container vp (min-width: 640px) { .artcol { --cw: 180px; --sw: 180px; width: 340px; } .artcol.fanA { --ah: 448px; } .artcol.fanB { --ah: 274px; width: 180px; } }
+.artcol.fanB .slv { top: auto; bottom: 0; }
+.artcol.fanA .slv { bottom: 0; }
+
+.sec { margin-top: 80px; }
+.sec h2 { margin-bottom: 16px; }
+.tiers { display: grid; grid-auto-flow: column; grid-auto-columns: 92px; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 8px; margin: 0 -16px; padding-left: 16px; padding-right: 16px; scrollbar-width: thin; }
+@container vp (min-width: 640px) { .tiers { grid-auto-flow: row; grid-template-columns: repeat(6, minmax(0, 1fr)); overflow: visible; margin: 0; padding: 0; max-width: 46rem; } }
+.tiers li { scroll-snap-align: start; display: flex; flex-direction: column; gap: 8px; }
+.tiers .back, .tiers .back .glow { box-shadow: none !important; }
+.tiers .w { font: 700 14px/1.2 var(--f-sans); }
+
+.steps { border-top: 1px solid var(--night-700); max-width: 46rem; }
+.steps li { border-bottom: 1px solid var(--night-700); padding: 16px 0; display: grid; grid-template-columns: 56px minmax(0, 1fr); column-gap: 12px; align-items: baseline; }
+@container vp (min-width: 640px) { .steps li { grid-template-columns: 64px 9rem minmax(0, 1fr); column-gap: 24px; } }
+.steps .n { font: 800 40px/1 var(--f-display); font-stretch: 85%; font-optical-sizing: none; color: var(--ink-500); grid-row: span 2; }
+@container vp (min-width: 640px) { .steps .n { grid-row: auto; } }
+.steps h3 { font-size: 17px; font-weight: 700; line-height: 1.3; }
+.steps p { font-size: 14px; color: var(--ink-300); }
+
+.odds { width: 100%; max-width: 40rem; border-collapse: collapse; font-size: 14px; }
+.odds th, .odds td { border-bottom: 1px solid var(--night-700); padding: 9px 0; }
+.odds thead th { font: 500 12px/1.3 var(--f-sans); color: var(--ink-400); text-align: right; }
+.odds thead th:first-child { text-align: left; }
+.odds tbody th { text-align: left; font-weight: 500; white-space: nowrap; }
+.odds .sw { display: inline-block; width: 10px; aspect-ratio: 5 / 7; border-radius: 2px; vertical-align: middle; margin-right: 8px; }
+.odds .ss { display: none; letter-spacing: 2px; margin-right: 6px; font-size: 12px; }
+@container vp (min-width: 640px) { .odds .ss { display: inline; } }
+.odds td { text-align: right; }
+.odds td.num { font-size: 13px; color: var(--ink-200); }
+.odds td.bar { width: 96px; padding-left: 12px; text-align: left; }
+.odds .trk { display: block; width: 80px; height: 6px; background: var(--night-800); border-radius: 1px; }
+.odds .trk i { display: block; height: 100%; border-radius: 1px; }
+.src { margin-top: 8px; font-size: 12px; color: var(--ink-400); }
+.join { margin-top: 64px; padding-top: 32px; border-top: 1px solid var(--night-700); }
+.join p { color: var(--ink-300); max-width: 36rem; }
+.join .row { margin-top: 16px; display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
+
+/* ===== /packs (§11.3) ===== */
+.ph-wrap { padding-top: 32px; }
+@container vp (min-width: 640px) { .ph-wrap { padding-top: 48px; } }
+.ph { margin-bottom: 24px; }
+@container vp (min-width: 640px) { .ph { margin-bottom: 32px; } }
+.sheet { background: var(--night-850); border-radius: 16px; padding: 20px; max-width: 36rem; display: grid; gap: 20px; }
+@container vp (min-width: 640px) { .sheet { grid-template-columns: 140px minmax(0, 1fr); align-items: start; gap: 24px; } }
+.sheet .sl { width: 120px; } @container vp (min-width: 640px) { .sheet .sl { width: 140px; } }
+.ctl { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-width: 0; }
+.ctl .count { color: var(--ink-200); }
+.ctl .btn { width: 100%; } @container vp (min-width: 640px) { .ctl .btn { width: auto; } }
+.ctl .line { font-size: 14px; color: var(--ink-400); }
+.ctl .err { font-size: 14px; color: var(--danger); }
+.ctl .foot { margin-top: 8px; width: 100%; display: flex; flex-direction: column; gap: 2px; align-items: flex-start; }
+@container vp (min-width: 640px) { .ctl .foot { flex-direction: row; align-items: baseline; justify-content: space-between; gap: 16px; } }
+.ctl .pity { font-size: 12px; color: var(--ink-400); }
+.skel { height: 16px; width: 144px; border-radius: 4px; background: var(--night-800); }
+.latest { margin-top: 16px; font-size: 14px; }
+
+/* odds dialog (inside the frame) */
+.dlg-back { position: absolute; inset: 0; z-index: 20; background: rgb(7 8 15 / .7); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.dlg { width: 100%; max-width: 34rem; max-height: 85%; overflow-y: auto; background: var(--night-900); border-radius: 16px; box-shadow: 0 16px 48px rgb(0 0 0 / .55); padding: 24px; }
+.dlg h2 { margin-bottom: 16px; }
+.dlg p { font-size: 14px; color: var(--ink-300); margin-top: 10px; }
+.dlg .x { margin-top: 20px; }
+
+/* empty state (§11.1) */
+.empty { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; margin-top: 8px; }
+.empty .orb { width: 96px; }
+.empty p { color: var(--ink-300); }
+.bodynote { margin-top: 8px; padding: 20px; border: 1px dashed var(--night-600); border-radius: 12px; color: var(--ink-400); font-size: 14px; max-width: 36rem; }
+
+</style>
+<div class="wrap">
+  <header class="top">
+    <p class="kick">Anime TCG · mockup · visual-identity.md (PR #64)</p>
+    <h1>The new look, page by page</h1>
+    <p class="sub">The landing page, <code>/packs</code>, the header and the phone tab bar in the proposed identity, at 1440, 390 and 320 px. Pick a variant for open questions 1 and 3 at the bottom. Frames scroll; links and tabs inside them are live where the spec defines them.</p>
+  </header>
+
+  <div class="bar" role="toolbar" aria-label="Mockup controls">
+    <div class="grp"><span class="lbl" id="l-page">Page</span>
+      <div class="seg" data-key="page" aria-labelledby="l-page">
+        <button data-v="landing">Landing <code>/</code></button><button data-v="packs"><code>/packs</code></button><button data-v="chrome">Header &amp; tab bar</button><button data-v="today">Today</button>
+      </div></div>
+    <div class="grp"><span class="lbl" id="l-view">View</span>
+      <div class="seg" data-key="view" aria-labelledby="l-view">
+        <button data-v="all">All sizes</button><button data-v="1440">1440</button><button data-v="390">390</button><button data-v="320">320</button><button data-v="compare">Compare A / B</button>
+      </div></div>
+    <div class="grp" data-show="landing"><span class="lbl" id="l-d1">Q1 landing art</span>
+      <div class="seg" data-key="d1" aria-labelledby="l-d1"><button data-v="A"><span class="v">A</span>Showcase fan</button><button data-v="B"><span class="v">B</span>No art</button></div></div>
+    <div class="grp" data-show="packs chrome"><span class="lbl" id="l-d3">Q3 header</span>
+      <div class="seg" data-key="d3" aria-labelledby="l-d3"><button data-v="A"><span class="v">A</span>Chips + tab count</button><button data-v="B"><span class="v">B</span>No chips</button></div></div>
+    <div class="grp" data-show="packs"><label class="lbl" for="pstate">State</label>
+      <select id="pstate"></select></div>
+    <div class="grp" data-show="today"><span class="lbl" id="l-tp">Route</span>
+      <div class="seg" data-key="todayRoute" aria-labelledby="l-tp"><button data-v="landing"><code>/</code></button><button data-v="demo"><code>/demo</code></button></div></div>
+    <div class="grp" data-show="compare"><label class="lbl" for="csize">Compare at</label>
+      <select id="csize"><option value="390">390 × 844</option><option value="320">320 × 568</option><option value="1440">1440 × 900</option></select></div>
+    <label class="chk"><input type="checkbox" id="ann" checked> Annotations</label>
+  </div>
+
+  <main class="frames" id="frames" aria-live="off"></main>
+
+  <section class="decide" aria-label="Your picks">
+    <article class="dcard" data-decision="landing-art">
+      <h2>Q1 · Art on the landing page</h2>
+      <p class="q">visual-identity.md §16 question 1, §11.2. <code>GET /api/demo</code> carries no characters today.</p>
+      <label class="opt"><input type="radio" name="d-landing-art" value="A" id="d1a"><span><b>A · Showcase fan behind the sleeve</b><span class="rec">spec · recommended</span></span><span class="tr">Art before the first word, with real tiers and frames. Costs a server change (PR 6a, T2) and a taller phone hero.</span></label>
+      <label class="opt"><input type="radio" name="d-landing-art" value="B" id="d1b"><span><b>B · No art, the sleeve alone</b></span><span class="tr">No server change and a shorter phone hero. The landing shows drawn objects only until the visitor opens a demo pack.</span></label>
+      <textarea id="n-landing-art" placeholder="Optional note"></textarea>
+      <div class="pickrow"><button class="pickbtn" data-save="landing-art">Save my pick</button><span class="saved" id="s-landing-art"></span></div>
+      <div class="chatline" id="c-landing-art" hidden></div>
+    </article>
+    <article class="dcard" data-decision="header-chips">
+      <h2>Q3 · What the header shows</h2>
+      <p class="q">visual-identity.md §16 question 3, §10.2, §10.3. Variant B here is the spec's option C (Karma only, as today).</p>
+      <label class="opt"><input type="radio" name="d-header-chips" value="A" id="d3a"><span><b>A · Packs ready and Karma chips, count on the tab</b><span class="rec">spec · recommended</span></span><span class="tr">Progress is visible on every page with no motion or colour change. It relaxes packs-page.md §2's "no badge".</span></label>
+      <label class="opt"><input type="radio" name="d-header-chips" value="B" id="d3b"><span><b>B · No chips: Karma as plain text, no pack count</b></span><span class="tr">The quietest option: no pack count outside <code>/packs</code>. The header reads less like a game.</span></label>
+      <textarea id="n-header-chips" placeholder="Optional note"></textarea>
+      <div class="pickrow"><button class="pickbtn" data-save="header-chips">Save my pick</button><span class="saved" id="s-header-chips"></span></div>
+      <div class="chatline" id="c-header-chips" hidden></div>
+    </article>
+  </section>
+
+  <section class="legend" aria-label="How to read this mockup">
+    <div><h3>Sources</h3><ul>
+      <li>Tokens, type, chips, tab bar: <code>visual-identity.md</code> §4–§12 (PR #64).</li>
+      <li>Copy, odds and pool figures: today's <code>web/src/lib/*Copy.ts</code> and the acceptance stack's <code>GET /api/demo</code> (2,983 characters, 10-minute timer, cap 3).</li>
+      <li>Today: screenshots of <code>http://127.0.0.1:8180</code>, signed out, 31 Oct 2026.</li></ul></div>
+    <div><h3>Stand-ins</h3><ul>
+      <li>Card art is a drawn stand-in. Character and series names are real; ranks are invented inside each tier's band.</li>
+      <li>The player <code>tidewren</code> and every number on the account are fictional.</li>
+      <li>Fonts load from Google Fonts. The spec self-hosts the same OFL families from npm; display opsz is held at its default, as the npm <code>wdth.css</code> build has no opsz axis.</li></ul></div>
+    <div><h3>Annotations</h3><ul>
+      <li><span class="nis-key"></span>Dashed pink: <b>not in spec</b>, invented for the mockup.</li>
+      <li>White tags name the spec section a block comes from.</li>
+      <li>Untick Annotations to see the page clean.</li></ul></div>
+  </section>
+</div>
+
+<script>
+/* ===== APP KIT (shared by the redesign mockups). Drawn stand-ins only: no image host is contacted. ===== */
+const TIERS = ["common", "uncommon", "rare", "epic", "legendary", "mythic"];
+const LABEL = { common: "Common", uncommon: "Uncommon", rare: "Rare", epic: "Epic", legendary: "Legendary", mythic: "Mythic" };
+const STAR = "✦";
+const POOL = 2983; // GET /api/demo on the acceptance stack, 2026-10-31: odds.snapshot.characterCount
+const stars = (t) => STAR.repeat(TIERS.indexOf(t) + 1);
+const nStars = (t) => TIERS.indexOf(t) + 1;
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const fmt = (n) => new Intl.NumberFormat("en-GB").format(n);
+const rankText = (r) => `#${String(r).padStart(String(POOL).length, "0")} / ${POOL}`;
+
+/* Real character and series names (allowed by the brief); ranks are invented but sit inside each tier's band
+   of the live snapshot (tierBands over 2,983: Mythic 1–60, Legendary 61–239, Epic 240–597, Rare 598–1193,
+   Uncommon 1194–1939, Common 1940–2983). */
+const CHARS = {
+  levi: { id: 45627, name: "Levi", series: "Shingeki no Kyojin", native: "進撃の巨人", year: 2013, rank: 4, tier: "mythic" },
+  makima: { id: 170735, name: "Makima", series: "Chainsaw Man", native: "チェンソーマン", year: 2022, rank: 23, tier: "mythic" },
+  maomao: { id: 129191, name: "Maomao", series: "Kusuriya no Hitorigoto", native: "薬屋のひとりごと", year: 2023, rank: 97, tier: "legendary" },
+  zerotwo: { id: 124381, name: "Zero Two", series: "DARLING in the FRANXX", native: "ダーリン・イン・ザ・フランキス", year: 2018, rank: 141, tier: "legendary" },
+  power: { id: 170736, name: "Power", series: "Chainsaw Man", native: "チェンソーマン", year: 2022, rank: 188, tier: "legendary" },
+  anya: { id: 138101, name: "Anya Forger", series: "SPY×FAMILY", native: "SPY×FAMILY", year: 2022, rank: 312, tier: "epic" },
+  nanami: { id: 127221, name: "Nanami Kento", series: "Jujutsu Kaisen", native: "呪術廻戦", year: 2020, rank: 255, tier: "epic" },
+  rengoku: { id: 129130, name: "Rengoku Kyoujurou", series: "Kimetsu no Yaiba", native: "鬼滅の刃", year: 2019, rank: 402, tier: "epic" },
+  kanao: { id: 128452, name: "Kanao Tsuyuri", series: "Kimetsu no Yaiba", native: "鬼滅の刃", year: 2019, rank: 744, tier: "rare" },
+  inumaki: { id: 127212, name: "Inumaki Toge", series: "Jujutsu Kaisen", native: "呪術廻戦", year: 2020, rank: 610, tier: "rare" },
+  kazuma: { id: 88573, name: "Kazuma Satou", series: "Kono Subarashii Sekai ni Shukufuku wo!", native: "この素晴らしい世界に祝福を!", year: 2016, rank: 1288, tier: "uncommon" },
+  sasha: { id: 46496, name: "Sasha Blouse", series: "Shingeki no Kyojin", native: "進撃の巨人", year: 2013, rank: 1410, tier: "uncommon" },
+  bertholdt: { id: 46497, name: "Bertholdt Hoover", series: "Shingeki no Kyojin", native: "進撃の巨人", year: 2013, rank: 1502, tier: "uncommon" },
+  mineta: { id: 117903, name: "Mineta Minoru", series: "Boku no Hero Academia", native: "僕のヒーローアカデミア", year: 2016, rank: 2711, tier: "common" },
+  kaminari: { id: 117904, name: "Kaminari Denki", series: "Boku no Hero Academia", native: "僕のヒーローアカデミア", year: 2016, rank: 2204, tier: "common" },
+  usopp: { id: 41, name: "Usopp", series: "ONE PIECE", native: "ONE PIECE", year: 1999, rank: 2056, tier: "common" },
+};
+
+/* A drawn stand-in portrait, 3:4, deterministic per character id. Clearly a mockup: flat shapes, no face. */
+function artSVG(c, extra = "") {
+  const h = (c.id * 47) % 360, h2 = (h + 40) % 360, hair = (c.id * 13) % 360;
+  const gid = "g" + c.id + extra;
+  return `<svg viewBox="0 0 60 80" preserveAspectRatio="xMidYMin slice" aria-hidden="true" focusable="false">
+    <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="hsl(${h} 38% 34%)"/><stop offset="1" stop-color="hsl(${h2} 42% 16%)"/></linearGradient></defs>
+    <rect width="60" height="80" fill="url(#${gid})"/>
+    <circle cx="${12 + (c.id % 7) * 5}" cy="14" r="9" fill="hsl(${h2} 60% 70% / .12)"/>
+    <path d="M6 80 C8 60 18 54 30 54 C42 54 52 60 54 80 Z" fill="hsl(${hair} 22% 12%)"/>
+    <ellipse cx="30" cy="38" rx="12" ry="14" fill="hsl(${(h + 20) % 360} 25% 72%)"/>
+    <path d="M16 38 C15 22 24 17 31 17 C40 17 46 24 44 40 C41 31 36 27 30 26 C25 30 20 33 16 38 Z" fill="hsl(${hair} 55% 38%)"/>
+  </svg>`;
+}
+
+/* The card (card-and-rarity.md §3): effects 'full' (reveal, glow + glint/pearl), 'none' (frame only), size 'small' | 'stage'. */
+function cardFace(c, { tier = c.tier, size = "small", effects = "full", tag = "article", extraClass = "" } = {}) {
+  const glow = effects === "none" ? "" : ` gl-${tier}`;
+  const motion = effects === "full" ? (tier === "epic" || tier === "legendary" ? " fx-glint" : tier === "mythic" ? " fx-pearl" : "") : "";
+  const label = `${c.name}, ${LABEL[tier]}, ${c.series}`;
+  return `<${tag} class="card fr-${tier}${glow}${motion} ${size === "stage" ? "sz-stage" : ""} ${extraClass}" style="--ph:${(c.id % 11) * 0.5}" ${tag === "article" ? `aria-label="${esc(label)}"` : ""}>
+    <span class="face">
+      <span class="head"><span class="nm" dir="auto" title="${esc(c.name)}">${esc(c.name)}</span><span class="st tx-${tier}" aria-hidden="true">${stars(tier)}</span></span>
+      <span class="art">${artSVG(c, size)}<span class="rk">${rankText(c.rank)}</span></span>
+      <span class="sr-line" dir="auto" title="${esc(c.series)}">${esc(c.series)}</span>
+    </span></${tag}>`;
+}
+
+/* The Orbit ring with six sockets, clockwise from the top (§7.2). `lit` sockets in `color`. */
+function star4(cx, cy, r) {
+  return `M${cx} ${cy - r} Q${cx} ${cy} ${cx + r} ${cy} Q${cx} ${cy} ${cx} ${cy + r} Q${cx} ${cy} ${cx - r} ${cy} Q${cx} ${cy} ${cx} ${cy - r} Z`;
+}
+function orbitSVG({ lit = 0, color = "var(--night-700)", socket = 8.3, ring = "var(--night-600)", unlit = "var(--night-700)", outer = null, attrs = true, riseFrom = 99 } = {}) {
+  let s = "";
+  for (let k = 0; k < 6; k++) {
+    const a = (-90 + k * 60) * Math.PI / 180;
+    const x = +(50 * Math.cos(a)).toFixed(2), y = +(50 * Math.sin(a)).toFixed(2);
+    const on = k < lit;
+    s += `<path d="${star4(x, y, socket)}" fill="${on ? color : unlit}" ${on && k >= riseFrom ? 'class="rise"' : ""} ${attrs && on ? 'data-lit=""' : ""}/>`;
+  }
+  const outerRing = outer ? `<circle r="61" fill="none" stroke="${outer}" stroke-width="1.5" vector-effect="non-scaling-stroke"/>` : "";
+  return `<svg viewBox="-60 -60 120 120" aria-hidden="true" focusable="false">${outerRing}
+    <circle r="50" fill="none" stroke="${ring}" stroke-width="1.5" vector-effect="non-scaling-stroke"/>
+    <circle r="14.5" fill="none" stroke="${ring}" stroke-width="1.5" vector-effect="non-scaling-stroke"/>${s}</svg>`;
+}
+
+/* The card back (§7.2). tier=null: plain back, no tell. */
+function cardBack({ tier = null, size = "small", breathe = false, extraClass = "" } = {}) {
+  const tellCls = tier ? ` t-${tier}${breathe && ["epic", "legendary", "mythic"].includes(tier) ? " breathe" : ""}` : "";
+  return `<div class="back ${size === "stage" ? "sz-stage" : ""}${tellCls} ${extraClass}" aria-hidden="true">
+    <div class="field"><div class="orb">${orbitSVG({ lit: tier ? nStars(tier) : 0, color: tier ? `var(--r-${tier})` : "" })}</div>
+    <div class="wm"><b>Anime TCG</b><i>Six tiers · one orbit</i></div></div><span class="glow"></span></div>`;
+}
+
+/* Sleeve inks (§8.3) and the theme hash (§8.2: sum of UTF-16 code units mod 5). */
+const THEME_INKS = ["plum", "pine", "rust", "olive", "petrol"];
+const themeInk = (themeId) => THEME_INKS[[...themeId].reduce((a, ch) => a + ch.charCodeAt(0), 0) % 5];
+
+/* A sleeve (§8.1). floor: tier whose star count is lit (null = none). Lit colour is not in spec (see README). */
+function sleeve({ name = "Anime TCG", line = "Five cards", floor = "rare", ink = "night", kind = null, outer = false, tear = 0, extraClass = "", style = "", riseFrom = 99 } = {}) {
+  const radiant = ink === "radiant";
+  const mark = kind ? `<span class="km">${esc(kind)}</span>` : "";
+  return `<div class="sleeve ${radiant ? "radiant" : ""} ${extraClass}" style="--sc:var(--sleeve-${ink});--tear:${tear};${style}" aria-hidden="true">
+    <div class="sbody"></div><div class="seam"></div><div class="tear"></div>${mark}
+    <div class="orb">${orbitSVG({ lit: floor ? nStars(floor) : 0, color: floor ? `var(--r-${floor})` : "", socket: 7.6, ring: radiant ? "#b9addb" : "var(--night-600)", unlit: radiant ? "#d8d0f0" : "var(--night-700)", outer: outer ? "var(--ink-300)" : null, riseFrom })}</div>
+    <div class="nb"><b>${esc(name)}</b><i>${esc(line)}</i></div></div>`;
+}
+
+/* The 12 x 18 sleeve glyph (§10.2) as an inline icon. */
+const SLEEVE_GLYPH = `<svg viewBox="0 0 12 18" aria-hidden="true" focusable="false"><rect x=".75" y=".75" width="10.5" height="16.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M.75 3.5h10.5" stroke="currentColor" stroke-width="1.2"/><circle cx="6" cy="8.5" r="2.6" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>`;
+
+/* Lucide icons (ISC licence), 24-unit paths, as §10.3 names them. */
+const LUCIDE = {
+  Package: '<path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"/><path d="M12 22V12"/><path d="m3.3 7 7.703 4.734a2 2 0 0 0 1.994 0L20.7 7"/><path d="m7.5 4.27 9 5.15"/>',
+  ArrowLeftRight: '<path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/>',
+  LayoutGrid: '<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>',
+  CircleUser: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/><path d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662"/>',
+  ChevronLeft: '<path d="m15 18-6-6 6-6"/>',
+  Volume2: '<path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><path d="M16 9a5 5 0 0 1 0 6"/><path d="M19.364 18.364a9 9 0 0 0 0-12.728"/>',
+  VolumeX: '<path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><line x1="22" x2="16" y1="9" y2="15"/><line x1="16" x2="22" y1="9" y2="15"/>',
+};
+const icon = (n, size = 22) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${LUCIDE[n]}</svg>`;
+
+/* Annotation helpers: a `not in spec` outline + tag, and a spec-section tag. */
+const nis = (note = "not in spec") => `<span class="nis-tag">${esc(note)}</span>`;
+const spec = (ref, pos = "top:4px;left:4px") => `<span class="spec-tag" style="${pos}">${esc(ref)}</span>`;
+
+/* Fit fixed-size frames into their column: scale = min(1, available / frame width). */
+function fitFrames(root = document) {
+  root.querySelectorAll(".fw").forEach((fw) => {
+    const w = +fw.dataset.w, h = +fw.dataset.h;
+    const avail = fw.parentElement.clientWidth;
+    const s = Math.min(1, avail / w);
+    fw.style.width = w * s + "px";
+    fw.style.height = h * s + "px";
+    fw.firstElementChild.style.transform = `scale(${s})`;
+    const lab = fw.previousElementSibling;
+    if (lab && lab.classList.contains("fl")) lab.querySelector(".sc").textContent = s < 1 ? `shown at ${Math.round(s * 100)}%` : "actual size";
+  });
+}
+function frameShell(w, h, inner, label = `${w} × ${h}`, cls = "") {
+  return `<div class="fcell ${cls}" style="width:${w}px"><div class="fl"><b>${label}</b> <span class="sc"></span></div><div class="fw" data-w="${w}" data-h="${h}"><div class="vp" style="width:${w}px;height:${h}px;transform-origin:0 0">${inner}</div></div></div>`;
+}
+
+/* ===== Redesign pages: render functions. Every number is the acceptance stack's GET /api/demo (2026-10-31). ===== */
+const ODDS = {
+  scale: 1000000,
+  perPack: { common: 999704, uncommon: 1000000, rare: 800000, epic: 170000, legendary: 27500, mythic: 2500 },
+  share: { common: 560000, uncommon: 240000, rare: 160000, epic: 34000, legendary: 5500, mythic: 500 },
+  sizes: { common: 1044, uncommon: 746, rare: 596, epic: 358, legendary: 179, mythic: 60 },
+};
+const PCT = new Intl.NumberFormat("en-GB", { style: "percent", maximumSignificantDigits: 3, roundingMode: "trunc" });
+const pct = (p) => PCT.format(p / ODDS.scale);
+const PLAYER = { login: "tidewren", karma: 1240, cards: 48, dups: 6 }; // fictional player
+
+/* ---------- header (§10.2, §10.3) ---------- */
+function headerOut() {
+  return `<header class="hdr"><div class="in"><a class="wordmark" href="#">Anime TCG</a>
+    <div class="hdr-out"><a class="btn-text" href="#">Log in</a><a class="btn btn-secondary" href="#">Register</a></div></div></header>`;
+}
+function headerIn({ chips, current = "/packs", ready = 2 }) {
+  const links = [["/packs", "Packs"], ["/shop", "Shop"], ["/market", "Market"], ["/collection", `Collection <span class="tab">(${PLAYER.cards})</span>`]];
+  const nav = `<nav class="navlinks" aria-label="Main">${links.map(([to, t]) => `<a href="#" data-tab="${to}" ${to === current ? 'aria-current="page"' : ""}>${t}</a>`).join("")}</nav>`;
+  const right = chips === "A"
+    ? `<div class="chips"><a class="chip" href="#" aria-label="${ready} of 3 packs ready"><span style="color:var(--ink-300);display:inline-flex;width:12px;height:18px">${SLEEVE_GLYPH}</span><span class="num">${ready}/3</span></a>
+         <span class="chip karma" aria-label="${fmt(PLAYER.karma)} Karma"><span class="num">${fmt(PLAYER.karma)}</span><span class="w">Karma</span></span></div>`
+    : `<p class="karma-plain"><span class="num">${fmt(PLAYER.karma)}</span> <span class="w">Karma</span></p>`;
+  const acct = `<button class="acct ${""}" aria-label="Account, ${PLAYER.login}"><span class="av">${PLAYER.login[0]}</span><span class="nmx">${PLAYER.login}</span></button>`;
+  return `<header class="hdr"><div class="in"><a class="wordmark" href="#">Anime TCG</a>${nav}${right}<span class="nis" style="display:inline-flex;border-radius:10px">${acct}<span class="nis-tag" style="top:auto;bottom:-15px;left:auto;right:0">not in spec</span></span></div></header>`;
+}
+function tabBar({ chips, current = "/packs", ready = 2 }) {
+  const item = (to, label, ic) => `<a href="#" data-tab="${to}" ${to === current ? 'aria-current="page"' : ""}>${icon(ic)}<span>${label}</span></a>`;
+  const cnt = chips === "A" && ready > 0 ? `<span class="cnt">${ready}</span>` : "";
+  const name = chips === "A" && ready > 0 ? `Packs, ${ready} of 3 ready` : "Packs";
+  return `<nav class="tabbar" aria-label="Main">${item("/shop", "Shop", "Package")}${item("/market", "Market", "ArrowLeftRight")}
+    <a href="#" class="centre" data-tab="/packs" aria-label="${name}" ${current === "/packs" ? 'aria-current="page"' : ""}><span class="disc">${SLEEVE_GLYPH}${cnt}</span><span>Packs</span></a>
+    ${item("/collection", "Collection", "LayoutGrid")}${item("/profile", "Profile", "CircleUser")}</nav>`;
+}
+function footer() {
+  return `<footer class="ftr"><p>Non-commercial fan project. Character images and titles © their respective owners, served via the <a href="#">AniList</a> API.</p>
+    <p>Fonts: Bricolage Grotesque, Figtree, Martian Mono (<a href="#">SIL Open Font License</a>).</p></footer>`;
+}
+
+/* ---------- landing (§11.2) ---------- */
+function landing({ art }) {
+  const fan = art === "A"
+    ? [["maomao", -9, "calc(50% - var(--cw) * 0.95)", "0px"], ["anya", -3, "calc(50% - var(--cw) * 0.5)", "calc(var(--cw) * -0.04)"], ["inumaki", 5, "calc(50% - var(--cw) * 0.05)", "calc(var(--cw) * 0.02)"]]
+        .map(([k, rot, left, top]) => `<div class="fan" style="left:${left};top:${top};transform:rotate(${rot}deg)">${cardFace(CHARS[k], { effects: "none", tag: "span" })}</div>`).join("")
+    : "";
+  const tiers = TIERS.map((t) => `<li>${cardBack({ tier: t })}<span class="w tx-${t}">${LABEL[t]}</span></li>`).join("");
+  const steps = [
+    ["Packs", "A new pack every 10 minutes, and up to 3 can pile up. Five cards each."],
+    ["Rarity", "Every character has one of six tiers, set by how many AniList users favourited them. Every pack uses the odds below."],
+    ["Collection", "See how much of each series you have, and how much of all 2,983 characters."],
+    ["Karma", "Recycle duplicates for Karma and spend it on themed packs. Karma comes only from playing. It can't be bought."],
+    ["Market", "List cards for other players to buy with Karma, and buy theirs."],
+  ].map(([t, s], i) => `<li><span class="n" aria-hidden="true">${String(i + 1).padStart(2, "0")}</span><h3>${t}</h3><p>${s}</p></li>`).join("");
+  const rows = TIERS.map((t) => {
+    const w = Math.max(2, (ODDS.perPack[t] / ODDS.scale) * 80);
+    return `<tr><th scope="row" class="tx-${t}"><span class="sw" style="background:var(--flat-${t})" aria-hidden="true"></span><span class="ss" aria-hidden="true">${stars(t)}</span>${LABEL[t]}</th>
+      <td class="bar" aria-hidden="true"><span class="trk"><i style="width:${w.toFixed(1)}px;background:var(--r-${t})"></i></span></td>
+      <td class="num">${pct(ODDS.perPack[t])}</td><td class="num">${pct(ODDS.share[t])}</td></tr>`;
+  }).join("");
+  return `<div class="app">${headerOut()}<main>
+    <section class="hero" aria-labelledby="landing-heading"><div class="stars"></div><div class="horizon"></div>${spec("§11.2 hero · horizon", "top:6px;right:6px")}
+      <div class="page hero-in">
+        <div class="head"><p class="eyebrow" aria-hidden="true">Anime character cards</p><h1 id="landing-heading" class="d t-hero">Anime TCG</h1></div>
+        <div class="artcol ${art === "A" ? "fanA" : "fanB"} ${art === "A" ? "nis" : ""}" aria-hidden="true">${art === "A" ? nis("not in spec: fan offsets; phone height ≠ 168 px") : ""}${fan}<div class="slv">${sleeve({ line: "Demo pack · five cards" })}</div></div>
+        <div class="body"><p class="lede">2,983 characters from the 100 most popular anime on AniList, five to a pack.</p>
+          <div class="cta"><a class="btn btn-primary" href="#">Open a demo pack</a>
+          <p class="disc">A demo pack uses the same odds as every pack in the game. Its cards aren't kept: nothing is saved, and they don't go to any account.</p></div></div>
+      </div></section>
+    <div class="page">
+      <section class="sec" aria-labelledby="six-tiers" style="position:relative">${spec("§11.2 item 2", "top:-22px;left:0")}<h2 id="six-tiers" class="d t-section">Six tiers</h2><ul class="tiers" role="list">${tiers}</ul></section>
+      <section class="sec" aria-labelledby="how" style="position:relative">${spec("§11.2 item 3", "top:-22px;left:0")}<h2 id="how" class="d t-section">How it plays</h2><ol class="steps" role="list">${steps}</ol></section>
+      <section class="sec" aria-labelledby="odds-h" style="position:relative">${spec("§11.2 item 4 · bar column", "top:-22px;left:0")}<h2 id="odds-h" class="d t-section">Pack odds</h2>
+        <table class="odds"><thead><tr><th scope="col">Tier</th><th class="nis" aria-hidden="true" style="text-align:left;padding-left:12px">${nis("bar column position")}</th><th scope="col">At least one per pack</th><th scope="col">Each card</th></tr></thead><tbody>${rows}</tbody></table>
+        <p class="src">Drawn from 2,983 characters, as of 29 Oct 2026.</p></section>
+      <section class="join" aria-labelledby="join-h"><h2 id="join-h" class="d t-section" style="margin-bottom:12px">Join</h2><p>Playing needs an account, and registering needs an invite code from the owner.</p>
+        <div class="row"><a class="btn btn-primary" href="#">Register</a><p class="t-small" style="color:var(--ink-300)">Already registered? <a class="link-u" href="#">Log in</a></p></div></section>
+    </div></main>${footer()}</div>`;
+}
+
+/* ---------- /packs (§11.3) ---------- */
+const PACK_STATES = { ready: "2 of 3 ready", cap: "3 of 3 (at the cap)", none: "0 of 3 (waiting)", loading: "Loading", failed: "Couldn't load" };
+function packs({ chips, state = "ready", oddsOpen = false }) {
+  const ready = state === "cap" ? 3 : state === "none" ? 0 : 2;
+  let ctl;
+  if (state === "loading") ctl = `<div class="skel"></div><span class="btn btn-primary" aria-disabled="true">Open pack</span><p class="sr" role="status">Loading your packs…</p>`;
+  else if (state === "failed") ctl = `<p class="t-small" style="color:var(--ink-300)">Couldn't load your packs.</p><button class="btn btn-secondary">Try again</button>`;
+  else ctl = `<p class="count num">${ready} of 3 packs ready</p>
+      <button class="btn btn-primary" ${ready === 0 ? 'aria-disabled="true"' : ""}>Open pack</button>
+      ${state !== "cap" ? `<p class="line tab">Next pack in 7:42</p>` : ""}
+      <div class="foot"><p class="pity tab">Mythic guaranteed within 214 free packs.</p><button class="btn-text" data-act="odds" style="font-size:13px">Pack odds</button></div>`;
+  return `<div class="app col">${headerIn({ chips, current: "/packs", ready })}
+    <main class="page ph-wrap"><div class="ph"><p class="eyebrow" aria-hidden="true">Timer packs</p><h1 class="d t-title">Packs</h1></div>
+      <div class="sheet" style="position:relative">${spec("§11.3 pack sheet", "top:-10px;right:8px")}<div class="sl">${sleeve({ floor: "rare" })}</div><div class="ctl">${ctl}</div></div>
+    </main>${footer()}${tabBar({ chips, current: "/packs", ready })}${oddsOpen ? oddsDialog() : ""}</div>`;
+}
+function oddsDialog() {
+  const rows = TIERS.slice().reverse().map((t) => {
+    const w = Math.max(2, (ODDS.perPack[t] / ODDS.scale) * 80);
+    return `<tr><th scope="row" class="tx-${t}"><span class="ss" aria-hidden="true">${stars(t)}</span>${LABEL[t]}</th><td class="num">${fmt(ODDS.sizes[t])}</td><td class="num">${pct(ODDS.share[t])}</td>
+      <td class="bar" aria-hidden="true"><span class="trk"><i style="width:${w.toFixed(1)}px;background:var(--r-${t})"></i></span></td><td class="num">${pct(ODDS.perPack[t])}</td></tr>`;
+  }).join("");
+  return `<div class="dlg-back" data-act="close"><div class="dlg" role="dialog" aria-modal="true" aria-labelledby="odds-dlg" data-stop>
+    <h2 id="odds-dlg" class="d t-section">Pack odds</h2>
+    <div style="overflow-x:auto"><table class="odds" style="min-width:420px"><thead><tr><th scope="col">Tier</th><th scope="col">Characters</th><th scope="col">Share of cards</th><th aria-hidden="true"></th><th scope="col">At least one per pack</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <p>Shares and chances are for a standard pack; the special packs below add to the rarer tiers.</p>
+    <p>Cards 1 to 3: Common or better. Card 4: Uncommon or better. Card 5: Rare or better.</p>
+    <p>Every 10th free pack is Enchanted: its fifth card is Epic or better.</p>
+    <p>About 1 pack in 2,500 is Radiant: five cards of Epic or better, at least one of them Mythic.</p>
+    <p>A 300th free pack in a row without a Mythic always has one.</p>
+    <p>Shop packs can be Radiant. They don't count toward Enchanted packs or the guarantee.</p>
+    <p>A character's tier comes from its popularity rank on AniList among the 2,983 characters of the current pool: Mythic is the top 2%, Legendary the next 6%, Epic the next 12%, Rare the next 20%, Uncommon the next 25%, Common the rest.</p>
+    <p>Pool as of 29 Oct 2026.</p>
+    <button class="btn btn-secondary x" data-act="close">Close</button></div></div>`;
+}
+
+/* ---------- header and tab bar page (§10.1–§10.3) ---------- */
+const PAGE_HEAD = {
+  "/shop": ["Themed packs", "Shop", null], "/market": ["Player trades", "Market", null], "/packs": ["Timer packs", "Packs", null],
+  "/collection": ["Your cards", "Collection", `${PLAYER.cards} cards · ${PLAYER.dups} duplicates`], "/profile": ["Player", "Profile", null],
+};
+function chrome({ chips, current = "/collection" }) {
+  const [eb, title, stat] = PAGE_HEAD[current];
+  const body = `<p class="bodynote">Page body unchanged apart from the new tokens (§11.4). Switch tabs in the bar, or the links in the header, to see each page's eyebrow and title (§10.1).</p>`;
+  return `<div class="app col">${headerIn({ chips, current, ready: 2 })}
+    <main class="page ph-wrap"><div class="ph"><p class="eyebrow" aria-hidden="true">${eb}</p><h1 class="d t-title">${title}</h1>${stat ? `<p class="stat tab">${stat}</p>` : ""}</div>${body}</main>
+    ${footer()}${tabBar({ chips, current, ready: 2 })}</div>`;
+}
+
+/* ===== Mockup controller ===== */
+const S = { page: "landing", view: "all", d1: "A", d3: "A", pstate: "ready", oddsOpen: false, tab: "/collection", todayRoute: "landing", csize: "390", ann: true };
+const SIZES = { 1440: 900, 390: 844, 320: 568 };
+const pstateSel = document.getElementById("pstate");
+pstateSel.innerHTML = Object.entries(PACK_STATES).map(([k, v]) => `<option value="${k}">${v}</option>`).join("");
+
+function render(page, { d1 = S.d1, d3 = S.d3 } = {}) {
+  if (page === "landing") return landing({ art: d1 });
+  if (page === "packs") return packs({ chips: d3, state: S.pstate, oddsOpen: S.oddsOpen });
+  if (page === "chrome") return chrome({ chips: d3, current: S.tab });
+  return "";
+}
+function todayInner(w) {
+  const file = `today/${S.todayRoute === "demo" ? "demo" : "landing"}-${w}.jpg`;
+  return `<img class="today-img" src="${file}" alt="Today's ${S.todayRoute === "demo" ? "/demo" : "landing page"} at ${w} px, captured from the acceptance stack">`;
+}
+function cell(w, inner, label, cls = "") {
+  return frameShell(+w, SIZES[w], `<div class="scroller${S.ann ? "" : " no-ann"}">${inner}</div>`, label, cls);
+}
+function tag(v) { return `<span class="tagv" style="background:var(--c-${v.toLowerCase()})">${v}</span>`; }
+
+function draw() {
+  const el = document.getElementById("frames");
+  const isToday = S.page === "today";
+  const dKey = S.page === "landing" ? "d1" : "d3";
+  const vName = (v) => (S.page === "landing" ? { A: "Showcase fan", B: "No art" } : { A: "Chips + tab count", B: "No chips" })[v];
+  let html = "";
+  if (S.view === "compare" && !isToday) {
+    const w = S.csize;
+    html = `<div class="cmp">${["A", "B"].map((v) => cell(w, render(S.page, { [dKey]: v }), `${tag(v)} <b>${vName(v)}</b> · ${w} × ${SIZES[w]}`)).join("")}</div>`;
+  } else {
+    const inner = (w) => (isToday ? todayInner(w) : render(S.page));
+    const lab = (w) => `${isToday ? "<b>Today</b> · " : S.page === "landing" ? `${tag(S.d1)} ` : `${tag(S.d3)} `}<b>${w} × ${SIZES[w]}</b>`;
+    if (S.view === "all") html = `<div class="row">${cell(1440, inner(1440), lab(1440), "grow")}</div><div class="row">${cell(390, inner(390), lab(390))}${cell(320, inner(320), lab(320))}</div>`;
+    else html = `<div class="row">${cell(S.view, inner(S.view), lab(S.view), S.view === "1440" ? "grow" : "")}</div>`;
+    if (isToday) html += `<p class="saved" style="margin:0">Today's <code>/demo</code> becomes the ceremony; see the pack-opening prototype. Signed-in pages were not captured (the brief limits capture to signed out).</p>`;
+  }
+  el.innerHTML = html;
+  fitFrames(el);
+  syncControls();
+}
+function syncControls() {
+  document.querySelectorAll(".seg").forEach((seg) => {
+    const k = seg.dataset.key;
+    seg.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(S[k] === b.dataset.v)));
+  });
+  document.querySelectorAll("[data-show]").forEach((g) => {
+    const tokens = g.dataset.show.split(" ");
+    g.hidden = !(tokens.includes(S.page) || (tokens.includes("compare") && S.view === "compare" && S.page !== "today"));
+  });
+  pstateSel.value = S.pstate;
+}
+document.querySelectorAll(".seg").forEach((seg) => seg.addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  S[seg.dataset.key] = b.dataset.v; S.oddsOpen = false; draw();
+}));
+pstateSel.addEventListener("change", () => { S.pstate = pstateSel.value; draw(); });
+document.getElementById("csize").addEventListener("change", (e) => { S.csize = e.target.value; draw(); });
+document.getElementById("ann").addEventListener("change", (e) => { S.ann = e.target.checked; draw(); });
+document.getElementById("frames").addEventListener("click", (e) => {
+  const a = e.target.closest("a, button"); if (!a) return;
+  if (a.tagName === "A") e.preventDefault();
+  const t = a.dataset.tab;
+  if (t && S.page === "chrome" && PAGE_HEAD[t]) { S.tab = t; draw(); return; }
+  if (a.dataset.act === "odds") { S.oddsOpen = true; draw(); return; }
+  if (a.dataset.act === "close" && (e.target === a || a.tagName === "BUTTON")) { S.oddsOpen = false; draw(); }
+});
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && S.oddsOpen) { S.oddsOpen = false; draw(); } });
+new ResizeObserver(() => fitFrames(document.getElementById("frames"))).observe(document.getElementById("frames"));
+draw();
+if (document.fonts) document.fonts.ready.then(() => fitFrames());
+
+/* ===== The owner's picks: the artifact's shared db (picks/<decision>), else a line to send in chat. ===== */
+const DECISIONS = { "landing-art": "Q1 landing art", "header-chips": "Q3 header" };
+const fmtWhen = (iso) => new Date(iso).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+function chatLine(key) {
+  const v = document.querySelector(`input[name="d-${key}"]:checked`)?.value || "<A or B>";
+  const note = document.getElementById(`n-${key}`).value.trim();
+  return `mockup redesign-pages: ${DECISIONS[key]} ${v}${note ? `, ${note}` : ""}`;
+}
+let db = null;
+function fallback() {
+  Object.keys(DECISIONS).forEach((key) => {
+    const c = document.getElementById(`c-${key}`); c.hidden = false;
+    const upd = () => { c.textContent = "Send this line in chat: " + chatLine(key); };
+    upd();
+    document.querySelectorAll(`input[name="d-${key}"], #n-${key}`).forEach((i) => i.addEventListener("input", upd));
+    const btn = document.querySelector(`[data-save="${key}"]`); btn.textContent = "Copy line";
+    btn.onclick = async () => { try { await navigator.clipboard.writeText(chatLine(key)); document.getElementById(`s-${key}`).textContent = "Copied."; } catch { document.getElementById(`s-${key}`).textContent = "Select the line and copy it."; } };
+  });
+}
+(async () => {
+  try { db = window.claude?.use ? await window.claude.use("db") : null; } catch { db = null; }
+  if (!db) { fallback(); return; }
+  Object.keys(DECISIONS).forEach((key) => {
+    const ref = db.doc(`picks/${key}`);
+    ref.onSnapshot((snap) => {
+      const s = document.getElementById(`s-${key}`);
+      if (!snap.exists) { s.textContent = "No pick saved yet."; return; }
+      const d = snap.data();
+      s.textContent = `Saved: ${d.choice}${d.note ? ` (“${d.note}”)` : ""} · ${fmtWhen(d.at)}`;
+      const r = document.querySelector(`input[name="d-${key}"][value="${d.choice}"]`); if (r && !document.querySelector(`input[name="d-${key}"]:checked`)) r.checked = true;
+      const n = document.getElementById(`n-${key}`); if (!n.value && d.note) n.value = d.note;
+    }, () => { document.getElementById(`s-${key}`).textContent = "Couldn't read saved picks."; });
+    document.querySelector(`[data-save="${key}"]`).onclick = async (e) => {
+      const v = document.querySelector(`input[name="d-${key}"]:checked`)?.value;
+      const s = document.getElementById(`s-${key}`);
+      if (!v) { s.textContent = "Choose A or B first."; return; }
+      e.target.disabled = true;
+      try { await ref.set({ choice: v, note: document.getElementById(`n-${key}`).value.trim().slice(0, 500), at: new Date().toISOString() }); }
+      catch (err) { s.textContent = "Couldn't save. Send this in chat instead: " + chatLine(key); }
+      e.target.disabled = false;
+    };
+  });
+})();
+
+</script>
