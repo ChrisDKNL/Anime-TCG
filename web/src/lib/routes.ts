@@ -3,8 +3,7 @@
  * this build, its title and its `h1`. The router's tree, the header links, the
  * guard, the return-path check and the titles all read this module, so a path
  * cannot be added to one of them and missed in another (§3.1 rule 3). `/shop`
- * joined with `feat/economy-ui`; `/market` joins `ACCOUNT_PAGES` in the PR that
- * builds it, and until then it is the not-found page like any other unknown path.
+ * joined with `feat/economy-ui`, `/market` with `feat/market-ui`.
  * The opening pages (§3.13) and `/demo` (§3.14) joined with the landing revision.
  */
 
@@ -14,6 +13,7 @@ const SITE = "Anime TCG";
 export const ACCOUNT_PAGES = {
   "/packs": { heading: "Packs", guardLine: "Log in to open your packs." },
   "/shop": { heading: "Shop", guardLine: "Log in to see the shop." },
+  "/market": { heading: "Market", guardLine: "Log in to see the market." },
   "/collection": { heading: "Collection", guardLine: "Log in to see your collection." },
   "/profile": { heading: "Profile", guardLine: "Log in to see your profile." },
   "/account": { heading: "Manage account", guardLine: "Log in to manage your account." },
@@ -47,7 +47,12 @@ export type PagePath = AccountPath | OpeningPath | PublicPath;
 export const NOT_FOUND = { heading: "Page not found", title: `Page not found · ${SITE}` } as const;
 
 /** The header's page links, in order (§3.5 step 2). `/profile` has none until roadmap item 4 (§9 decision 2). */
-export const NAV_LINKS = ["/packs", "/shop", "/collection"] as const satisfies readonly AccountPath[];
+export const NAV_LINKS = [
+  "/packs",
+  "/shop",
+  "/market",
+  "/collection",
+] as const satisfies readonly AccountPath[];
 
 /** Where every sign-in without a valid return path lands (§3.3 step 3, §2 "Remembering the last page"). */
 export const HOME_PATH = "/packs" satisfies AccountPath;

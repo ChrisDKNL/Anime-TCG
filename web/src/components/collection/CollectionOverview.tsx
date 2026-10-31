@@ -1,10 +1,15 @@
 import type { CollectionResponse } from "@anime-tcg/shared/api";
+import { searchTermsOf } from "@anime-tcg/shared/search";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useCollectionOverview, type OverviewModel } from "../../hooks/useCollectionOverview";
 import { useResultsAnnouncement } from "../../hooks/useResultsAnnouncement";
-import { resultsCopy, seriesTitle } from "../../lib/collectionCopy";
-import { searchTerms } from "../../lib/collectionSearch";
-import type { ControlsAction, IndexedEntry, OverviewControls } from "../../lib/collectionView";
+import { resultsCopy, seriesTitle, viewCopy } from "../../lib/collectionCopy";
+import {
+  COLLECTION_TABS,
+  type ControlsAction,
+  type IndexedEntry,
+  type OverviewControls,
+} from "../../lib/collectionView";
 import { LoginText } from "../account/LoginText";
 import { BUTTON } from "../account/styles";
 import { CardDialog } from "./CardDialog";
@@ -98,7 +103,13 @@ export function CollectionOverview({ data, staleSince, controls, onChange }: Pro
   return (
     <>
       <CollectionStats data={data} staleSince={staleSince} series={seriesLine(model, controls)} />
-      <ViewSwitch tab={controls.tab} disabled={false} onChange={(tab) => onChange({ type: "tab", tab })} />
+      <ViewSwitch
+        views={COLLECTION_TABS}
+        labels={viewCopy}
+        tab={controls.tab}
+        disabled={false}
+        onChange={(tab) => onChange({ type: "tab", tab })}
+      />
       {controls.tab === "cards" ? (
         <CardsView
           model={model}
@@ -241,7 +252,7 @@ function NoMatches({ query, onClear }: { query: string; onClear: () => void }) {
   return (
     <div className="flex flex-col items-center gap-3 py-12 text-center">
       <p className="text-sm break-words text-zinc-400">
-        {searchTerms(query).length > 0 ? (
+        {searchTermsOf(query).length > 0 ? (
           <LoginText text={{ template: resultsCopy.noMatchQuery, login: query }} />
         ) : (
           resultsCopy.noMatchFilters

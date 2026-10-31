@@ -14,6 +14,7 @@ import {
   type OverviewControls,
 } from "./collectionView";
 import { MAX_WAIT_SECONDS } from "./failures";
+import { DEFAULT_MARKET, marketReducer, type MarketAction, type MarketControls } from "./market";
 
 /**
  * The signed-in account's game state, held by the root layout so it survives
@@ -119,6 +120,8 @@ export interface GameState {
   waitUntil: number | null;
   /** The collection overview's search, filters, sort, view and page, kept across pages (collection-overview.md §2). */
   overview: OverviewControls;
+  /** The market's view, search, filters, sort and character filter, kept across pages (market-and-shop.md §3.2 item 4). */
+  market: MarketControls;
   /** The newest balance a receipt or a refusal carried; the header shows it when it is newer than the wallet's. */
   balance: HeldBalance | null;
 }
@@ -146,6 +149,7 @@ export type GameAction =
   | ({ type: "failed"; row: Row } & GameOwner)
   | ({ type: "noAnswer" } & GameOwner)
   | ({ type: "overview"; action: ControlsAction } & GameOwner)
+  | ({ type: "market"; action: MarketAction } & GameOwner)
   | ({ type: "balance"; balance: HeldBalance } & GameOwner)
   | ({ type: "shopBought"; pack: ShopPack; landedShowing: boolean } & GameOwner);
 
@@ -165,6 +169,7 @@ export function initialGame(accountId: string | null, session = 0): GameState {
     line: null,
     waitUntil: null,
     overview: DEFAULT_CONTROLS,
+    market: DEFAULT_MARKET,
     balance: null,
   };
 }
@@ -216,6 +221,10 @@ export function gameReducer(state: GameState, action: GameAction): GameState {
       return { ...state, shopPack: action.pack, shopPackLandedShowing: action.landedShowing };
     case "overview":
       return { ...state, overview: controlsReducer(state.overview, action.action) };
+    case "market": {
+      const market = marketReducer(state.market, action.action);
+      return market === state.market ? state : { ...state, market };
+    }
     case "balance":
       return state.balance !== null && state.balance.seq >= action.balance.seq
         ? state

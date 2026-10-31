@@ -69,6 +69,9 @@ function SignedInFrame({ game, children }: { game: Game; children: ReactNode }) 
               <PageLink to="/shop" className={NAV_LINK}>
                 {headerCopy.shop}
               </PageLink>
+              <PageLink to="/market" className={NAV_LINK}>
+                {headerCopy.market}
+              </PageLink>
               <PageLink to="/collection" className={NAV_LINK}>
                 {headerCopy.collection}{" "}
                 {/* The count leaves the screen below 400 px and stays in the accessible name. */}

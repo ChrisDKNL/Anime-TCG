@@ -197,10 +197,24 @@ describe("gameReducer", () => {
     ).toBe(state);
   });
 
-  it("a reset starts the next session empty, the overview's controls included", () => {
+  it("keeps the market's controls, for this session only; a change that changes nothing keeps the state", () => {
+    const state = run(initialGame(CHRIS), {
+      type: "market",
+      ...owner,
+      action: { type: "showCharacter", character: { id: 7, name: "Spike" } },
+    });
+    expect(state.market).toMatchObject({ view: "browse", character: { id: 7, name: "Spike" } });
+    expect(run(state, { type: "market", ...owner, action: { type: "send" } })).toBe(state);
+    expect(
+      run(state, { type: "market", accountId: CHRIS, session: 1, action: { type: "view", view: "mine" } }),
+    ).toBe(state);
+  });
+
+  it("a reset starts the next session empty, the overview's and the market's controls included", () => {
     const state = run(
       initialGame(CHRIS),
       { type: "overview", ...owner, action: { type: "toggleRarity", rarity: "epic" } },
+      { type: "market", ...owner, action: { type: "rarity", rarity: "mythic" } },
       { type: "openStarted", ...owner, key: REQUEST_ID, keepReveal: false },
       { type: "reset", accountId: CHRIS },
     );

@@ -1,5 +1,14 @@
-import type { AccountPublic, CollectionResponse, PackOpened, ShopResponse } from "@anime-tcg/shared/api";
+import type {
+  AccountPublic,
+  CollectionResponse,
+  ListingsPage,
+  ListingsQuery,
+  MarketMine,
+  PackOpened,
+  ShopResponse,
+} from "@anime-tcg/shared/api";
 import {
+  infiniteQueryOptions,
   queryOptions,
   useMutation,
   useQuery,
@@ -19,6 +28,8 @@ import {
 import {
   ApiError,
   getCollection,
+  getListings,
+  getMarketMine,
   getPacks,
   getShop,
   getWallet,
@@ -40,6 +51,7 @@ import {
   type WalletAnswer,
 } from "../lib/game";
 import type { ControlsAction } from "../lib/collectionView";
+import type { MarketAction } from "../lib/market";
 import { rethrowUnlessKnown } from "../lib/failures";
 import { packControlCopy, revealCopy } from "../lib/packsCopy";
 import type { ShellActions } from "./useShell";
@@ -59,6 +71,9 @@ const collectionKey = (owner: GameOwner | null) =>
 const walletKey = (owner: GameOwner | null) =>
   ["wallet", owner?.accountId ?? null, owner?.session ?? 0] as const;
 const shopKey = (owner: GameOwner | null) => ["shop", owner?.accountId ?? null, owner?.session ?? 0] as const;
+/** The market's reads, the listings pages and `mine`, under one prefix so an action can mark them all stale. */
+const marketKey = (owner: GameOwner | null) =>
+  ["market", owner?.accountId ?? null, owner?.session ?? 0] as const;
 
 function packsQueryOptions(owner: GameOwner | null, nextSeq: () => number, report: (err: unknown) => void) {
   return queryOptions({
@@ -128,10 +143,51 @@ function shopQueryOptions(owner: GameOwner | null, report: (err: unknown) => voi
   });
 }
 
+function marketMineQueryOptions(owner: GameOwner | null, report: (err: unknown) => void) {
+  return queryOptions({
+    queryKey: [...marketKey(owner), "mine"] as const,
+    queryFn: async (): Promise<MarketMine> => {
+      try {
+        return await getMarketMine();
+      } catch (err) {
+        report(err);
+        throw err;
+      }
+    },
+  });
+}
+
+/**
+ * The browse list for one set of parameters (market-and-shop.md §3.4): keyset pages through the
+ * server's `nextCursor`. A change of parameters is a new query, and the old one's request is aborted
+ * once nothing observes it, so an answer to older parameters never shows (§3.4 step 4).
+ */
+function listingsQueryOptions(
+  owner: GameOwner | null,
+  report: (err: unknown) => void,
+  params: ListingsQuery,
+) {
+  return infiniteQueryOptions({
+    queryKey: [...marketKey(owner), "listings", params] as const,
+    queryFn: async ({ pageParam, signal }): Promise<ListingsPage> => {
+      try {
+        return await getListings(pageParam === null ? params : { ...params, cursor: pageParam }, signal);
+      } catch (err) {
+        report(err);
+        throw err;
+      }
+    },
+    initialPageParam: null as string | null,
+    getNextPageParam: (last: ListingsPage) => last.nextCursor,
+  });
+}
+
 export type PacksQueryOptions = ReturnType<typeof packsQueryOptions>;
 export type CollectionQueryOptions = ReturnType<typeof collectionQueryOptions>;
 export type WalletQueryOptions = ReturnType<typeof walletQueryOptions>;
 export type ShopQueryOptions = ReturnType<typeof shopQueryOptions>;
+export type MarketMineQueryOptions = ReturnType<typeof marketMineQueryOptions>;
+export type ListingsQueryOptions = ReturnType<typeof listingsQueryOptions>;
 
 export interface Game {
   /** The signed-in account, as the session query last named it (a rename updates it here too). */
@@ -178,6 +234,14 @@ export interface Game {
   shownReveals: WeakSet<PackOpened>;
   /** Changes the collection overview's controls (`state.overview`). */
   changeOverview: (action: ControlsAction) => void;
+  /** The prefix of every market read of this session: an action that changes the market marks them stale. */
+  marketKey: readonly unknown[];
+  /** For the My listings view's own observer: it fetches each time the view is shown. */
+  marketMineQuery: MarketMineQueryOptions;
+  /** The Browse view's pages for a set of parameters. */
+  listingsQuery: (params: ListingsQuery) => ListingsQueryOptions;
+  /** Changes the market's controls (`state.market`). */
+  changeMarket: (action: MarketAction) => void;
 }
 
 export type OpenedFrom = "packs" | "opening";
@@ -242,6 +306,7 @@ export function useGameState({ account, shell, openingShowing, leaveOpening }: O
     queryClient.removeQueries({ queryKey: collectionKey(previous), exact: true });
     queryClient.removeQueries({ queryKey: walletKey(previous), exact: true });
     queryClient.removeQueries({ queryKey: shopKey(previous), exact: true });
+    queryClient.removeQueries({ queryKey: marketKey(previous) });
   }, [owner, queryClient]);
   const isCurrent = useCallback(
     (of: GameOwner) => current.current?.accountId === of.accountId && current.current.session === of.session,
@@ -265,6 +330,12 @@ export function useGameState({ account, shell, openingShowing, leaveOpening }: O
     [owner, nextSeq, report, serverAnswered],
   );
   const shopQuery = useMemo(() => shopQueryOptions(owner, report), [owner, report]);
+  const marketMineQuery = useMemo(() => marketMineQueryOptions(owner, report), [owner, report]);
+  const listingsQuery = useCallback(
+    (params: ListingsQuery) => listingsQueryOptions(owner, report, params),
+    [owner, report],
+  );
+  const marketPrefix = useMemo(() => marketKey(owner), [owner]);
   // Observed here but never fetched from here: the held answer stays in the cache for the whole
   // session, so returning to `/packs` shows it at once (§3.1 step 2) while the page's observer refetches.
   useQuery({ ...packsQuery, enabled: false });
@@ -402,6 +473,13 @@ export function useGameState({ account, shell, openingShowing, leaveOpening }: O
     [owner],
   );
 
+  const changeMarket = useCallback(
+    (action: MarketAction) => {
+      if (owner !== null) dispatch({ type: "market", ...owner, action });
+    },
+    [owner],
+  );
+
   const applyBalance = useCallback(
     (value: number) => {
       if (owner !== null) dispatch({ type: "balance", ...owner, balance: { seq: nextSeq(), value } });
@@ -432,6 +510,10 @@ export function useGameState({ account, shell, openingShowing, leaveOpening }: O
             shownShopPacks,
             shownReveals,
             changeOverview,
+            marketKey: marketPrefix,
+            marketMineQuery,
+            listingsQuery,
+            changeMarket,
           },
     [
       account,
@@ -450,6 +532,10 @@ export function useGameState({ account, shell, openingShowing, leaveOpening }: O
       shownShopPacks,
       shownReveals,
       changeOverview,
+      marketPrefix,
+      marketMineQuery,
+      listingsQuery,
+      changeMarket,
     ],
   );
 }

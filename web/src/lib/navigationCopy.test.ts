@@ -110,6 +110,7 @@ describe("navigation copy (§8)", () => {
       "Back to the landing page",
       "Five cards",
       "Recycle duplicates for Karma and spend it on themed packs. Karma comes only from playing. It can't be bought.",
+      "List cards for other players to buy with Karma, and buy theirs.",
     ]) {
       expect(texts).toContain(expected);
     }
@@ -122,6 +123,7 @@ describe("navigation copy (§8)", () => {
       "Rarity",
       "Collection",
       "Karma",
+      "Market",
     ]);
   });
 
@@ -156,6 +158,7 @@ describe("navigation copy (§8)", () => {
         term: "Karma",
         text: "Recycle duplicates for Karma and spend it on themed packs. Karma comes only from playing. It can't be bought.",
       },
+      { term: "Market", text: "List cards for other players to buy with Karma, and buy theirs." },
     ]);
     expect(landingCopy.odds.source(2_983, "2026-10-29T08:00:00.000Z")).toBe(
       "Drawn from 2,983 characters, as of 29 Oct 2026.",
@@ -175,6 +178,7 @@ describe("navigation copy (§8)", () => {
       "Every character has one of six tiers, set by how many AniList users favourited them.",
       "See how much of each series you have, and of the whole pool.",
       "Recycle duplicates for Karma and spend it on themed packs. Karma comes only from playing. It can't be bought.",
+      "List cards for other players to buy with Karma, and buy theirs.",
     ]);
     expect(landingText(undefined).rows[0]?.text).toBe(
       "A new pack on a timer, and a few can pile up. Five cards each.",

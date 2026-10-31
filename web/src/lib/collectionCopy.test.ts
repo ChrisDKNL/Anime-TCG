@@ -40,7 +40,11 @@ const CALLS: Record<string, string[]> = {
   "resultsCopy.of": [resultsCopy.of(34)],
   "resultsCopy.noMatchQuery": [resultsCopy.noMatchQuery("zoro")],
   "tileCopy.copies": [tileCopy.copies(1), tileCopy.copies(3)],
-  "tileCopy.label": [tileCopy.label("Spike", "epic", "Cowboy Bebop", 3)],
+  "tileCopy.label": [
+    tileCopy.label("Spike", "epic", "Cowboy Bebop", 3, 0),
+    tileCopy.label("Spike", "epic", null, 3, 2),
+  ],
+  "tileCopy.listed": [tileCopy.listed(2)],
   "tileCopy.count": [tileCopy.count(3)],
   "dialogCopy.more": [dialogCopy.more(4)],
   "dialogCopy.date": [dialogCopy.date("2026-10-29T09:00:00.000Z")],
@@ -144,10 +148,12 @@ describe("results and tile copy", () => {
   });
 
   it("names the tile with the isolated name and series, the tier and the copies", () => {
-    expect(tileCopy.label(RTL, "epic", "Cowboy Bebop", 3)).toBe(
+    expect(tileCopy.label(RTL, "epic", "Cowboy Bebop", 3, 0)).toBe(
       `\u2068${RTL}\u2069, Epic, \u2068Cowboy Bebop\u2069, 3 copies`,
     );
-    expect(tileCopy.label("Spike", "common", null, 1)).toBe("\u2068Spike\u2069, Common, 1 copy");
+    expect(tileCopy.label("Spike", "common", null, 1, 0)).toBe("\u2068Spike\u2069, Common, 1 copy");
+    expect(tileCopy.label("Spike", "epic", null, 3, 2)).toBe("\u2068Spike\u2069, Epic, 3 copies, 2 listed");
+    expect(tileCopy.listed(1_204)).toBe("1,204 listed");
     expect(tileCopy.count(1_204)).toBe("×1,204");
   });
 });
@@ -162,6 +168,7 @@ describe("dialog copy", () => {
     expect(dialogCopy.facts).toEqual({
       rarity: "Rarity",
       copies: "Copies",
+      onTheMarket: "On the market",
       firstObtained: "First obtained",
       lastObtained: "Last obtained",
     });

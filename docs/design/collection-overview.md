@@ -142,12 +142,13 @@ One listing is one card (`economy.md` §8.3): there is no quantity. Any card can
    - **201 or 200 (a replay) `Listing`**: the dialog returns to the details, which show the refetched `On the market` count, the inline status line `Listed for <P> Karma until <D Mon YYYY>, <HH:MM>. The fee is <fee> Karma if it sells.` (price, fee and `expiresAt` from the answer), and focus on the dialog heading. The field is cleared.
    - **`price_out_of_bounds`** (the bounds changed since the wallet was read): nothing was listed. The view refetches the wallet, returns to the details with the field kept, the field error showing the new bounds, and the neutral `Something changed…` notice.
    - **`not_enough_copies`** or **`request_id_reused`**: nothing was listed. The view refetches the collection, returns to the details with the new numbers and the neutral `Something changed…` notice.
-   - **`listing_limit`**: nothing was listed. The details show the red line `You have <max> cards on the market, the most at once. Cancel a listing to list another.` (`rules.maxListings`) and a text link `My listings` (`market-and-shop.md` §3.6).
+   - **`listing_limit`**: nothing was listed. The details show the red line `You have <max> cards on the market, the most at once. Cancel a listing to list this card.` (`rules.maxListings`; "another" is a word §8 bans, manager decision, 2026-10-30) and a text link `My listings` (`market-and-shop.md` §3.6).
    - **Rate limited** (429): the confirmation stays; the button reads `Try again in <S> s` from the server's seconds and counts down (the `accounts.md` §4.4-B pattern); the status line under it appears once.
    - **Any other answer from the server** (`validation_failed`, `bad_origin`, a 5xx): nothing was listed, because a listing is all or nothing. The confirmation stays with the red `The game server couldn't finish this…` banner, and the button is enabled again.
    - **No answer (network)**: the outcome is unknown, because the request may have arrived. The confirmation body is replaced by the red `Couldn't reach the game server, so this may not have gone through.` banner, `Try again` and `Cancel`. `Try again` resends **the same request with the same `requestId`**; if the first one arrived, the server answers 200 with that listing and nothing is listed twice (`economy.md` §8.8). `Cancel` discards the key, refetches the collection and returns to the details as the server now shows them. The UI never resends by itself.
    - **`unauthenticated`**: `accounts.md` §4.8.
 10. `Cancel`, or Escape on the confirmation, returns to the details with the price kept.
+11. **Settled for `feat/market-ui`** (manager decision, 2026-10-30): the key follows §3.6 item 10's rules (`useKeyedAction`; a 429's wait belongs to the dialog); `Cancel` and Escape return focus to `List…`; every answer that returns to the details puts focus on the name heading; after `price_out_of_bounds`, `not_enough_copies` or `request_id_reused` the price is kept. A listing also reads the wallet again (its `activeListings` and the bounds) and marks the market's reads stale. `See <name> on the market` clears the market's search, rarity and series as it sets the character, and keeps the sort, so no other filter hides the character. The fee preview and the net are the only Karma sums of the section, from the wallet's published rule; the server's `fee` replaces them in the answer.
 
 ### 3.6 Recycle for Karma
 
@@ -580,7 +581,7 @@ No gradients, glows, glass (backdrop blur), drop shadows, hover lift or zoom, em
 
 Exact strings. Placeholders: `<name>` the character name; `<series>` and `<title>` a series (franchise) title; `<Rarity>` the entry's granted rarity label (`RARITY_LABEL`); `<Tier>` the label of the character's current tier; `<N>` a count; `<copies>` the phrase `1 copy` / `<N> copies`; `<K>` the copies kept; `<L>` listed copies; `<A>` available copies; `<Q>` the duplicates to recycle; `<V>` the Karma per recycled duplicate (`<recycle T>`); `<total>` Q × V; `<credited>` the credit in the receipt; `<P>` the asking price; `<min>`, `<max>` the price bounds for the entry's rarity, and in the `Duplicates` hint and error `<max>` is `recyclable`; `<fee>` the market fee (preview, or the server's `Listing.fee`); `<feePct>` `feeBps` as a percentage (`5%`); `<net>` P − fee; `<days>` the listing time as `<N> days`; `<B>` the balance the server sent; `<S>` countdown seconds, or in the source line the number of series rows; `<owned>`, `<total>`, `<pct>` completion figures; `<page>`, `<pages>`; `<HH:MM>` from `Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" })`; `<D Mon YYYY>` the `metaLine` date format (`day: "numeric", month: "short", year: "numeric"`); `<query>` the search as typed. Every amount comes from the server (§3.9 dependencies); none is written into a string. Numbers use `Intl.NumberFormat("en-GB")`. `Karma` is the currency's name, one constant in `web/src/lib/copy.ts` (`economy.md` §12); every `Karma` below is that constant. The player-facing word for a franchise is "series" (§3 terms).
 
-**Words.** The words "secure", "verified", "protected", "safe", "private", "attempt", "locked" and "blocked" do not appear in any string below and must not be added (`accounts.md` §8). The market and shop words this feature needs are allowed: `Karma`, `price`, `fee`, `list`, `listed`, `listing`, `market`, `sell`, `sells`, `sold`, `buy`, `bought`, `cost`, `costs`. No other money words: no "pay", "paid", "cash", "money", "coins", "earn", "profit", "worth", "value", "balance", "wallet", "store", "checkout", "purchase", and no currency symbol. "Franchise" is not a player-facing word. **No casino nudges**: no exclamation marks; no urgency ("hurry", "ending soon", "last chance", "before it's gone", "don't miss"); no streaks; no "deal", "bargain", "discount", "save", "cheap", "steal"; no fake scarcity ("only <N> left", "rare find", "few on the market", "selling fast"); no "lucky", "jackpot", "win", "you could get", "try your luck"; no prompt near a completion threshold or after a recycle; nothing that comments on a balance going up. The copy test scans every string for these.
+**Words.** The words "secure", "verified", "protected", "safe", "private", "attempt", "locked" and "blocked" do not appear in any string below and must not be added (`accounts.md` §8). The market and shop words this feature needs are allowed: `Karma`, `price`, `fee`, `list`, `listed`, `listing`, `market`, `sell`, `sells`, `sold`, `buy`, `bought`, `cost`, `costs`. No other money words: no "pay", "paid", "cash", "money", "coins", "earn", "profit", "worth", "value", "balance", "wallet", "store", "checkout", "purchase", and no currency symbol. "Franchise" is not a player-facing word. **No casino nudges**: no exclamation marks; no urgency ("hurry", "ending soon", "last chance", "before it's gone", "don't miss"); no streaks; no "deal", "bargain", "discount", "save", "cheap", "steal"; no fake scarcity ("only <N> left", "rare find", "few on the market", "selling fast"); no "lucky", "jackpot", "win", "you could get", "try your luck"; no prompt near a completion threshold or after a recycle; nothing that comments on a balance going up. The copy test scans every string for these. **`Karma` stands only after a number** (`120 Karma`), with exactly these exceptions (manager decision, 2026-10-30): the label `Recycle for Karma`, the unit `Karma` after the `Price` field, and the market limits line's `spend <n> more Karma` (with its `receive <n> more Karma`, `market-and-shop.md` §8); the copy tests allow those and nothing else.
 
 **Header link and page**
 
@@ -684,30 +685,30 @@ Exact strings. Placeholders: `<name>` the character name; `<series>` and `<title
 
 **List on the market**
 
-| Element                                      | Copy                                                                                      |
-| -------------------------------------------- | ----------------------------------------------------------------------------------------- |
-| Section heading                              | `List on the market`                                                                      |
-| Price label                                  | `Price`                                                                                   |
-| After the field                              | `Karma`                                                                                   |
-| Hint                                         | `<min> to <max> Karma`                                                                    |
-| Fee line                                     | `Fee <fee> Karma (<feePct>). You get <net> Karma if it sells.`                            |
-| Price error                                  | `Choose a whole number from <min> to <max>.`                                              |
-| Button                                       | `List…`                                                                                   |
-| Reason, nothing available                    | `Every copy is already on the market.`                                                    |
-| Market link                                  | `See <name> on the market`                                                                |
-| Confirmation heading                         | `List <name> for <P> Karma?`                                                              |
-| Body, first sentence                         | `One <Rarity> copy goes on the market for <days>.`                                        |
-| Body, second sentence                        | ` If someone buys it, you get <net> Karma after the <fee> Karma fee.`                     |
-| Body, third sentence                         | ` It stays in your collection until it sells, and you can cancel the listing until then.` |
-| Body, only copy of the character             | ` This is your only <name>; once it sells, it stops counting toward completion.`          |
-| Body, only copy, not in the current snapshot | ` This is your only <name>, and packs no longer include this character.`                  |
-| Body, last available copy of this rarity     | ` That puts every <Rarity> copy you have on the market.`                                  |
-| Body, last sentence                          | ` A sale can't be undone.`                                                                |
-| Confirm button                               | `List for <P> Karma` / in flight `Listing…`                                               |
-| Cancel                                       | `Cancel`                                                                                  |
-| Success (inline status)                      | `Listed for <P> Karma until <D Mon YYYY>, <HH:MM>. The fee is <fee> Karma if it sells.`   |
-| Listing cap (red)                            | `You have <max> cards on the market, the most at once. Cancel a listing to list another.` |
-| Listing cap link                             | `My listings`                                                                             |
+| Element                                      | Copy                                                                                        |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| Section heading                              | `List on the market`                                                                        |
+| Price label                                  | `Price`                                                                                     |
+| After the field                              | `Karma`                                                                                     |
+| Hint                                         | `<min> to <max> Karma`                                                                      |
+| Fee line                                     | `Fee <fee> Karma (<feePct>). You get <net> Karma if it sells.`                              |
+| Price error                                  | `Choose a whole number from <min> to <max>.`                                                |
+| Button                                       | `List…`                                                                                     |
+| Reason, nothing available                    | `Every copy is already on the market.`                                                      |
+| Market link                                  | `See <name> on the market`                                                                  |
+| Confirmation heading                         | `List <name> for <P> Karma?`                                                                |
+| Body, first sentence                         | `One <Rarity> copy goes on the market for <days>.`                                          |
+| Body, second sentence                        | ` If someone buys it, you get <net> Karma after the <fee> Karma fee.`                       |
+| Body, third sentence                         | ` It stays in your collection until it sells, and you can cancel the listing until then.`   |
+| Body, only copy of the character             | ` This is your only <name>; once it sells, it stops counting toward completion.`            |
+| Body, only copy, not in the current snapshot | ` This is your only <name>, and packs no longer include this character.`                    |
+| Body, last available copy of this rarity     | ` That puts every <Rarity> copy you have on the market.`                                    |
+| Body, last sentence                          | ` A sale can't be undone.`                                                                  |
+| Confirm button                               | `List for <P> Karma` / in flight `Listing…`                                                 |
+| Cancel                                       | `Cancel`                                                                                    |
+| Success (inline status)                      | `Listed for <P> Karma until <D Mon YYYY>, <HH:MM>. The fee is <fee> Karma if it sells.`     |
+| Listing cap (red)                            | `You have <max> cards on the market, the most at once. Cancel a listing to list this card.` |
+| Listing cap link                             | `My listings`                                                                               |
 
 Here `<max>` is `rules.maxListings`.
 

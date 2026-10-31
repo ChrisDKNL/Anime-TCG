@@ -761,8 +761,12 @@ const visibleText = (page: Page, selector: string) =>
 
 function expectCopyClean(text: string) {
   for (const word of FORBIDDEN_WORDS) expect(text, `forbidden ${word}`).not.toMatch(word);
-  // `Karma` only after a number, or in the section's name `Recycle for Karma`.
-  const stray = text.replace(/\d Karma/g, "").replace(/Recycle for Karma/g, "");
+  // `Karma` only after a number, in the section's name `Recycle for Karma`, or as the unit after the
+  // List on the market price field, a line of its own (collection-overview.md §5.4).
+  const stray = text
+    .replace(/\d Karma/g, "")
+    .replace(/Recycle for Karma/g, "")
+    .replace(/^Karma$/gm, "");
   expect(stray, "Karma not after a number or in a label").not.toMatch(/Karma/);
   expect(text.replace(/free packs?\b/gi, ""), "free outside free pack(s)").not.toMatch(/\bfree\b/i);
 }

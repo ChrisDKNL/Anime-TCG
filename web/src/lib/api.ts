@@ -6,10 +6,16 @@ import type {
   DemoOpened,
   DemoResponse,
   InviteBody,
+  ListBody,
+  Listing,
+  ListingsPage,
+  ListingsQuery,
   LoginBody,
+  MarketMine,
   OpenPackBody,
   PackOpened,
   PacksResponse,
+  PurchaseReceipt,
   RecycleBody,
   RecycleReceipt,
   RegisterBody,
@@ -21,7 +27,13 @@ import type {
   SignedIn,
   Wallet,
 } from "@anime-tcg/shared/api";
-import { ERROR_CODES, type ErrorCode, type ErrorEnvelope } from "@anime-tcg/shared/errors";
+import {
+  ERROR_CODES,
+  MARKET_LIMITS,
+  type ErrorCode,
+  type ErrorEnvelope,
+  type MarketLimit,
+} from "@anime-tcg/shared/errors";
 
 /** The api answered with its error envelope: a decision the UI maps to copy (accounts-api spec §7). */
 export class ApiError extends Error {
@@ -36,14 +48,19 @@ export class ApiError extends Error {
   readonly retryAfterSeconds: number | undefined;
   /** The acting account's balance under the lock, on `insufficient_funds` only (economy.md §11.1). */
   readonly balance: number | undefined;
+  /** Which window limit a purchase hit, on `market_limit` only (economy.md §11.1). */
+  readonly limit: MarketLimit | undefined;
 
   constructor(status: number, error: ErrorEnvelope["error"], retryAfterHeader?: number) {
     super(error.message);
     this.name = "ApiError";
     this.status = status;
     this.code = error.code;
-    this.retryAfterSeconds = error.retryAfterSeconds ?? retryAfterHeader;
+    // Only seconds that count exactly; a market_limit's invalid ones reach here and are missing.
+    const own = isWholeSeconds(error.retryAfterSeconds) ? error.retryAfterSeconds : undefined;
+    this.retryAfterSeconds = own ?? retryAfterHeader;
     this.balance = error.balance;
+    this.limit = error.limit;
   }
 }
 
@@ -83,23 +100,34 @@ function isBalance(value: unknown): value is number {
   return Number.isSafeInteger(value) && Number(value) >= 0;
 }
 
-function isErrorEnvelope(value: unknown): value is ErrorEnvelope {
-  if (!isRecord(value) || !isRecord(value.error)) return false;
-  const { code, message, retryAfterSeconds, balance } = value.error;
-  const retryOk = retryAfterSeconds === undefined || isWholeSeconds(retryAfterSeconds);
-  const balanceOk = balance === undefined || isBalance(balance);
-  return isErrorCode(code) && typeof message === "string" && retryOk && balanceOk;
+function isMarketLimit(value: unknown): value is MarketLimit {
+  return typeof value === "string" && (MARKET_LIMITS as readonly string[]).includes(value);
 }
 
-async function send(method: Method, path: string, body?: object): Promise<Response> {
+function isErrorEnvelope(value: unknown): value is ErrorEnvelope {
+  if (!isRecord(value) || !isRecord(value.error)) return false;
+  const { code, message, retryAfterSeconds, balance, limit } = value.error;
+  // A market_limit is still the refusal it names when its seconds are 0 or not a number: they count as
+  // missing, and the wait falls back (manager decision, 2026-10-30). Elsewhere they void the envelope.
+  const retryOk =
+    retryAfterSeconds === undefined || isWholeSeconds(retryAfterSeconds) || code === "market_limit";
+  const balanceOk = balance === undefined || isBalance(balance);
+  const limitOk = limit === undefined || isMarketLimit(limit);
+  return isErrorCode(code) && typeof message === "string" && retryOk && balanceOk && limitOk;
+}
+
+async function send(method: Method, path: string, body?: object, signal?: AbortSignal): Promise<Response> {
   const init: RequestInit = { method, credentials: "same-origin", headers: { accept: "application/json" } };
   if (body !== undefined) {
     init.headers = { accept: "application/json", "content-type": "application/json" };
     init.body = JSON.stringify(body);
   }
+  if (signal !== undefined) init.signal = signal;
   try {
     return await fetch(path, init);
   } catch (cause) {
+    // A request the caller aborted (a newer set of market filters) is not a lost answer: no banner.
+    if (signal?.aborted === true) throw cause;
     throw new NetworkError(`${method} ${path}: no answer`, { cause });
   }
 }
@@ -133,8 +161,8 @@ function failure(res: Response, json: unknown): Error {
 }
 
 /** A route whose success carries a JSON body of type `T` (the response schema is the server's contract). */
-async function expectJson<T>(method: Method, path: string, body?: object): Promise<T> {
-  const res = await send(method, path, body);
+async function expectJson<T>(method: Method, path: string, body?: object, signal?: AbortSignal): Promise<T> {
+  const res = await send(method, path, body, signal);
   const json = await readJson(res);
   if (res.ok) return json as T;
   throw failure(res, json);
@@ -209,6 +237,57 @@ export function buyShopPack(body: ShopBuyBody): Promise<ShopReceipt> {
 /** 201 for a recycle and 200 for a replay of `requestId` carry the same receipt. */
 export function recycleDuplicates(body: RecycleBody): Promise<RecycleReceipt> {
   return expectJson<RecycleReceipt>("POST", "/api/collection/recycle", body);
+}
+
+/** The listings query's parameters, in the order the request names them. */
+const LISTINGS_PARAMS = [
+  "rarity",
+  "franchiseId",
+  "characterId",
+  "q",
+  "sort",
+  "cursor",
+] as const satisfies readonly (keyof ListingsQuery)[];
+
+/**
+ * `GET /api/market/listings`: the query's parameters as the request's query
+ * string, in a fixed order and only those set. The page's own address never
+ * carries them (market-and-shop.md §3.2 item 4). `signal` aborts a request
+ * whose parameters are no longer the toolbar's.
+ */
+export function getListings(query: ListingsQuery, signal?: AbortSignal): Promise<ListingsPage> {
+  const params = new URLSearchParams();
+  for (const name of LISTINGS_PARAMS) {
+    const value = query[name];
+    if (value !== undefined) params.set(name, value);
+  }
+  const search = params.toString();
+  const path = search === "" ? "/api/market/listings" : `/api/market/listings?${search}`;
+  return expectJson<ListingsPage>("GET", path, undefined, signal);
+}
+
+export function getMarketMine(): Promise<MarketMine> {
+  return expectJson<MarketMine>("GET", "/api/market/mine");
+}
+
+/** 201 for a new listing and 200 for a replay of `requestId` carry the same listing. */
+export function listCard(body: ListBody): Promise<Listing> {
+  return expectJson<Listing>("POST", "/api/market/listings", body);
+}
+
+/** The path segment of a listing: the server's uuid, encoded so no id can reach another route. */
+function listingPath(listingId: string, action: "buy" | "cancel"): string {
+  return `/api/market/listings/${encodeURIComponent(listingId)}/${action}`;
+}
+
+/** 201 for a purchase and 200 for a replay of `requestId` carry the same receipt; the body names no price. */
+export function buyListing(listingId: string, requestId: string): Promise<PurchaseReceipt> {
+  return expectJson<PurchaseReceipt>("POST", listingPath(listingId, "buy"), { requestId });
+}
+
+/** Idempotent on the server: an already cancelled or expired listing answers 200 with its state. */
+export function cancelListing(listingId: string): Promise<Listing> {
+  return expectJson<Listing>("POST", listingPath(listingId, "cancel"), {});
 }
 
 /** The landing page's facts: public, no session. */

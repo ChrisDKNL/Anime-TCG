@@ -147,7 +147,20 @@ export function cardCount(n: number): string {
  * §8's three-letter months. Intl's short month is locale data, not a format:
  * en-GB has written September as "Sept" since CLDR 38, so the names are fixed here.
  */
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
+export const MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+] as const;
 
 /** `D Mon YYYY` in the viewer's time zone, e.g. `5 Sep 2026`. */
 export function shortDate(isoDateTime: string): string {

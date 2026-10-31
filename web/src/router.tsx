@@ -26,6 +26,7 @@ import { CollectionPage } from "./pages/CollectionPage";
 import { DemoPage } from "./pages/DemoPage";
 import { LandingPage } from "./pages/LandingPage";
 import { LoginPage } from "./pages/LoginPage";
+import { MarketPage } from "./pages/MarketPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { PackOpeningPage } from "./pages/PackOpeningPage";
 import { PacksPage } from "./pages/PacksPage";
@@ -118,11 +119,12 @@ const routeTree = rootRoute.addChildren([
       beforeLoad: replaceOnLoad("/shop/open"),
       component: ShopOpenPage,
     }),
+    createRoute({ getParentRoute: () => accountLayout, path: "/market", component: MarketPage }),
     createRoute({ getParentRoute: () => accountLayout, path: "/collection", component: CollectionPage }),
     createRoute({ getParentRoute: () => accountLayout, path: "/profile", component: ProfilePage }),
     createRoute({ getParentRoute: () => accountLayout, path: "/account", component: AccountPage }),
   ]),
-  // Everything else, `/market` included until its PR (§3.1 rule 1).
+  // Everything else (§3.1 rule 1).
   createRoute({ getParentRoute: () => rootRoute, path: "$", component: NotFoundPage }),
 ]);
 

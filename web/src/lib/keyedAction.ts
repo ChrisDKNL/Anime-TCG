@@ -1,9 +1,9 @@
-import type { ErrorCode } from "@anime-tcg/shared/errors";
+import type { ErrorCode, MarketLimit } from "@anime-tcg/shared/errors";
 import { ApiError, NetworkError } from "./api";
 import { rateLimitWaitSeconds } from "./game";
 
 /**
- * What one answer to a balance-changing request (a shop purchase, a recycle)
+ * What one answer to a balance-changing request (a shop purchase, a recycle, a listing, a market purchase)
  * means to its confirmation, whatever the request was
  * (collection-overview.md §3.5 step 9, market-and-shop.md §3.3 step 6).
  * Every outcome is the server's; the browser decides none.
@@ -11,8 +11,17 @@ import { rateLimitWaitSeconds } from "./game";
 export type Outcome<R> =
   /** 201, or 200 on a replay of the key. */
   | { kind: "answered"; result: R }
-  /** Any envelope but `rate_limited` and `unauthenticated`: nothing changed, and the caller names it by `code`. */
-  | { kind: "refused"; code: ErrorCode; balance: number | undefined }
+  /**
+   * Any envelope but `rate_limited` and `unauthenticated`: nothing changed, and the caller names it by
+   * `code`. `balance` is on `insufficient_funds`; `limit` and `retryAfterSeconds` on `market_limit`.
+   */
+  | {
+      kind: "refused";
+      code: ErrorCode;
+      balance: number | undefined;
+      limit: MarketLimit | undefined;
+      retryAfterSeconds: number | undefined;
+    }
   /** 429 from the rate limiter: the wait from `Retry-After`, capped at `MAX_WAIT_SECONDS`. */
   | { kind: "rateLimited"; seconds: number }
   /** No answer at all: the request may or may not have arrived. */
@@ -29,7 +38,13 @@ export function failureOutcome(err: unknown): Outcome<never> {
     case "rate_limited":
       return { kind: "rateLimited", seconds: rateLimitWaitSeconds(err.retryAfterSeconds) };
     default:
-      return { kind: "refused", code: err.code, balance: err.balance };
+      return {
+        kind: "refused",
+        code: err.code,
+        balance: err.balance,
+        limit: err.limit,
+        retryAfterSeconds: err.retryAfterSeconds,
+      };
   }
 }
 

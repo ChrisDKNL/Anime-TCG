@@ -1,4 +1,4 @@
-import type { ErrorCode } from "@anime-tcg/shared/errors";
+import type { ErrorCode, MarketLimit } from "@anime-tcg/shared/errors";
 import { describe, expect, it } from "vitest";
 import { ApiError, NetworkError } from "./api";
 import { MAX_WAIT_SECONDS } from "./failures";
@@ -8,9 +8,13 @@ import { failureOutcome, keepsKey } from "./keyedAction";
 function apiError(
   status: number,
   code: ErrorCode,
-  extra: { retryAfterSeconds?: number; balance?: number } = {},
+  extra: { retryAfterSeconds?: number; balance?: number; limit?: MarketLimit } = {},
 ) {
   return new ApiError(status, { code, message: code, ...extra });
+}
+
+function refused(code: ErrorCode, balance?: number) {
+  return { kind: "refused", code, balance, limit: undefined, retryAfterSeconds: undefined } as const;
 }
 
 describe("failureOutcome (collection-overview.md §3.5 step 9)", () => {
@@ -55,6 +59,18 @@ describe("failureOutcome (collection-overview.md §3.5 step 9)", () => {
     }
   });
 
+  it("market_limit carries which limit it hit and when it frees up, never capped: the date is shown as sent", () => {
+    expect(
+      failureOutcome(apiError(409, "market_limit", { retryAfterSeconds: 400_000, limit: "pair" })),
+    ).toEqual({
+      kind: "refused",
+      code: "market_limit",
+      balance: undefined,
+      limit: "pair",
+      retryAfterSeconds: 400_000,
+    });
+  });
+
   it("rethrows anything that is not an api answer: a bug in this client", () => {
     const bug = new TypeError("bug");
     expect(() => failureOutcome(bug)).toThrow(bug);
@@ -66,8 +82,8 @@ describe("keepsKey (packs-page.md §3.3)", () => {
     expect(keepsKey({ kind: "noAnswer" })).toBe(true);
     expect(keepsKey({ kind: "rateLimited", seconds: 5 })).toBe(true);
     expect(keepsKey({ kind: "answered", result: {} })).toBe(false);
-    expect(keepsKey({ kind: "refused", code: "insufficient_funds", balance: 0 })).toBe(false);
-    expect(keepsKey({ kind: "refused", code: "internal", balance: undefined })).toBe(false);
+    expect(keepsKey(refused("insufficient_funds", 0))).toBe(false);
+    expect(keepsKey(refused("internal"))).toBe(false);
     expect(keepsKey({ kind: "sessionEnded" })).toBe(false);
   });
 });

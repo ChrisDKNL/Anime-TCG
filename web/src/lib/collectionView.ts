@@ -1,6 +1,7 @@
 import type { CollectionEntry, CollectionResponse, FranchiseRef, Rarity } from "@anime-tcg/shared/api";
 import { RARITIES } from "@anime-tcg/shared/rarity";
-import { matchesTerms, normalise, searchTerms } from "./collectionSearch";
+import { normaliseSearchText, searchTermsOf } from "@anime-tcg/shared/search";
+import { matchesTerms } from "./collectionSearch";
 
 /**
  * The collection overview's view of the server's answer (collection-overview.md
@@ -20,6 +21,9 @@ export const SERIES_SORTS = ["popular", "title"] as const;
 export type SeriesSort = (typeof SERIES_SORTS)[number];
 
 export type CollectionTab = "cards" | "series";
+
+/** The view switch's order (§3.2 step 5); `viewCopy` names them. */
+export const COLLECTION_TABS: readonly CollectionTab[] = ["cards", "series"];
 
 export interface OverviewControls {
   tab: CollectionTab;
@@ -109,7 +113,7 @@ export function controlsReducer(state: OverviewControls, action: ControlsAction)
 /** Whether the search or any filter differs from its default; the sort is not a filter (§3.3 `Clear filters`). */
 export function filtersActive(controls: OverviewControls): boolean {
   return (
-    searchTerms(controls.query).length > 0 ||
+    searchTermsOf(controls.query).length > 0 ||
     controls.rarities.length > 0 ||
     controls.series !== null ||
     controls.duplicatesOnly
@@ -147,7 +151,7 @@ export function indexCollection(data: CollectionResponse): IndexedEntry[] {
       franchises,
       series: primary?.title ?? null,
       lastObtained: Date.parse(entry.lastObtainedAt),
-      searchFields: texts.flatMap((text) => (text === null ? [] : [normalise(text)])),
+      searchFields: texts.flatMap((text) => (text === null ? [] : [normaliseSearchText(text)])),
     };
   });
 }
@@ -193,7 +197,7 @@ export type OverviewFilters = Pick<OverviewControls, "query" | "rarities" | "ser
 
 /** Search, rarity, series and duplicates combined with AND (§3.3); keeps the order it is given. */
 export function filterEntries(entries: readonly IndexedEntry[], filters: OverviewFilters): IndexedEntry[] {
-  const terms = searchTerms(filters.query);
+  const terms = searchTermsOf(filters.query);
   const { rarities, series, duplicatesOnly } = filters;
   return entries.filter(
     ({ entry, searchFields }) =>
