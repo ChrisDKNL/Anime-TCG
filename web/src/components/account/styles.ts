@@ -79,6 +79,8 @@ export const ERROR_TEXT = "text-xs text-danger";
 
 export const ALERT_BANNER =
   "flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-900/60 bg-red-950/40 p-4 text-sm text-red-200";
+/** The alert banner's `Try again`: 44 px on a phone (visual-identity.md §6.1), the Volt ring (§5.4). */
+export const BANNER_BUTTON = `min-h-11 rounded-control bg-red-800/60 px-3 py-1 font-medium hover:bg-red-700/60 disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0 ${FOCUS_RING}`;
 export const STATUS_BANNER = "rounded-xl border border-zinc-800 bg-zinc-900 p-4 text-sm text-zinc-200";
 
 /**

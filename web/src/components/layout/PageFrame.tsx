@@ -3,7 +3,7 @@ import { useFrame } from "../../hooks/useFrame";
 import { banners } from "../../lib/copy";
 import { fontsCopy, footerCopy, headerCopy } from "../../lib/navigationCopy";
 import { focusPageHeading, PAGE_HEADING_ID } from "../../lib/pageFocus";
-import { ALERT_BANNER, STATUS_BANNER } from "../account/styles";
+import { ALERT_BANNER, BANNER_BUTTON, STATUS_BANNER } from "../account/styles";
 import { FOOTER_LINK, SKIP_LINK } from "./styles";
 
 interface Props {
@@ -41,12 +41,7 @@ export function PageFrame({ header, children, skipLink = true }: Props) {
         {frame?.notice === "unreachable" && (
           <div role="alert" className={ALERT_BANNER}>
             <span>{banners.unreachable}</span>
-            <button
-              type="button"
-              onClick={frame.onRetry}
-              disabled={frame.retrying}
-              className="rounded-lg bg-red-800/60 px-3 py-1 font-medium hover:bg-red-700/60 disabled:opacity-50"
-            >
+            <button type="button" onClick={frame.onRetry} disabled={frame.retrying} className={BANNER_BUTTON}>
               {banners.tryAgain}
             </button>
           </div>

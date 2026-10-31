@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   ACCOUNT_CONTROL,
   AVATAR,
+  BANNER_BUTTON,
   BUTTON,
   ERROR_TEXT,
   FOCUS_RING,
@@ -33,6 +34,12 @@ describe("touch targets", () => {
 
   it.each(controlTargets)("%s is 48 px tall below sm and 44 px from sm up", (_, classes) => {
     expect(tokens(classes)).toEqual(expect.arrayContaining(["min-h-12", "sm:min-h-11"]));
+  });
+
+  it("the alert banner's Try again is 44 px tall below sm and shows the Volt ring", () => {
+    expect(tokens(BANNER_BUTTON)).toEqual(
+      expect.arrayContaining(["min-h-11", "sm:min-h-0", ...tokens(FOCUS_RING)]),
+    );
   });
 
   it("the Account control is 44 px tall at every width (§10.2)", () => {

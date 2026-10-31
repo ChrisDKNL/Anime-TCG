@@ -489,6 +489,18 @@ test.describe("the zinc remap (§12.1)", () => {
     expect(missing).toEqual([]);
   });
 
+  test("every element Tab reaches shows the Volt ring with the unreachable banner up", async ({
+    page,
+    api,
+  }) => {
+    api.on("GET /api/session", envelope(500, "internal"));
+    await page.goto("/packs");
+    await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
+    await settle(page);
+    const missing = await ringless(page, 25);
+    expect(missing).toEqual([]);
+  });
+
   test("the Account menu's items show focus with the Volt ring", async ({ page, api }) => {
     api.on("GET /api/session", signedIn(CHRIS));
     await visit(page, "/packs");
@@ -1049,6 +1061,14 @@ test.describe("sizes at 320 px", () => {
     await page.getByRole("button", { name: "Delete account…" }).click();
     await check("Delete dialog");
     expect(sideways).toEqual([]);
+  });
+
+  test("the unreachable banner's Try again is 44 px or more", async ({ page, api }) => {
+    api.on("GET /api/session", envelope(500, "internal"));
+    await page.goto("/packs");
+    await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
+    await settle(page);
+    expect(await smallTargets(page, "unreachable")).toEqual([]);
   });
 
   test("every control is 44 px or more and every primary or secondary 48, signed out", async ({
