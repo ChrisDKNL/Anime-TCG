@@ -27,8 +27,7 @@ describe("touch targets", () => {
   const controlTargets: Array<[string, string]> = [
     ["primary button", BUTTON.primary],
     ["secondary button", BUTTON.secondary],
-    ["danger outline button", BUTTON.dangerOutline],
-    ["danger solid button", BUTTON.dangerSolid],
+    ["danger button", BUTTON.danger],
     ["text field, which holds the Show/Hide toggle", INPUT],
   ];
 
@@ -74,7 +73,7 @@ describe("the identity's controls", () => {
   });
 
   it("every filled kind, disabled or aria-disabled, is a night-800 block with ink-500 words that hover does not change", () => {
-    for (const kind of ["primary", "secondary", "dangerOutline", "dangerSolid"] as const) {
+    for (const kind of ["primary", "secondary", "danger"] as const) {
       expect(tokens(BUTTON[kind]), kind).toEqual(
         expect.arrayContaining([
           "disabled:bg-night-800",

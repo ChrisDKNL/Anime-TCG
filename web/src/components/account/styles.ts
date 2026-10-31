@@ -25,20 +25,17 @@ const DISABLED = [
  */
 const CONTROL_BOX = `min-h-12 rounded-control border px-5 py-2 text-[15px] font-bold sm:min-h-11 ${FOCUS_RING} ${DISABLED}`;
 
-/** The Danger kind, Delete account only: the section's button and the confirmation's. */
-const DANGER = `${CONTROL_BOX} border-danger bg-night-850 text-danger hover:bg-night-800`;
-
 /** The Text kind's colours (§10.4), for every text button and text link that copies its look. */
 export const TEXT_KIND =
   "text-ink-300 hover:text-ink-100 hover:underline disabled:cursor-not-allowed disabled:text-ink-500 disabled:hover:no-underline aria-disabled:cursor-not-allowed aria-disabled:text-ink-500 aria-disabled:hover:no-underline";
 
-export type ButtonKind = "primary" | "secondary" | "dangerOutline" | "dangerSolid" | "text";
+export type ButtonKind = "primary" | "secondary" | "danger" | "text";
 
 export const BUTTON: Record<ButtonKind, string> = {
   primary: `${CONTROL_BOX} border-transparent bg-volt text-volt-ink hover:bg-volt-hover active:bg-volt-press`,
   secondary: `${CONTROL_BOX} border-night-600 bg-night-850 text-ink-100 hover:bg-night-800 active:border-ink-400 active:bg-night-800`,
-  dangerOutline: DANGER,
-  dangerSolid: DANGER,
+  /** The one Danger kind, Delete account only: the section's button and the confirmation's. */
+  danger: `${CONTROL_BOX} border-danger bg-night-850 text-danger hover:bg-night-800`,
   /** The Show/Hide toggles: 44 px on phone (§6.1), 28 px from `sm` up, inside the field. */
   text: `h-11 rounded px-1 text-xs font-medium sm:h-7 ${TEXT_KIND} ${FOCUS_RING}`,
 };

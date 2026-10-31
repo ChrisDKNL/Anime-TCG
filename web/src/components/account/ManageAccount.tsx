@@ -71,7 +71,7 @@ export function ManageAccount({ account, onRenamed, onDeleted }: Props) {
           ref={deleteTriggerRef}
           type="button"
           onClick={openConfirm}
-          className={`${BUTTON.dangerOutline} self-start`}
+          className={`${BUTTON.danger} self-start`}
         >
           {manageCopy.deleteTrigger}
         </button>
@@ -308,7 +308,7 @@ function ConfirmDelete({ account, onCancel, onDeleted }: ConfirmDeleteProps) {
         <SubmitButton
           blocked={form.deleting || waiting}
           disabled={form.password.length === 0}
-          className={`${BUTTON.dangerSolid} w-full break-words sm:w-auto ${waiting ? "tabular-nums" : ""}`}
+          className={`${BUTTON.danger} w-full break-words sm:w-auto ${waiting ? "tabular-nums" : ""}`}
         >
           <LoginText text={label} />
         </SubmitButton>
