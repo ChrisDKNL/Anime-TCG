@@ -250,7 +250,7 @@ No new tokens. Everything reuses `collection-overview.md` §6: the card and rari
 
 ## 8. Copy
 
-The word rules, placeholders and number formats of `collection-overview.md` §8 apply. New placeholders: `<price>` a listing's or a theme's price; `<title>` a theme's title (the owner's, rendered as text, `dir="auto"`); `<pack price>` a theme's price; `<window>` the market window in days (`7 days`); `<purchases>`, `<spend>`, `<proceeds>` the `left` figures; `<D Mon>` the date without the year.
+The word rules, placeholders and number formats of `collection-overview.md` §8 apply, its `Karma` rule included: only after a number, except the label `Recycle for Karma` and the limits line's `spend <spend> more Karma` and `receive <proceeds> more Karma` (manager decision, 2026-10-30). New placeholders: `<price>` a listing's or a theme's price; `<title>` a theme's title (the owner's, rendered as text, `dir="auto"`); `<pack price>` a theme's price; `<window>` the market window in days (`7 days`); `<purchases>`, `<spend>`, `<proceeds>` the `left` figures; `<D Mon>` the date without the year.
 
 **Header and pages**
 

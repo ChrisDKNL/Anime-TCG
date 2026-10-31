@@ -1175,8 +1175,11 @@ function copyProblems(strings: readonly string[]): string[] {
     if (text === "Karma" || text === "Recycle for Karma") continue;
     for (const match of text.matchAll(/Karma/g)) {
       const before = text.slice(0, match.index);
-      // "<n> more Karma" is the limits line as market-and-shop.md §8 words it.
-      if (!/\d( more)? $/.test(before)) problems.push(`Karma not after a number: ${text}`);
+      // `spend <n> more Karma` (and `receive <n> more Karma`) is the limits line as market-and-shop.md
+      // §8 words it, the one exception after a number (manager decision, 2026-10-30).
+      if (!/\d $|\b(?:spend|receive) [\d,]+ more $/.test(before)) {
+        problems.push(`Karma not after a number: ${text}`);
+      }
     }
   }
   return problems;

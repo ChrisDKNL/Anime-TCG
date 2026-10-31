@@ -99,13 +99,18 @@ describe("market copy words (collection-overview.md §8, market-and-shop.md §8)
     expect(offenders).toEqual([]);
   });
 
-  it("says Karma only after a number (`500 more Karma` included) or as a label", () => {
-    for (const text of rendered) {
-      for (const match of text.matchAll(/(\S*) Karma\b/g)) {
-        expect(match[1], text).toMatch(/^(?:[\d,]+|more)$/);
-      }
-    }
+  it("says Karma only after a number, with exactly the exceptions §8 names (manager decision, 2026-10-30)", () => {
+    // The limits line's `spend <n> more Karma` (and its `receive <n> more Karma`), and the unit label
+    // after the price field; the label `Recycle for Karma` is economy copy, outside this module.
+    const stray = (text: string) =>
+      text
+        .replace(/\b(?:spend|receive) [\d,]+ more Karma\b/g, "")
+        .replace(/[\d,]+ Karma\b/g, "")
+        .replace(/^Karma$/, "");
+    expect(rendered.filter((text) => /Karma/.test(stray(text)))).toEqual([]);
     expect(listCopy.afterField).toBe("Karma");
+    expect(stray("You have more Karma.")).toMatch(/Karma/);
+    expect(stray("buy 2 more Karma")).toMatch(/Karma/);
   });
 
   it("names no other account: no login appears in any string", () => {
