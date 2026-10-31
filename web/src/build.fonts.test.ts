@@ -1,4 +1,5 @@
-import { dirname, join } from "node:path";
+// @vitest-environment node
+import { fileURLToPath } from "node:url";
 import { build, type Rollup } from "vite";
 import { describe, expect, it } from "vitest";
 
@@ -14,11 +15,11 @@ import { describe, expect, it } from "vitest";
  */
 
 async function buildInMemory(): Promise<Rollup.OutputBundle[number][]> {
-  // This file's own path: jsdom gives `import.meta.url` no file scheme. `web/` is the folder above `src/`.
-  const root = dirname(dirname(expect.getState().testPath!));
+  // `web/`, the folder above this file's `src/`.
+  const root = fileURLToPath(new URL("..", import.meta.url));
   const result = await build({
     root,
-    configFile: join(root, "vite.config.ts"),
+    configFile: fileURLToPath(new URL("../vite.config.ts", import.meta.url)),
     logLevel: "silent",
     build: { write: false },
   });
