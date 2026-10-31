@@ -1,11 +1,11 @@
 import type { Listing, ListingsPage, PurchaseReceipt } from "@anime-tcg/shared/api";
 import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { buyListing, cancelListing, isApiError } from "../lib/api";
 import { failureOutcome, type Outcome } from "../lib/keyedAction";
 import { blocksEveryListing, limitBlock, withoutListing, type LimitBlock } from "../lib/market";
 import { useGame } from "./useGame";
-import { useKeyedAction, type KeyedAction, type RateLimitWait } from "./useKeyedAction";
+import { useKeyedAction, useRateLimitWait, type KeyedAction, type RateLimitWait } from "./useKeyedAction";
 import { useShellContext } from "./useShell";
 
 /** The market's reads after an action: the listing leaves every browse page held, and the rest is read again. */
@@ -109,10 +109,8 @@ export interface BuyListing {
  * the header, the listing leaves the browse list and the collection is marked
  * stale, even if the dialog is gone by then.
  */
-export function useBuyListing(
-  listing: Listing,
-  { wait, blocks, balance }: { wait: RateLimitWait; blocks: MarketBlocks; balance: number | null },
-): BuyListing {
+export function useBuyListing(listing: Listing, balance: number | null): BuyListing {
+  const { wait, blocks } = useMarketActions();
   const { applyBalance } = useGame();
   const refresh = useMarketRefresh();
   const [stage, setStage] = useState<BuyStage>("details");
@@ -327,4 +325,32 @@ export function useCancelListing(wait: RateLimitWait): CancelListing {
   );
 
   return { cancel, cancelling };
+}
+
+/**
+ * What the Market page holds for its views and dialogs (market-and-shop.md §3.8): the 429 wait that
+ * buying and cancelling share, the `market_limit` refusals, and the cancels in flight. The page
+ * creates them once and provides them, so closing a dialog or switching views keeps them.
+ */
+export interface MarketActions {
+  wait: RateLimitWait;
+  blocks: MarketBlocks;
+  cancel: CancelListing;
+}
+
+export const MarketActionsContext = createContext<MarketActions | null>(null);
+
+/** The Market page's actions, for the page to provide through `MarketActionsContext`. */
+export function useMarketActionsState(): MarketActions {
+  const wait = useRateLimitWait();
+  const blocks = useMarketBlocks();
+  const cancel = useCancelListing(wait);
+  return useMemo(() => ({ wait, blocks, cancel }), [wait, blocks, cancel]);
+}
+
+/** The actions of the Market page this component is part of; only the page's views and dialogs call it. */
+export function useMarketActions(): MarketActions {
+  const actions = useContext(MarketActionsContext);
+  if (actions === null) throw new Error("useMarketActions needs the Market page's MarketActionsContext");
+  return actions;
 }

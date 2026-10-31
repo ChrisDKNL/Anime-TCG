@@ -1,14 +1,12 @@
 import type { CollectionEntry, FranchiseRef, Listing } from "@anime-tcg/shared/api";
 import { useId, useLayoutEffect, useRef, useState, type RefObject, type SyntheticEvent } from "react";
-import type { RateLimitWait } from "../../hooks/useKeyedAction";
 import { useCountdown } from "../../hooks/useCountdown";
 import {
   cancelEnded,
   useBuyListing,
+  useMarketActions,
   type BuyListing,
-  type CancelListing,
   type CancelResult,
-  type MarketBlocks,
 } from "../../hooks/useMarketActions";
 import type { SeriesName } from "../../lib/collectionSeries";
 import { actionCopy } from "../../lib/economyCopy";
@@ -36,9 +34,6 @@ interface Props {
   stale: boolean;
   /** `rules.window.seconds`, for the limit line; null without the wallet. */
   windowSeconds: number | null;
-  wait: RateLimitWait;
-  blocks: MarketBlocks;
-  cancel: CancelListing;
   /** The dialog has closed, with nothing in flight: the page returns focus to the grid. */
   onClose: () => void;
 }
@@ -53,12 +48,12 @@ interface Props {
  * dialog, so it cannot close on an unknown outcome. It mounts per opening.
  */
 export function ListingDialog(props: Props) {
-  const { listing, balance, wait, blocks, onClose } = props;
+  const { listing, balance, onClose } = props;
   const ref = useRef<HTMLDialogElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const buyRef = useRef<HTMLButtonElement>(null);
   const headingId = useId();
-  const buy = useBuyListing(listing, { wait, blocks, balance });
+  const buy = useBuyListing(listing, balance);
   const { stage, action } = buy;
   const focusBuy = useRef(false);
 
@@ -173,8 +168,6 @@ function Details({
   held,
   balance,
   stale,
-  cancel,
-  wait,
   buy,
   headingId,
   headingRef,
@@ -246,7 +239,7 @@ function Details({
         </ul>
         <div className="border-t border-zinc-800 pt-5">
           {listing.mine ? (
-            <OwnListing listing={listing} cancel={cancel} wait={wait} />
+            <OwnListing listing={listing} />
           ) : (
             <div className="flex flex-col items-start gap-1">
               <button
@@ -273,15 +266,8 @@ function Details({
 }
 
 /** §3.4 step 7: the player's own listing offers no buy, only `Cancel listing`, whose answer shows in place. */
-function OwnListing({
-  listing,
-  cancel,
-  wait,
-}: {
-  listing: Listing;
-  cancel: CancelListing;
-  wait: RateLimitWait;
-}) {
+function OwnListing({ listing }: { listing: Listing }) {
+  const { cancel, wait } = useMarketActions();
   const [result, setResult] = useState<CancelResult | null>(null);
   const cancelling = cancel.cancelling.has(listing.listingId);
   const ended = result !== null && cancelEnded(result);
@@ -314,7 +300,6 @@ function BuyConfirmation({
   listing,
   balance,
   windowSeconds,
-  blocks,
   buy,
   onBack,
   headingId,
@@ -329,6 +314,7 @@ function BuyConfirmation({
 }) {
   const bodyId = useId();
   const { action, line, noAnswer } = buy;
+  const { blocks } = useMarketActions();
   const block = blocks.blockFor(listing.listingId);
   const left = useCountdown(block?.until ?? null);
   const limited = block !== null && left !== null && left > 0;

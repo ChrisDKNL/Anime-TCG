@@ -4,8 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { useDelayedFlag } from "../../hooks/useDelayedFlag";
 import { useGame } from "../../hooks/useGame";
-import type { RateLimitWait } from "../../hooks/useKeyedAction";
-import { cancelEnded, type CancelListing, type CancelResult } from "../../hooks/useMarketActions";
+import { cancelEnded, useMarketActions, type CancelResult } from "../../hooks/useMarketActions";
 import { actionCopy } from "../../lib/economyCopy";
 import { mineCopy } from "../../lib/marketCopy";
 import { BUTTON } from "../account/styles";
@@ -22,11 +21,6 @@ interface Cancelled {
   result: CancelResult;
 }
 
-interface Props {
-  cancel: CancelListing;
-  wait: RateLimitWait;
-}
-
 /**
  * My listings (market-and-shop.md §3.6, §5.3, §7): `GET /api/market/mine`,
  * read each time the view is shown and after a cancel, in four parts: the
@@ -34,8 +28,9 @@ interface Props {
  * listings closed and the cards bought in the last 30 days. Every figure is
  * the server's; the one sum is a listing's net, its price less its own fee.
  */
-export function MyListings({ cancel, wait }: Props) {
+export function MyListings() {
   const game = useGame();
+  const { cancel } = useMarketActions();
   const mine = useQuery(game.marketMineQuery);
   // §3.6 step 1: showing the view reads the wallet too, whose rules its headings name.
   useQuery(game.walletQuery);
@@ -77,14 +72,7 @@ export function MyListings({ cancel, wait }: Props) {
       {last !== null && cancelEnded(last.result) && (
         <CancelLine result={last.result} name={last.listing.character.name} statusRef={statusRef} />
       )}
-      <Active
-        data={mine.data}
-        rules={rules}
-        cancel={cancel}
-        wait={wait}
-        last={last}
-        onCancel={(listing) => void run(listing)}
-      />
+      <Active data={mine.data} rules={rules} last={last} onCancel={(listing) => void run(listing)} />
       <Part heading={mineCopy.limitsHeading(rules?.window.seconds ?? null)}>
         <p className="text-sm text-zinc-300 tabular-nums">{mineCopy.limits(mine.data.left)}</p>
       </Part>
@@ -145,18 +133,15 @@ function Rows<T>({
 function Active({
   data,
   rules,
-  cancel,
-  wait,
   last,
   onCancel,
 }: {
   data: MarketMine;
   rules: KarmaRules | null;
-  cancel: CancelListing;
-  wait: RateLimitWait;
   last: Cancelled | null;
   onCancel: (listing: Listing) => void;
 }) {
+  const { cancel, wait } = useMarketActions();
   return (
     <Part heading={mineCopy.activeHeading(data.active.length, rules?.maxListings ?? null)}>
       <Rows

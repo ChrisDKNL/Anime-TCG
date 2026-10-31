@@ -3,8 +3,6 @@ import { keepPreviousData, useInfiniteQuery, useQueryClient } from "@tanstack/re
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useDelayedFlag } from "../../hooks/useDelayedFlag";
 import { useGame } from "../../hooks/useGame";
-import type { RateLimitWait } from "../../hooks/useKeyedAction";
-import type { CancelListing, MarketBlocks } from "../../hooks/useMarketActions";
 import { useResultsAnnouncement } from "../../hooks/useResultsAnnouncement";
 import { seriesNames } from "../../lib/collectionSeries";
 import {
@@ -38,9 +36,6 @@ export const MARKET_RESULTS_ID = "market-results";
 
 interface Props {
   controls: MarketControls;
-  wait: RateLimitWait;
-  blocks: MarketBlocks;
-  cancel: CancelListing;
 }
 
 /**
@@ -51,7 +46,7 @@ interface Props {
  * previous list stays until it arrives, and an answer to older parameters is
  * never shown. The listing dialog opens over the grid.
  */
-export function MarketBrowse({ controls, wait, blocks, cancel }: Props) {
+export function MarketBrowse({ controls }: Props) {
   const game = useGame();
   const queryClient = useQueryClient();
   const { changeMarket, marketKey } = game;
@@ -213,9 +208,6 @@ export function MarketBrowse({ controls, wait, blocks, cancel }: Props) {
           balance={game.balance}
           stale={game.wallet.isError}
           windowSeconds={rules?.window.seconds ?? null}
-          wait={wait}
-          blocks={blocks}
-          cancel={cancel}
           onClose={() => onClose(open)}
         />
       )}
