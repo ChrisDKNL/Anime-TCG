@@ -8,6 +8,7 @@ import {
   OPENING_PAGES,
   openingPath,
   PUBLIC_PAGES,
+  pageEyebrow,
   pageHeading,
   pagePath,
   pageTitle,
@@ -18,6 +19,51 @@ import {
   toReturnPath,
   withoutTrailingSlash,
 } from "./routes";
+
+describe("the eyebrows (visual-identity.md §10.1)", () => {
+  it("names every page's eyebrow as the identity's table has it, in sentence case", () => {
+    expect(
+      Object.fromEntries(
+        (
+          [
+            "/",
+            "/demo",
+            "/packs",
+            "/packs/open",
+            "/shop/open",
+            "/collection",
+            "/shop",
+            "/market",
+            "/profile",
+            "/account",
+            "/login",
+            "/register",
+          ] as const
+        ).map((path) => [path, pageEyebrow(path)]),
+      ),
+    ).toEqual({
+      "/": "Anime character cards",
+      "/demo": "Try a pack",
+      "/packs": "Timer packs",
+      "/packs/open": "Timer packs",
+      "/shop/open": "Themed packs",
+      "/collection": "Your cards",
+      "/shop": "Themed packs",
+      "/market": "Player trades",
+      "/profile": "Player",
+      "/account": "Settings",
+      "/login": "Welcome back",
+      "/register": "Invite only",
+    });
+    expect(NOT_FOUND.eyebrow).toBe("404");
+  });
+
+  it("gives an opening page the eyebrow of the page its pack came from", () => {
+    for (const [path, { section }] of Object.entries(OPENING_PAGES)) {
+      expect(pageEyebrow(openingPath(path) ?? "/"), path).toBe(pageEyebrow(section));
+    }
+  });
+});
 
 describe("the route list (§3.1)", () => {
   it("holds exactly the pages of this build", () => {
