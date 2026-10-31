@@ -84,6 +84,8 @@ describe("App boot", () => {
       vi.advanceTimersByTime(1);
     });
     expect(screen.getByRole("status")).toHaveTextContent("Loading…");
+    // visual-identity.md §5.4: text is never ink-500 (4.36:1); the muted text colour is ink-400.
+    expect(screen.getByRole("status")).toHaveClass("text-ink-400");
   });
 
   it("unreachable: red banner with Try again above a usable landing page; Try again recovers, the pool facts too", async () => {

@@ -11,7 +11,7 @@ export function BootFrame({ showLoading }: { showLoading: boolean }) {
   return (
     <PageFrame header={<Wordmark />} skipLink={false}>
       {showLoading && (
-        <p role="status" className="text-sm text-zinc-500">
+        <p role="status" className="text-sm text-ink-400">
           {banners.loading}
         </p>
       )}
