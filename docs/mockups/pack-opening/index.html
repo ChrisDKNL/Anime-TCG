@@ -1,0 +1,1312 @@
+<title>Anime TCG Pack Opening</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wdth,wght@12..96,75..100,200..800&family=Figtree:wght@300..900&family=Martian+Mono:wght@100..800&display=swap">
+<!-- Throwaway mockup by mockup-artist. Generated from one source; edit freely, nothing in web/ depends on it. -->
+<style>
+/* ===== APP KIT: the proposed identity (visual-identity.md §4, §5, §6, §12). Always dark, as the app is (§2). ===== */
+:root {
+  /* §12.1 */
+  --night-950: #07080f; --night-900: #0e1020; --night-850: #151830; --night-800: #1d2140; --night-700: #2a2f55; --night-600: #3a4070;
+  --ink-100: #eef0fa; --ink-200: #dde0ee; --ink-300: #c3c7dc; --ink-400: #9aa0bd; --ink-500: #6e7493;
+  --volt: #c8f031; --volt-hover: #d9f86a; --volt-press: #b3d924; --volt-ink: #07080f; --ion: #5cd6f5; --danger: #ff9b8f;
+  --sleeve-night: #1f2a44; --sleeve-plum: #2b1f3d; --sleeve-pine: #13322e; --sleeve-rust: #3a2418; --sleeve-olive: #2e2e14; --sleeve-petrol: #1a2f3f;
+  --sleeve-radiant: #f3eeff; --sleeve-radiant-ink: #3a2f66;
+  /* card-and-rarity.md §10 (unchanged, from web/src/index.css) */
+  --r-common: #9a9da6; --r-uncommon: #3cc7a9; --r-rare: #6f95ec; --r-epic: #e04563; --r-legendary: #f5b84a; --r-mythic: #b79ff0;
+  --rt-common: #9a9da6; --rt-uncommon: #3cc7a9; --rt-rare: #6f95ec; --rt-epic: #e45b76; --rt-legendary: #f5b84a; --rt-mythic: #b79ff0;
+  --card-ink: #eceaf3; --card-ink-muted: #bcb8c9; --card-ink-subtle: #a6a3b6; --card-chip: rgb(18 19 32 / 0.9); --card-glint: rgb(255 255 255 / 0.5);
+  --glow-epic: 0 0 24px rgb(224 69 99 / 0.4); --glow-legendary: 0 0 30px rgb(245 184 74 / 0.45); --glow-mythic: 0 0 34px rgb(170 140 240 / 0.5);
+  --tell-rare: 0 0 16px rgb(111 149 236 / 0.35);
+  --frame-common: #686b73; --frame-uncommon: #2fb79c; --frame-rare: #2a4fa8;
+  --frame-epic: conic-gradient(from 45deg, #8e1730, #e04563, #8e1730, #c22c4b, #8e1730);
+  --frame-legendary: conic-gradient(from 45deg, #a8641a, #f5b84a, #c27b22, #ffd57a, #a8641a);
+  --frame-mythic: linear-gradient(120deg, #b79ff0, #ece3ff, #8f6fe0, #d9cdfb, #a88ff0, #f3eeff, #b79ff0);
+  --flat-common: #686b73; --flat-uncommon: #2fb79c; --flat-rare: #2a4fa8; --flat-epic: #c22c4b; --flat-legendary: #c27b22; --flat-mythic: #a88ff0;
+  --card-face:
+    radial-gradient(circle at 20% 15%, rgba(255, 255, 255, 0.8) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 75% 22%, rgba(255, 255, 255, 0.6) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 55% 35%, rgba(255, 255, 255, 0.5) 0 1px, transparent 1.5px),
+    linear-gradient(180deg, #1b1e36, #121320 65%);
+  /* §12.5 */
+  --card-back-field:
+    radial-gradient(circle at 12% 30%, rgb(255 255 255 / .3) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 84% 64%, rgb(255 255 255 / .3) 0 1px, transparent 1.5px),
+    radial-gradient(circle at 30% 86%, rgb(255 255 255 / .25) 0 1px, transparent 1.5px),
+    var(--card-face);
+  --sleeve-sheen: linear-gradient(100deg, transparent 30%, rgb(255 255 255 / .06) 45%, transparent 60%);
+  --stage-bg: radial-gradient(120% 80% at 50% 110%, #151830 0%, #07080f 60%);
+  /* §12.4, §9.3 */
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1); --ease-in-out-sine: cubic-bezier(0.37, 0, 0.63, 1); --ease-snap: cubic-bezier(0.5, 0, 0.1, 1);
+  /* §12.2. Google Fonts serves the same OFL families the spec self-hosts from npm. */
+  --f-display: "Bricolage Grotesque", ui-sans-serif, system-ui, sans-serif;
+  --f-sans: "Figtree", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --f-mono: "Martian Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* A frame is a fake viewport: container queries stand in for the app's media queries (sm 640, lg 1024). */
+.vp { container: vp / size; position: relative; overflow: hidden; background: var(--night-950); }
+.app { font-family: var(--f-sans); color: var(--ink-100); background: var(--night-950); font-size: 16px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+.app *, .app *::before, .app *::after { box-sizing: border-box; }
+.app :where(h1, h2, h3, p, ol, ul, figure, table) { margin: 0; }
+.app :where(ol, ul) { padding: 0; list-style: none; }
+.app :where(button) { font: inherit; color: inherit; background: none; border: 0; padding: 0; cursor: pointer; }
+.app :where(a) { color: inherit; text-decoration: none; }
+.app :focus { outline: none; }
+.app :focus-visible { outline: 2px solid var(--volt); outline-offset: 2px; }
+.app .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* Type roles (§4.2). `font-optical-sizing: none` keeps opsz at its default, as the npm wdth.css build (no opsz axis) would. */
+.d { font-family: var(--f-display); font-weight: 800; font-stretch: 85%; font-optical-sizing: none; }
+.t-hero { font-size: 48px; line-height: .9; letter-spacing: -.02em; }
+.t-title { font-size: 36px; line-height: .95; letter-spacing: -.015em; }
+.t-section { font-size: 24px; line-height: 1.05; letter-spacing: -.01em; font-weight: 750; font-stretch: 90%; }
+@container vp (min-width: 640px) { .t-hero { font-size: 72px; } .t-title { font-size: 48px; } .t-section { font-size: 28px; } }
+@container vp (min-width: 1024px) { .t-hero { font-size: 96px; } .t-title { font-size: 56px; } }
+.t-tier { font-family: var(--f-display); font-weight: 800; font-stretch: 75%; font-optical-sizing: none; font-size: clamp(3.5rem, 18cqw, 10rem); line-height: .85; letter-spacing: .01em; text-transform: uppercase; }
+.t-sub { font-size: 17px; line-height: 1.3; font-weight: 700; }
+.t-small { font-size: 14px; line-height: 1.45; }
+.t-xs { font-size: 12px; line-height: 1.4; font-weight: 500; }
+.eyebrow { font-family: var(--f-mono); font-size: 11px; line-height: 1.2; letter-spacing: .12em; font-weight: 500; text-transform: uppercase; color: var(--ink-400); }
+@container vp (min-width: 640px) { .eyebrow { font-size: 12px; } }
+.num { font-family: var(--f-mono); font-size: 13px; line-height: 1.2; font-weight: 500; font-variant-numeric: tabular-nums; }
+.tab { font-variant-numeric: tabular-nums; }
+.tx-common { color: var(--rt-common); } .tx-uncommon { color: var(--rt-uncommon); } .tx-rare { color: var(--rt-rare); }
+.tx-epic { color: var(--rt-epic); } .tx-legendary { color: var(--rt-legendary); } .tx-mythic { color: var(--rt-mythic); }
+
+/* Buttons (§10.4) */
+.btn { display: inline-flex; align-items: center; justify-content: center; min-height: 48px; padding: 0 20px; border-radius: 10px; font: 700 15px/1 var(--f-sans); white-space: nowrap; }
+@container vp (min-width: 640px) { .btn { min-height: 44px; } }
+.btn-primary { background: var(--volt); color: var(--volt-ink); }
+.btn-primary:hover { background: var(--volt-hover); } .btn-primary:active { background: var(--volt-press); }
+.btn-primary[aria-disabled="true"] { background: var(--night-800); color: var(--ink-500); cursor: not-allowed; }
+.btn-secondary { background: var(--night-850); border: 1px solid var(--night-600); color: var(--ink-100); font-weight: 600; }
+.btn-secondary:hover { background: var(--night-800); } .btn-secondary:active { border-color: var(--ink-400); }
+.btn-text { color: var(--ink-300); font: 600 14px/1.2 var(--f-sans); min-height: 44px; display: inline-flex; align-items: center; }
+.btn-text:hover { color: var(--ink-100); text-decoration: underline; }
+.link-u { color: var(--ink-200); text-decoration: underline; text-decoration-color: var(--night-600); text-underline-offset: 2px; }
+
+/* ===== The card face (card-and-rarity.md §3, unchanged; type families from §6.3 / §7.1) ===== */
+.card { position: relative; display: block; aspect-ratio: 5 / 7; width: 100%; border-radius: 12px; padding: 5px; }
+.card.sz-stage { border-radius: 14px; padding: 6px; }
+.card .face { display: flex; flex-direction: column; height: 100%; min-width: 0; overflow: hidden; border-radius: 8px; background: var(--card-face); }
+.card.sz-stage .face { border-radius: 9px; }
+.card .head { display: flex; flex-direction: column; gap: 3px; padding: 9px 10px 7px; min-width: 0; }
+.card.sz-stage .head { gap: 4px; padding: 12px 13px 9px; }
+.card .nm { display: block; font: 700 13px/1.2 var(--f-sans); color: var(--card-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card.sz-stage .nm { font-size: 17px; }
+.card .st { display: block; font-size: 11px; letter-spacing: 2px; line-height: 1; white-space: nowrap; font-variant-emoji: text; }
+.card.sz-stage .st { font-size: 14px; letter-spacing: 3px; }
+.card .art { position: relative; flex: 1; min-height: 0; margin: 0 8px; border-radius: 6px; overflow: hidden; }
+.card.sz-stage .art { margin: 0 11px; border-radius: 8px; }
+.card .art svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.card .rk { position: absolute; bottom: 7px; left: 7px; border-radius: 3px; padding: 1px 4px; background: var(--card-chip); font: 500 11px/1.25 var(--f-mono); color: var(--card-ink-subtle); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.card.sz-stage .rk { bottom: 9px; left: 9px; border-radius: 4px; padding: 1px 5px; font-size: 13px; }
+.card .sr-line { display: block; padding: 9px 10px; font: 500 12px/1.2 var(--f-sans); color: var(--card-ink-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.card.sz-stage .sr-line { padding: 12px 13px; font-size: 15px; }
+.fr-common { background: var(--frame-common); } .fr-uncommon { background: var(--frame-uncommon); } .fr-rare { background: var(--frame-rare); }
+.fr-epic { background: var(--frame-epic); } .fr-legendary { background: var(--frame-legendary); }
+.fr-mythic { background: var(--frame-mythic); background-size: 300% 300%; background-position: 0% 40%; }
+.gl-epic { box-shadow: var(--glow-epic); } .gl-legendary { box-shadow: var(--glow-legendary); } .gl-mythic { box-shadow: var(--glow-mythic); }
+.fx-glint::after { content: ""; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; background: linear-gradient(105deg, transparent 42%, var(--card-glint) 50%, transparent 56%); background-size: 260% 100%; background-position: 130% 0; animation: card-glint 5.5s ease-in-out infinite; animation-delay: calc(var(--ph, 0) * -1s); }
+.fx-pearl { animation: card-pearl 7s ease-in-out infinite; animation-delay: calc(var(--ph, 0) * -1s); }
+@keyframes card-glint { 0%, 60% { background-position: 130% 0; } 100% { background-position: -130% 0; } }
+@keyframes card-pearl { 0%, 100% { background-position: 0% 40%; } 50% { background-position: 100% 60%; } }
+.rm .fx-glint::after { content: none; } .rm .fx-pearl { animation: none; }
+
+/* ===== The card back: the Orbit (§7.2). Sizes scale with the card (container units of the back). ===== */
+.back { container-type: inline-size; position: relative; aspect-ratio: 5 / 7; width: 100%; border-radius: 12px; padding: 5px; background: var(--night-600); }
+.back.sz-stage { border-radius: 14px; padding: 6px; }
+.back .field { position: relative; height: 100%; border-radius: 8px; background: var(--card-back-field); overflow: hidden; }
+.back .orb { position: absolute; left: 50%; top: 42%; width: 62cqw; transform: translate(-50%, -50%); }
+.back .wm { position: absolute; left: 0; right: 0; top: 80%; transform: translateY(-50%); text-align: center; }
+.back .wm b { display: block; font: 800 7.2cqw/1 var(--f-display); font-stretch: 85%; font-optical-sizing: none; color: var(--ink-300); }
+.back .wm i { display: block; margin-top: 1.6cqw; font: 500 4.45cqw/1.2 var(--f-mono); letter-spacing: .12em; text-transform: uppercase; font-style: normal; color: var(--ink-400); }
+.back.t-common { background: var(--flat-common); } .back.t-uncommon { background: var(--flat-uncommon); } .back.t-rare { background: var(--flat-rare); box-shadow: var(--tell-rare); }
+.back.t-epic { background: var(--flat-epic); } .back.t-legendary { background: var(--flat-legendary); }
+.back.t-mythic { background: var(--frame-mythic); background-size: 300% 300%; background-position: 0% 40%; }
+.back .glow { position: absolute; inset: 0; border-radius: inherit; pointer-events: none; }
+.back.t-epic .glow { box-shadow: var(--glow-epic); } .back.t-legendary .glow { box-shadow: var(--glow-legendary); } .back.t-mythic .glow { box-shadow: var(--glow-mythic); }
+.back.breathe .glow { animation: tell-breathe 1.6s var(--ease-in-out-sine) infinite; }
+.back.breathe.t-mythic { animation: card-pearl 7s ease-in-out infinite; }
+.rm .back.breathe .glow, .rm .back.breathe.t-mythic { animation: none; }
+@keyframes tell-breathe { 0%, 100% { opacity: .6; } 50% { opacity: 1; } }
+.orb svg { display: block; width: 100%; height: auto; overflow: visible; }
+
+/* ===== Sleeves (§8) ===== */
+.sleeve { container-type: inline-size; position: relative; aspect-ratio: 5 / 7.6; width: 100%; border-radius: 14px; overflow: hidden; color: var(--ink-100); }
+.sleeve .sbody { position: absolute; inset: 0; background: var(--sleeve-sheen), var(--sc, var(--sleeve-night)); }
+.sleeve .seam { position: absolute; left: 0; right: 0; top: 0; height: 12%; background: repeating-linear-gradient(90deg, var(--night-600) 0 1px, transparent 1px 5px) 0 30% / 100% 40% no-repeat, linear-gradient(rgb(0 0 0 / .02), rgb(0 0 0 / .02)), var(--sc, var(--sleeve-night)); filter: brightness(.98); }
+.sleeve .tear { position: absolute; left: 0; top: calc(12% - 2px); height: 2px; width: calc(var(--tear, 0) * 100%); background: var(--volt); }
+.sleeve .orb { position: absolute; left: 50%; top: 40%; width: 58cqw; transform: translate(-50%, -50%); }
+.sleeve .nb { position: absolute; left: 0; right: 0; bottom: 0; height: 28%; padding: 0 9cqw; display: flex; flex-direction: column; justify-content: center; }
+.sleeve .nb b { font: 800 11.1cqw/1 var(--f-display); font-stretch: 80%; font-optical-sizing: none; letter-spacing: -.01em; }
+.sleeve .nb i { font: 500 max(6.5px, 4.6cqw)/1.25 var(--f-mono); letter-spacing: .12em; text-transform: uppercase; font-style: normal; color: var(--ink-400); margin-top: 2.6cqw; }
+.sleeve .km { position: absolute; right: 6cqw; top: calc(12% + 5cqw); padding: 1.5cqw 3cqw; border-radius: 8px; background: rgb(7 8 15 / .6); font: 500 max(6.5px, 4.6cqw)/1.2 var(--f-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-100); }
+.sleeve.radiant { color: var(--sleeve-radiant-ink); }
+.sleeve.radiant .sbody, .sleeve.radiant .seam { --sc: var(--sleeve-radiant); }
+.sleeve.radiant .nb i { color: var(--sleeve-radiant-ink); }
+
+/* ===== Header, chips, tab bar (§10.2, §10.3) ===== */
+.hdr { position: sticky; top: 0; z-index: 5; height: 56px; background: var(--night-900); display: flex; align-items: center; gap: 12px; padding: 0 16px; }
+@container vp (min-width: 640px) { .hdr { padding: 0 24px; } }
+.hdr .in { display: flex; align-items: center; gap: 12px; width: 100%; max-width: 72rem; margin: 0 auto; min-width: 0; }
+.wordmark { font: 800 20px/1 var(--f-display); font-stretch: 85%; font-optical-sizing: none; color: var(--ink-100); white-space: nowrap; min-height: 44px; display: inline-flex; align-items: center; }
+.navlinks { display: none; gap: 4px; margin-left: 16px; }
+@container vp (min-width: 640px) { .navlinks { display: flex; } }
+.navlinks a { gap: 4px; position: relative; min-height: 44px; display: inline-flex; align-items: center; padding: 0 10px; font: 600 14px/1 var(--f-sans); color: var(--ink-400); }
+.navlinks a:hover { color: var(--ink-200); }
+.navlinks a[aria-current="page"] { color: var(--ink-100); }
+.navlinks a[aria-current="page"]::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: 8px; height: 2px; background: var(--volt); }
+.chips { display: flex; gap: 8px; margin-left: auto; align-items: center; }
+.chip { height: 32px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border-radius: 8px; background: var(--night-850); border: 1px solid var(--night-700); white-space: nowrap; }
+.chip .num { color: var(--ink-100); }
+.chip.karma .num { color: var(--ion); }
+.chip .w { font: 500 12px/1 var(--f-sans); color: var(--ink-400); }
+@container vp (max-width: 359px) { .chip.karma .w { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); } }
+.karma-plain { margin-left: auto; white-space: nowrap; font-size: 14px; }
+.karma-plain .num { color: var(--ion); font-size: 14px; }
+.karma-plain .w { color: var(--ink-400); }
+.acct { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 8px 0 6px; border-radius: 10px; background: var(--night-850); font: 600 14px/1 var(--f-sans); color: var(--ink-200); }
+.acct .av { width: 28px; height: 28px; border-radius: 50%; background: var(--night-700); display: inline-flex; align-items: center; justify-content: center; font: 700 12px/1 var(--f-sans); color: var(--ink-100); text-transform: uppercase; }
+.acct .nmx { display: none; }
+@container vp (min-width: 640px) { .acct .nmx { display: inline; } }
+@container vp (max-width: 639px) { .acct { padding: 0 8px; width: 44px; justify-content: center; } }
+.hdr-out { display: flex; gap: 12px; margin-left: auto; align-items: center; }
+.hdr-out .btn-secondary { min-height: 40px; padding: 0 14px; font-size: 14px; }
+
+.tabbar { position: sticky; bottom: 0; z-index: 6; height: 64px; background: var(--night-900); box-shadow: 0 -1px 0 var(--night-700); display: grid; grid-template-columns: repeat(5, 1fr); align-items: end; }
+.tabbar a { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; height: 64px; color: var(--ink-400); font: 600 11px/1 var(--f-sans); }
+.tabbar a svg { width: 22px; height: 22px; }
+.tabbar a[aria-current="page"] { color: var(--ink-100); }
+.tabbar a[aria-current="page"]:not(.centre)::before { content: ""; position: absolute; top: 6px; width: 16px; height: 2px; background: var(--volt); }
+.tabbar a:active svg { transform: translateY(1px); }
+.tabbar .centre { justify-content: flex-end; padding-bottom: 9px; }
+.tabbar .centre .disc { position: absolute; top: -12px; left: 50%; margin-left: -28px; width: 56px; height: 56px; border-radius: 50%; background: var(--volt); color: var(--volt-ink); display: flex; align-items: center; justify-content: center; }
+.tabbar .centre .disc svg { width: 20px; height: 28px; }
+.tabbar .centre .cnt { position: absolute; top: -4px; right: -4px; min-width: 18px; height: 18px; padding: 0 4px; border-radius: 9px; background: var(--night-950); color: var(--ink-100); font: 500 10px/18px var(--f-mono); text-align: center; }
+.tabbar .centre[aria-current="page"] { color: var(--ink-100); }
+@container vp (min-width: 640px) { .tabbar { display: none; } }
+
+.page { max-width: 72rem; margin: 0 auto; padding-left: 16px; padding-right: 16px; }
+@container vp (min-width: 640px) { .page { padding-left: 24px; padding-right: 24px; } }
+.ph .eyebrow { margin-bottom: 8px; }
+.ph .stat { margin-top: 10px; font-size: 14px; color: var(--ink-300); }
+.ftr { margin-top: 80px; padding: 24px 16px 32px; border-top: 1px solid var(--night-700); text-align: center; font-size: 12px; line-height: 1.5; color: var(--ink-400); }
+.ftr p + p { margin-top: 6px; }
+.ftr a { text-decoration: underline; text-underline-offset: 2px; }
+
+/* ===== Annotations ===== */
+.nis { outline: 1.5px dashed #ff6bd6; outline-offset: 3px; position: relative; }
+.nis-tag, .spec-tag { position: absolute; z-index: 30; font: 600 9.5px/1 var(--f-mono); letter-spacing: .02em; padding: 3px 5px; border-radius: 3px; white-space: nowrap; pointer-events: none; text-transform: none; }
+.nis-tag { background: #ff6bd6; color: #1a0016; top: -14px; left: -2px; }
+.spec-tag { background: rgb(255 255 255 / .9); color: #10131f; }
+.no-ann .nis { outline: none; } .no-ann .nis-tag, .no-ann .spec-tag { display: none; }
+
+.app.col { display: flex; flex-direction: column; min-height: 100%; }
+.app.col > main { flex: 1 0 auto; }
+
+/* ===== Mockup chrome (the tool around the frames). Theme-aware; the frames themselves are always the app's dark. ===== */
+/* Layout: a control strip over a column of real-size frames, the owner's decisions underneath. */
+:root {
+  --c-bg: #eceef4; --c-panel: #ffffff; --c-fg: #161827; --c-muted: #555b75; --c-line: #d3d6e3; --c-accent: #2f3a9e; --c-accent-ink: #ffffff; --c-soft: #e2e5f0;
+  --c-a: #2f3a9e; --c-b: #8a3b12;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --c-bg: #101119; --c-panel: #191b27; --c-fg: #e6e8f2; --c-muted: #a1a6bf; --c-line: #2d3044; --c-accent: #aab4ff; --c-accent-ink: #10121f; --c-soft: #23263a; --c-a: #aab4ff; --c-b: #f0a874; color-scheme: dark; } }
+:root[data-theme="dark"] { --c-bg: #101119; --c-panel: #191b27; --c-fg: #e6e8f2; --c-muted: #a1a6bf; --c-line: #2d3044; --c-accent: #aab4ff; --c-accent-ink: #10121f; --c-soft: #23263a; --c-a: #aab4ff; --c-b: #f0a874; color-scheme: dark; }
+body { background: var(--c-bg); color: var(--c-fg); font: 15px/1.5 var(--f-sans); margin: 0; }
+.wrap { max-width: 1520px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 64px; }
+.top h1 { font: 800 30px/1.05 var(--f-display); font-stretch: 85%; letter-spacing: -.015em; margin: 0; text-wrap: balance; }
+.top .kick { font: 500 11px/1.2 var(--f-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--c-muted); margin: 0 0 6px; }
+.top p.sub { margin: 8px 0 0; color: var(--c-muted); max-width: 70ch; }
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 50; margin: 16px 0 20px; background: var(--c-panel); border: 1px solid var(--c-line); border-radius: 12px; padding: 10px 12px; display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; }
+body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 60; background: var(--c-bg); }
+.grp { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.grp > .lbl { font: 500 10.5px/1.2 var(--f-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--c-muted); }
+.seg { display: inline-flex; background: var(--c-soft); border-radius: 8px; padding: 3px; gap: 2px; flex-wrap: wrap; }
+.seg button { font: 600 13px/1 var(--f-sans); color: var(--c-muted); background: none; border: 0; border-radius: 6px; padding: 8px 10px; cursor: pointer; white-space: nowrap; }
+.seg button[aria-pressed="true"] { background: var(--c-panel); color: var(--c-fg); box-shadow: 0 1px 2px rgb(0 0 0 / .12); }
+.seg button:focus-visible, .chk input:focus-visible, select:focus-visible, textarea:focus-visible, .pickbtn:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
+.seg button .v { font-family: var(--f-mono); font-weight: 600; margin-right: 4px; }
+.chk { display: inline-flex; align-items: center; gap: 6px; font: 600 13px/1 var(--f-sans); cursor: pointer; }
+select { font: 600 13px/1 var(--f-sans); color: var(--c-fg); background: var(--c-soft); border: 0; border-radius: 8px; padding: 8px 10px; }
+.frames { display: flex; flex-direction: column; gap: 28px; }
+.row { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-start; }
+.row > .fcell { flex: 0 0 auto; min-width: 0; max-width: 100%; }
+.fcell.grow { flex: 1 1 100%; width: 100%; }
+[hidden] { display: none !important; }
+.fl { font: 500 11px/1.2 var(--f-mono); color: var(--c-muted); margin-bottom: 8px; display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.fl b { color: var(--c-fg); font-weight: 600; }
+.fl .tagv { font-weight: 700; padding: 2px 6px; border-radius: 4px; color: var(--c-accent-ink); }
+.fw { position: relative; border-radius: 6px; box-shadow: 0 0 0 1px var(--c-line), 0 10px 30px rgb(0 0 0 / .18); overflow: hidden; }
+.fw > .vp { position: absolute; top: 0; left: 0; }
+.vp > .scroller { height: 100%; overflow: auto; overscroll-behavior: contain; }
+.today-img { display: block; width: 100%; height: auto; }
+.today-none { padding: 32px; color: #9aa0bd; font: 15px/1.5 var(--f-sans); }
+.cmp { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 28px; }
+.decide { margin-top: 40px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 420px), 1fr)); gap: 20px; }
+.dcard { background: var(--c-panel); border: 1px solid var(--c-line); border-radius: 12px; padding: 18px 20px; min-width: 0; }
+.dcard h2 { font: 800 21px/1.15 var(--f-display); font-stretch: 85%; margin: 0 0 4px; }
+.dcard .q { color: var(--c-muted); margin: 0 0 12px; font-size: 14px; }
+.opt { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; padding: 10px 0; border-top: 1px solid var(--c-line); }
+.opt input { margin-top: 4px; accent-color: var(--c-accent); width: 16px; height: 16px; }
+.opt b { font-weight: 700; } .opt .tr { grid-column: 2; color: var(--c-muted); font-size: 14px; }
+.opt .rec { font: 600 10px/1 var(--f-mono); letter-spacing: .08em; text-transform: uppercase; padding: 3px 5px; border-radius: 4px; background: var(--c-soft); color: var(--c-muted); margin-left: 6px; vertical-align: 2px; }
+textarea { width: 100%; box-sizing: border-box; min-height: 64px; margin-top: 10px; font: 14px/1.4 var(--f-sans); color: var(--c-fg); background: var(--c-bg); border: 1px solid var(--c-line); border-radius: 8px; padding: 8px 10px; resize: vertical; }
+.pickrow { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 10px; }
+.pickbtn { font: 700 14px/1 var(--f-sans); background: var(--c-accent); color: var(--c-accent-ink); border: 0; border-radius: 8px; padding: 10px 16px; cursor: pointer; }
+.pickbtn[disabled] { opacity: .5; cursor: default; }
+.saved { font-size: 13px; color: var(--c-muted); }
+.chatline { margin-top: 10px; font: 12px/1.4 var(--f-mono); background: var(--c-soft); border-radius: 6px; padding: 8px 10px; overflow-wrap: anywhere; }
+.legend { margin-top: 40px; display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 20px 32px; font-size: 14px; color: var(--c-muted); }
+.legend h3 { font: 500 11px/1.2 var(--f-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--c-fg); margin: 0 0 8px; }
+.legend ul { margin: 0; padding-left: 18px; } .legend li { margin: 4px 0; }
+.legend code { font: 12px var(--f-mono); }
+.nis-key { display: inline-block; width: 22px; height: 12px; outline: 1.5px dashed #ff6bd6; vertical-align: -1px; margin-right: 4px; }
+@media (prefers-reduced-motion: reduce) { .vp * { transition: none !important; } }
+
+/* ===== Landing (§11.2) ===== */
+.hero { position: relative; overflow: hidden; padding: 24px 0 48px; }
+@container vp (min-width: 640px) { .hero { padding: 48px 0 72px; } }
+@container vp (min-width: 1024px) { .hero { padding: 64px 0 88px; } }
+.hero .stars { position: absolute; inset: 0; pointer-events: none;
+  background: radial-gradient(circle at 12% 30%, rgb(255 255 255 / .3) 0 1px, transparent 1.5px), radial-gradient(circle at 84% 64%, rgb(255 255 255 / .3) 0 1px, transparent 1.5px), radial-gradient(circle at 30% 86%, rgb(255 255 255 / .25) 0 1px, transparent 1.5px);
+  background-size: 190px 170px; }
+.hero .horizon { position: absolute; left: 50%; top: 68%; width: 160cqw; aspect-ratio: 1; transform: translateX(-50%); border: 1.5px solid var(--night-700); border-radius: 50%; pointer-events: none; }
+.hero-in { position: relative; display: grid; grid-template-areas: "head" "art" "body"; row-gap: 20px; }
+@container vp (min-width: 640px) { .hero-in { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "head art" "body art"; column-gap: 32px; row-gap: 20px; align-items: end; } }
+@container vp (min-width: 1024px) { .hero-in { column-gap: 64px; } }
+.hero .head { grid-area: head; } .hero .body { grid-area: body; align-self: start; }
+.hero .head .eyebrow { margin-bottom: 8px; }
+.hero .lede { max-width: 36rem; color: var(--ink-300); font-size: 16px; }
+@container vp (min-width: 640px) { .hero .lede { font-size: 18px; } }
+.hero .cta { margin-top: 20px; display: flex; flex-direction: column; gap: 10px; align-items: stretch; max-width: 36rem; }
+@container vp (min-width: 640px) { .hero .cta { align-items: flex-start; } }
+.hero .disc { font-size: 14px; color: var(--ink-400); }
+.artcol { grid-area: art; position: relative; justify-self: center; }
+@container vp (min-width: 640px) { .artcol { align-self: center; } }
+.artcol .fan { position: absolute; width: var(--cw); top: 0; transform-origin: 50% 85%; }
+.artcol .slv { position: absolute; width: var(--sw); left: 50%; transform: translateX(-50%); }
+/* sizes: desktop reveal size 180 px; phone cards 110 px, sleeve 96 px (§11.2) */
+.artcol { --cw: 110px; --sw: 96px; width: 230px; height: var(--ah); }
+.artcol.fanA { --ah: 250px; } .artcol.fanB { --ah: 168px; width: 120px; }
+@container vp (min-width: 640px) { .artcol { --cw: 180px; --sw: 180px; width: 340px; } .artcol.fanA { --ah: 448px; } .artcol.fanB { --ah: 274px; width: 180px; } }
+.artcol.fanB .slv { top: auto; bottom: 0; }
+.artcol.fanA .slv { bottom: 0; }
+
+.sec { margin-top: 80px; }
+.sec h2 { margin-bottom: 16px; }
+.tiers { display: grid; grid-auto-flow: column; grid-auto-columns: 92px; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; padding-bottom: 8px; margin: 0 -16px; padding-left: 16px; padding-right: 16px; scrollbar-width: thin; }
+@container vp (min-width: 640px) { .tiers { grid-auto-flow: row; grid-template-columns: repeat(6, minmax(0, 1fr)); overflow: visible; margin: 0; padding: 0; max-width: 46rem; } }
+.tiers li { scroll-snap-align: start; display: flex; flex-direction: column; gap: 8px; }
+.tiers .back, .tiers .back .glow { box-shadow: none !important; }
+.tiers .w { font: 700 14px/1.2 var(--f-sans); }
+
+.steps { border-top: 1px solid var(--night-700); max-width: 46rem; }
+.steps li { border-bottom: 1px solid var(--night-700); padding: 16px 0; display: grid; grid-template-columns: 56px minmax(0, 1fr); column-gap: 12px; align-items: baseline; }
+@container vp (min-width: 640px) { .steps li { grid-template-columns: 64px 9rem minmax(0, 1fr); column-gap: 24px; } }
+.steps .n { font: 800 40px/1 var(--f-display); font-stretch: 85%; font-optical-sizing: none; color: var(--ink-500); grid-row: span 2; }
+@container vp (min-width: 640px) { .steps .n { grid-row: auto; } }
+.steps h3 { font-size: 17px; font-weight: 700; line-height: 1.3; }
+.steps p { font-size: 14px; color: var(--ink-300); }
+
+.odds { width: 100%; max-width: 40rem; border-collapse: collapse; font-size: 14px; }
+.odds th, .odds td { border-bottom: 1px solid var(--night-700); padding: 9px 0; }
+.odds thead th { font: 500 12px/1.3 var(--f-sans); color: var(--ink-400); text-align: right; }
+.odds thead th:first-child { text-align: left; }
+.odds tbody th { text-align: left; font-weight: 500; white-space: nowrap; }
+.odds .sw { display: inline-block; width: 10px; aspect-ratio: 5 / 7; border-radius: 2px; vertical-align: middle; margin-right: 8px; }
+.odds .ss { display: none; letter-spacing: 2px; margin-right: 6px; font-size: 12px; }
+@container vp (min-width: 640px) { .odds .ss { display: inline; } }
+.odds td { text-align: right; }
+.odds td.num { font-size: 13px; color: var(--ink-200); }
+.odds td.bar { width: 96px; padding-left: 12px; text-align: left; }
+.odds .trk { display: block; width: 80px; height: 6px; background: var(--night-800); border-radius: 1px; }
+.odds .trk i { display: block; height: 100%; border-radius: 1px; }
+.src { margin-top: 8px; font-size: 12px; color: var(--ink-400); }
+.join { margin-top: 64px; padding-top: 32px; border-top: 1px solid var(--night-700); }
+.join p { color: var(--ink-300); max-width: 36rem; }
+.join .row { margin-top: 16px; display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
+
+/* ===== /packs (§11.3) ===== */
+.ph-wrap { padding-top: 32px; }
+@container vp (min-width: 640px) { .ph-wrap { padding-top: 48px; } }
+.ph { margin-bottom: 24px; }
+@container vp (min-width: 640px) { .ph { margin-bottom: 32px; } }
+.sheet { background: var(--night-850); border-radius: 16px; padding: 20px; max-width: 36rem; display: grid; gap: 20px; }
+@container vp (min-width: 640px) { .sheet { grid-template-columns: 140px minmax(0, 1fr); align-items: start; gap: 24px; } }
+.sheet .sl { width: 120px; } @container vp (min-width: 640px) { .sheet .sl { width: 140px; } }
+.ctl { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; min-width: 0; }
+.ctl .count { color: var(--ink-200); }
+.ctl .btn { width: 100%; } @container vp (min-width: 640px) { .ctl .btn { width: auto; } }
+.ctl .line { font-size: 14px; color: var(--ink-400); }
+.ctl .err { font-size: 14px; color: var(--danger); }
+.ctl .foot { margin-top: 8px; width: 100%; display: flex; flex-direction: column; gap: 2px; align-items: flex-start; }
+@container vp (min-width: 640px) { .ctl .foot { flex-direction: row; align-items: baseline; justify-content: space-between; gap: 16px; } }
+.ctl .pity { font-size: 12px; color: var(--ink-400); }
+.skel { height: 16px; width: 144px; border-radius: 4px; background: var(--night-800); }
+.latest { margin-top: 16px; font-size: 14px; }
+
+/* odds dialog (inside the frame) */
+.dlg-back { position: absolute; inset: 0; z-index: 20; background: rgb(7 8 15 / .7); display: flex; align-items: center; justify-content: center; padding: 16px; }
+.dlg { width: 100%; max-width: 34rem; max-height: 85%; overflow-y: auto; background: var(--night-900); border-radius: 16px; box-shadow: 0 16px 48px rgb(0 0 0 / .55); padding: 24px; }
+.dlg h2 { margin-bottom: 16px; }
+.dlg p { font-size: 14px; color: var(--ink-300); margin-top: 10px; }
+.dlg .x { margin-top: 20px; }
+
+/* empty state (§11.1) */
+.empty { display: flex; flex-direction: column; align-items: flex-start; gap: 12px; margin-top: 8px; }
+.empty .orb { width: 96px; }
+.empty p { color: var(--ink-300); }
+.bodynote { margin-top: 8px; padding: 20px; border: 1px dashed var(--night-600); border-radius: 12px; color: var(--ink-400); font-size: 14px; max-width: 36rem; }
+
+/* ===== The ceremony stage (pack-opening.md §7) ===== */
+.stage { position: absolute; inset: 0; z-index: 40; background: var(--stage-bg); display: flex; flex-direction: column; overflow: hidden; font-family: var(--f-sans); color: var(--ink-100); --cw: 240px; --ch: 336px; }
+@container vp (max-width: 359px) or (max-height: 639px) { .stage { --cw: 200px; --ch: 280px; } }
+.stage .sky { position: absolute; inset: 0; pointer-events: none; opacity: .4; transition: opacity 200ms;
+  background: radial-gradient(circle at 12% 30%, rgb(255 255 255 / .9) 0 1px, transparent 1.5px), radial-gradient(circle at 84% 64%, rgb(255 255 255 / .9) 0 1px, transparent 1.5px), radial-gradient(circle at 30% 86%, rgb(255 255 255 / .8) 0 1px, transparent 1.5px);
+  background-size: 48px 67px; }
+.stage .sky.b60 { opacity: .6; animation: fadein 250ms both; } .stage .sky.b70 { opacity: .7; animation: fadein 250ms both; }
+.stage .tint { position: absolute; inset: 0; pointer-events: none; animation: fadein 250ms both; }
+.sbar { position: relative; z-index: 2; height: 56px; flex: none; padding: 0 16px; display: grid; grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr); align-items: center; gap: 8px; }
+.sbar .bk { justify-self: start; max-width: 100%; min-width: 0; overflow: hidden; display: inline-flex; align-items: center; gap: 4px; min-height: 44px; color: var(--ink-300); font: 600 14px/1 var(--f-sans); white-space: nowrap; }
+.sbar .bk .t { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+@container vp (max-width: 359px) { .sbar .bk .t { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); } }
+.sbar .ctr { text-align: center; }
+.sbar h1 { font: 500 12px/1.2 var(--f-mono); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-300); white-space: nowrap; }
+.sbar .cn { display: block; margin-top: 3px; color: var(--ink-200); font-size: 12px; }
+.sbar .rt { justify-self: end; display: flex; align-items: center; gap: 6px; }
+.sbar .snd { min-width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; border-radius: 10px; color: var(--ink-300); padding: 0 8px; }
+.sbar .snd:hover { background: var(--night-800); }
+.sbar .snd .t { display: none; font: 600 13px/1 var(--f-sans); }
+@container vp (min-width: 640px) { .sbar .snd .t { display: inline; } }
+.mid { position: relative; z-index: 1; flex: 1; min-height: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 0 16px; }
+.sctl { position: relative; width: var(--cw); height: var(--ch); touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; border-radius: 14px; flex: none; }
+.sctl[aria-disabled="true"] { cursor: default; }
+.sctl .slvw { position: absolute; top: 0; bottom: 0; left: 50%; height: 100%; aspect-ratio: 5 / 7.6; transform: translateX(-50%); }
+.sctl .slvw .sleeve { width: 100%; }
+.sctl .slvw.s0 { opacity: .6; }
+.sctl .slvw.in { animation: sleeve-in 320ms var(--ease-out-quint) both; }
+.sctl .lay { position: absolute; inset: 0; }
+.sctl .lay .back, .sctl .lay .card { width: 100%; }
+.rise { animation: rise 250ms both; }
+@keyframes rise { from { fill: #2a2f55; } }
+@keyframes sleeve-in { from { opacity: 0; transform: translate(-50%, 18px); } }
+@keyframes fadein { from { opacity: 0; } }
+.tellin { animation: fadein 250ms both; }
+/* S3 burst: seam lifts and fades (200 ms); sleeve drops and fades while five backs rise and settle (450 ms). */
+.burst .seam { animation: seam-lift 200ms var(--ease-snap) both; }
+.burst .slvw { animation: drop 450ms 200ms var(--ease-out-quint) both; }
+.burst .rb { animation: rise-in 330ms calc(200ms + var(--k) * 60ms) var(--ease-out-quint) both; }
+@keyframes seam-lift { to { transform: translateY(-40%) rotate(-3deg); opacity: 0; } }
+@keyframes drop { to { transform: translate(-50%, 60px); opacity: 0; } }
+@keyframes rise-in { from { transform: translateY(90px); opacity: 0; } }
+.flipw { position: absolute; inset: 0; perspective: 900px; }
+.flipi { position: absolute; inset: 0; transform-style: preserve-3d; animation: flip 360ms var(--ease-snap) both; }
+.flipi > * { position: absolute; inset: 0; backface-visibility: hidden; -webkit-backface-visibility: hidden; }
+.flipi > .fface { transform: rotateY(180deg); }
+@keyframes flip { from { transform: rotateY(0); } to { transform: rotateY(180deg); } }
+.settle { animation: settle 250ms var(--ease-out-quint) both; }
+@keyframes settle { from { transform: scale(.96) translateY(6px); } }
+.info { margin-top: 12px; width: min(100%, 300px); text-align: center; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+.info .tw .st { margin-left: 6px; font-size: 13px; letter-spacing: 2px; font-weight: 400; }
+.info .nm2 { max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.info .se { font-size: 14px; color: var(--ink-300); max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@container vp (max-height: 599px) { .info .se { display: none; } }
+.mk { display: inline-block; margin-top: 4px; padding: 3px 6px; border-radius: 4px; font: 600 11px/1.2 var(--f-sans); letter-spacing: .06em; text-transform: uppercase; }
+.mk.new { border: 1px solid var(--ink-300); color: var(--ink-100); }
+.mk.own { border: 1px solid var(--night-700); color: var(--ink-300); }
+.banner { margin-bottom: 10px; text-align: center; }
+.banner .bw { font: 750 24px/1.05 var(--f-display); font-stretch: 90%; font-optical-sizing: none; }
+.banner .bs { font-size: 14px; color: var(--ink-300); margin-top: 2px; }
+.prompt { margin-top: 16px; min-height: 20px; font-size: 14px; color: var(--ink-400); text-align: center; }
+.prompt .still { display: block; margin-top: 4px; max-width: 30ch; }
+.sbot { position: relative; z-index: 60; flex: none; padding: 8px 16px max(16px, env(safe-area-inset-bottom)); display: flex; flex-direction: column; align-items: center; gap: 12px; }
+.tray { display: flex; gap: 6px; }
+.tray i { width: 32px; height: 45px; border-radius: 4px; background: var(--night-800); overflow: hidden; display: block; position: relative; }
+.tray i.on { padding: 2px; }
+.tray i.on span { display: block; width: 100%; height: 100%; border-radius: 2px; overflow: hidden; position: relative; }
+.tray i.on svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.ctrls { display: flex; gap: 8px; width: 100%; justify-content: center; }
+.ctrls .btn { flex: 1; max-width: 200px; min-height: 44px; height: 44px; }
+/* S5 spotlight (§6) */
+.spot { position: absolute; inset: 0; z-index: 50; background: var(--stage-bg); display: flex; animation: fadein 150ms both; cursor: pointer; }
+.spot .tl { position: absolute; inset: 0; pointer-events: none; }
+.spot .col { position: relative; width: 100%; max-width: 560px; margin: 0 auto; padding: 88px 16px 140px; display: flex; flex-direction: column; justify-content: center; }
+.spot .eyebrow { color: var(--ink-300); }
+.spot .t-tier { margin-top: 10px; animation: word-in 300ms var(--ease-out-quint) both; }
+@keyframes word-in { from { transform: scale(1.08); opacity: 0; } }
+.spot .t-tier { transform-origin: left center; }
+.spot .ser { margin-top: 24px; display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 16px; align-items: start; }
+@container vp (max-width: 359px) { .spot .ser { grid-template-columns: 1fr; } .spot .ser .pa { width: 96px; height: 128px; } }
+.spot .pa { width: 120px; height: 160px; border-radius: 8px; border: 3px solid; overflow: hidden; position: relative; }
+.spot .pa svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.spot .st2 { font: 750 24px/1.05 var(--f-display); font-stretch: 90%; font-optical-sizing: none; margin-top: 6px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+@container vp (min-width: 640px) { .spot .st2 { font-size: 28px; } }
+.spot .nt { font-size: 14px; color: var(--ink-300); margin-top: 4px; }
+.spot .yr, .spot .pop { color: var(--ink-300); margin-top: 6px; }
+.spot .pop { margin-top: 18px; }
+.rm .stage *, .rm .spot *, .rm .summ * { animation: none !important; transition: none !important; }
+.rm .stage .sky, .rm .stage .tint { animation: none !important; }
+/* S7 summary (§8) */
+.summ .acts { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin-bottom: 8px; }
+.summ .acts .num { width: 100%; color: var(--ink-200); }
+.summ .acts .btn { flex: 1 1 auto; } @container vp (min-width: 640px) { .summ .acts .btn { flex: none; } }
+.summ .disc { font-size: 14px; color: var(--ink-400); max-width: 36rem; margin-top: 4px; }
+.summ .rv { margin-top: 32px; }
+.summ .rv h2 { outline: none; }
+.summ .sl { margin-top: 4px; color: var(--ink-200); }
+.summ .sp { margin-top: 6px; font-size: 14px; color: var(--ink-300); max-width: 40rem; }
+.summ .grid { margin-top: 16px; display: grid; grid-template-columns: repeat(auto-fill, minmax(136px, 1fr)); gap: 16px; max-width: 964px; }
+.summ .grid li { display: flex; flex-direction: column; gap: 6px; perspective: 900px; }
+.summ .grid .gflip { animation: gflip 360ms calc(var(--k) * 60ms) var(--ease-snap) both; }
+@keyframes gflip { from { transform: rotateY(90deg); } }
+.summ .cap { min-height: 22px; }
+.summ .rec { margin-top: 16px; font-size: 14px; color: var(--ink-300); }
+.summ .keep { margin-top: 16px; font-size: 14px; color: var(--ink-300); }
+
+</style>
+<style>
+.lay2 { display: grid; grid-template-columns: minmax(0, 1fr); gap: 24px; align-items: start; }
+@media (min-width: 1100px) { .lay2 { grid-template-columns: minmax(0, 1fr) 340px; } }
+.side { background: var(--c-panel); border: 1px solid var(--c-line); border-radius: 12px; padding: 16px 18px; font-size: 14px; min-width: 0; }
+.side h3 { font: 500 11px/1.2 var(--f-mono); letter-spacing: .1em; text-transform: uppercase; color: var(--c-muted); margin: 16px 0 8px; }
+.side h3:first-child { margin-top: 0; }
+.side ol, .side ul { margin: 0; padding: 0; list-style: none; }
+#sm li { display: flex; gap: 8px; padding: 3px 6px; border-radius: 6px; color: var(--c-muted); }
+#sm li b { font: 600 12px/1.6 var(--f-mono); width: 30px; color: var(--c-fg); }
+#sm li.cur { background: var(--c-soft); color: var(--c-fg); font-weight: 600; }
+#annlog li, #evlog li { padding: 4px 0; border-top: 1px solid var(--c-line); overflow-wrap: anywhere; }
+#evlog li { font: 11.5px/1.4 var(--f-mono); color: var(--c-muted); }
+#annlog li:first-child { color: var(--c-fg); font-weight: 600; }
+.mut { color: var(--c-muted); }
+.jrow { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.jrow button, .rbtn { font: 600 12px/1 var(--f-mono); color: var(--c-fg); background: var(--c-soft); border: 0; border-radius: 6px; padding: 7px 8px; cursor: pointer; }
+.jrow button:focus-visible, .rbtn:focus-visible { outline: 2px solid var(--c-accent); outline-offset: 2px; }
+.keys { color: var(--c-muted); font-size: 13px; }
+.keys kbd { font: 600 11px/1 var(--f-mono); background: var(--c-soft); border-radius: 4px; padding: 2px 5px; }
+details.today { margin-top: 28px; }
+details.today summary { cursor: pointer; font-weight: 700; }
+details.today .row { margin-top: 16px; }
+details.today img { display: block; width: 100%; height: auto; border-radius: 6px; box-shadow: 0 0 0 1px var(--c-line); }
+</style>
+<div class="wrap">
+  <header class="top">
+    <p class="kick">Anime TCG · prototype · pack-opening.md, ADR 0014 (PR #64)</p>
+    <h1>Opening a pack, slot style</h1>
+    <p class="sub">The ceremony's states S0 to S7, clickable. Hold the sleeve to tear it, tap or press <kbd>Enter</kbd> to turn each card, or use Skip and Reveal all. Every tell shows the card's real tier. Sound is off until you press the speaker in the stage's top bar.</p>
+  </header>
+
+  <div class="bar" role="toolbar" aria-label="Prototype controls">
+    <div class="grp"><span class="lbl" id="l-v">View</span>
+      <div class="seg" data-key="view" aria-labelledby="l-v"><button data-v="live">Prototype</button><button data-v="compare">Compare Q2 A / B</button></div></div>
+    <div class="grp" data-only="live"><span class="lbl" id="l-f">Frame</span>
+      <div class="seg" data-key="frame" aria-labelledby="l-f"><button data-v="390">390</button><button data-v="320">320</button><button data-v="1440">1440</button></div></div>
+    <div class="grp" data-only="live"><span class="lbl" id="l-s">Route</span>
+      <div class="seg" data-key="source" aria-labelledby="l-s"><button data-v="timer">Timer pack</button><button data-v="shop">Shop pack</button><button data-v="demo">Demo</button></div></div>
+    <div class="grp"><span class="lbl" id="l-q">Q2 demo cards</span>
+      <div class="seg" data-key="q2" aria-labelledby="l-q"><button data-v="A"><span class="v">A</span>Frame effects</button><button data-v="B"><span class="v">B</span>Plain</button></div></div>
+    <div class="grp" data-only="live"><label class="lbl" for="pack">Pack</label><select id="pack"></select></div>
+    <div class="grp" data-only="live"><label class="lbl" for="delay">Server answer</label>
+      <select id="delay"><option value="400">after 0.4 s</option><option value="3000">after 3 s</option><option value="12000">after 12 s</option></select></div>
+    <label class="chk"><input type="checkbox" id="rm"> Reduced motion</label>
+    <label class="chk"><input type="checkbox" id="ann2" checked> Annotations</label>
+    <button class="rbtn" id="restart" data-only="live">Restart</button>
+  </div>
+
+  <div id="live-wrap" class="lay2">
+    <div id="live" class="frames"></div>
+    <aside class="side" aria-label="Ceremony state">
+      <h3>State (§4.1)</h3><ol id="sm"></ol>
+      <h3>Jump to (prototype only)</h3>
+      <div class="jrow" id="jumps"><button data-j="S0">S0</button><button data-j="S1">S1</button><button data-j="S3">S3</button><button data-j="S4">S4</button><button data-j="S5">S5</button><button data-j="S6">S6</button><button data-j="S7">S7</button>
+        <label class="lbl" for="ji" style="margin-left:4px">card</label><select id="ji"><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select></div>
+      <h3>Keys</h3>
+      <p class="keys"><kbd>Enter</kbd>/<kbd>Space</kbd> on the card: tear, then advance. <kbd>→</kbd> advances. <kbd>Esc</kbd> is Reveal all. A swipe left or up of 48 px advances.</p>
+      <h3>Live region (§13)</h3><ul id="annlog"></ul>
+      <h3>Events</h3><ul id="evlog"></ul>
+    </aside>
+  </div>
+  <div id="cmpv" class="frames" hidden></div>
+
+  <section class="decide" aria-label="Your pick">
+    <article class="dcard">
+      <h2>Q2 · Effects on the demo's cards</h2>
+      <p class="q">visual-identity.md §16 question 2; pack-opening.md §9. The tell and the spotlight play in both; only the turned card differs.</p>
+      <label class="opt"><input type="radio" name="d-demo-effects" value="A"><span><b>A · Full ceremony, frame effects on demo cards</b><span class="rec">spec · recommended</span></span><span class="tr">The demo shows exactly what the game shows. It overrides the owner's 2026-10-29 "no glow, glint or drift" on the demo card.</span></label>
+      <label class="opt"><input type="radio" name="d-demo-effects" value="B"><span><b>B · Ceremony with plain demo cards</b></span><span class="tr">Keeps the 2026-10-29 decision. The turned card has its tier frame but no glow, glint or drift, so the demo undersells Epic and up.</span></label>
+      <textarea id="n-demo-effects" placeholder="Optional note"></textarea>
+      <div class="pickrow"><button class="pickbtn" data-save="demo-effects">Save my pick</button><span class="saved" id="s-demo-effects"></span></div>
+      <div class="chatline" id="c-demo-effects" hidden></div>
+    </article>
+    <article class="dcard">
+      <h2>What to try</h2>
+      <ul style="margin:0;padding-left:18px;color:var(--c-muted)">
+        <li>The Showcase script turns one card of each tier from Uncommon to Mythic, so every tell and all three spotlights show in one run. No real pack deals it: a standard pack has one Rare-or-better card, in slot 5.</li>
+        <li>Press and release the sleeve quickly to see <i>Keep holding</i>; hold for 0.7 s to tear.</li>
+        <li>Tick Reduced motion: one tap tears, there is no burst, flip or spotlight, and Epic and up get the static banner.</li>
+        <li>Set the server answer to 12 s to see S0's waiting lines.</li>
+        <li>Enchanted, Radiant and Guaranteed Mythic change the sleeve's lit sockets and kind mark before the tear.</li>
+      </ul>
+    </article>
+  </section>
+
+  <details class="today">
+    <summary>Today's <code>/demo</code>, for comparison</summary>
+    <div class="row"><img src="today/demo-1440.jpg" alt="Today's /demo at 1440 px: five cards in a row, no ceremony"></div>
+    <div class="row" style="display:flex;gap:20px;flex-wrap:wrap"><img src="today/demo-390.jpg" alt="Today's /demo at 390 px" style="width:min(100%,390px)"><img src="today/demo-320.jpg" alt="Today's /demo at 320 px" style="width:min(100%,320px)"></div>
+  </details>
+
+  <section class="legend" aria-label="How to read this prototype">
+    <div><h3>Sources</h3><ul>
+      <li>States, events, inputs, timings, copy: <code>pack-opening.md</code> §4–§11.</li>
+      <li>Card back, sleeves, tokens: <code>visual-identity.md</code> §7, §8, §12.</li>
+      <li>Pool size 2,983 and the special-pack lines: the acceptance stack's <code>GET /api/demo</code> and <code>packsCopy.ts</code>.</li></ul></div>
+    <div><h3>Stand-ins</h3><ul>
+      <li>Art is drawn; character and series names are real, ranks invented inside each tier's band.</li>
+      <li>The player, the Karma balance and the shop theme's figures are fictional.</li>
+      <li>Sound is a Web Audio stand-in built from §11's recipes.</li></ul></div>
+    <div><h3>Annotations</h3><ul>
+      <li><span class="nis-key"></span>Dashed pink tags: <b>not in spec</b> or an interpretation.</li>
+      <li>The side panel's Jump buttons are for review only; the real stage has no such controls.</li></ul></div>
+  </section>
+</div>
+
+<script>
+/* ===== APP KIT (shared by the redesign mockups). Drawn stand-ins only: no image host is contacted. ===== */
+const TIERS = ["common", "uncommon", "rare", "epic", "legendary", "mythic"];
+const LABEL = { common: "Common", uncommon: "Uncommon", rare: "Rare", epic: "Epic", legendary: "Legendary", mythic: "Mythic" };
+const STAR = "✦";
+const POOL = 2983; // GET /api/demo on the acceptance stack, 2026-10-31: odds.snapshot.characterCount
+const stars = (t) => STAR.repeat(TIERS.indexOf(t) + 1);
+const nStars = (t) => TIERS.indexOf(t) + 1;
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const fmt = (n) => new Intl.NumberFormat("en-GB").format(n);
+const rankText = (r) => `#${String(r).padStart(String(POOL).length, "0")} / ${POOL}`;
+
+/* Real character and series names (allowed by the brief); ranks are invented but sit inside each tier's band
+   of the live snapshot (tierBands over 2,983: Mythic 1–60, Legendary 61–239, Epic 240–597, Rare 598–1193,
+   Uncommon 1194–1939, Common 1940–2983). */
+const CHARS = {
+  levi: { id: 45627, name: "Levi", series: "Shingeki no Kyojin", native: "進撃の巨人", year: 2013, rank: 4, tier: "mythic" },
+  makima: { id: 170735, name: "Makima", series: "Chainsaw Man", native: "チェンソーマン", year: 2022, rank: 23, tier: "mythic" },
+  maomao: { id: 129191, name: "Maomao", series: "Kusuriya no Hitorigoto", native: "薬屋のひとりごと", year: 2023, rank: 97, tier: "legendary" },
+  zerotwo: { id: 124381, name: "Zero Two", series: "DARLING in the FRANXX", native: "ダーリン・イン・ザ・フランキス", year: 2018, rank: 141, tier: "legendary" },
+  power: { id: 170736, name: "Power", series: "Chainsaw Man", native: "チェンソーマン", year: 2022, rank: 188, tier: "legendary" },
+  anya: { id: 138101, name: "Anya Forger", series: "SPY×FAMILY", native: "SPY×FAMILY", year: 2022, rank: 312, tier: "epic" },
+  nanami: { id: 127221, name: "Nanami Kento", series: "Jujutsu Kaisen", native: "呪術廻戦", year: 2020, rank: 255, tier: "epic" },
+  rengoku: { id: 129130, name: "Rengoku Kyoujurou", series: "Kimetsu no Yaiba", native: "鬼滅の刃", year: 2019, rank: 402, tier: "epic" },
+  kanao: { id: 128452, name: "Kanao Tsuyuri", series: "Kimetsu no Yaiba", native: "鬼滅の刃", year: 2019, rank: 744, tier: "rare" },
+  inumaki: { id: 127212, name: "Inumaki Toge", series: "Jujutsu Kaisen", native: "呪術廻戦", year: 2020, rank: 610, tier: "rare" },
+  kazuma: { id: 88573, name: "Kazuma Satou", series: "Kono Subarashii Sekai ni Shukufuku wo!", native: "この素晴らしい世界に祝福を!", year: 2016, rank: 1288, tier: "uncommon" },
+  sasha: { id: 46496, name: "Sasha Blouse", series: "Shingeki no Kyojin", native: "進撃の巨人", year: 2013, rank: 1410, tier: "uncommon" },
+  bertholdt: { id: 46497, name: "Bertholdt Hoover", series: "Shingeki no Kyojin", native: "進撃の巨人", year: 2013, rank: 1502, tier: "uncommon" },
+  mineta: { id: 117903, name: "Mineta Minoru", series: "Boku no Hero Academia", native: "僕のヒーローアカデミア", year: 2016, rank: 2711, tier: "common" },
+  kaminari: { id: 117904, name: "Kaminari Denki", series: "Boku no Hero Academia", native: "僕のヒーローアカデミア", year: 2016, rank: 2204, tier: "common" },
+  usopp: { id: 41, name: "Usopp", series: "ONE PIECE", native: "ONE PIECE", year: 1999, rank: 2056, tier: "common" },
+};
+
+/* A drawn stand-in portrait, 3:4, deterministic per character id. Clearly a mockup: flat shapes, no face. */
+function artSVG(c, extra = "") {
+  const h = (c.id * 47) % 360, h2 = (h + 40) % 360, hair = (c.id * 13) % 360;
+  const gid = "g" + c.id + extra;
+  return `<svg viewBox="0 0 60 80" preserveAspectRatio="xMidYMin slice" aria-hidden="true" focusable="false">
+    <defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="hsl(${h} 38% 34%)"/><stop offset="1" stop-color="hsl(${h2} 42% 16%)"/></linearGradient></defs>
+    <rect width="60" height="80" fill="url(#${gid})"/>
+    <circle cx="${12 + (c.id % 7) * 5}" cy="14" r="9" fill="hsl(${h2} 60% 70% / .12)"/>
+    <path d="M6 80 C8 60 18 54 30 54 C42 54 52 60 54 80 Z" fill="hsl(${hair} 22% 12%)"/>
+    <ellipse cx="30" cy="38" rx="12" ry="14" fill="hsl(${(h + 20) % 360} 25% 72%)"/>
+    <path d="M16 38 C15 22 24 17 31 17 C40 17 46 24 44 40 C41 31 36 27 30 26 C25 30 20 33 16 38 Z" fill="hsl(${hair} 55% 38%)"/>
+  </svg>`;
+}
+
+/* The card (card-and-rarity.md §3): effects 'full' (reveal, glow + glint/pearl), 'none' (frame only), size 'small' | 'stage'. */
+function cardFace(c, { tier = c.tier, size = "small", effects = "full", tag = "article", extraClass = "" } = {}) {
+  const glow = effects === "none" ? "" : ` gl-${tier}`;
+  const motion = effects === "full" ? (tier === "epic" || tier === "legendary" ? " fx-glint" : tier === "mythic" ? " fx-pearl" : "") : "";
+  const label = `${c.name}, ${LABEL[tier]}, ${c.series}`;
+  return `<${tag} class="card fr-${tier}${glow}${motion} ${size === "stage" ? "sz-stage" : ""} ${extraClass}" style="--ph:${(c.id % 11) * 0.5}" ${tag === "article" ? `aria-label="${esc(label)}"` : ""}>
+    <span class="face">
+      <span class="head"><span class="nm" dir="auto" title="${esc(c.name)}">${esc(c.name)}</span><span class="st tx-${tier}" aria-hidden="true">${stars(tier)}</span></span>
+      <span class="art">${artSVG(c, size)}<span class="rk">${rankText(c.rank)}</span></span>
+      <span class="sr-line" dir="auto" title="${esc(c.series)}">${esc(c.series)}</span>
+    </span></${tag}>`;
+}
+
+/* The Orbit ring with six sockets, clockwise from the top (§7.2). `lit` sockets in `color`. */
+function star4(cx, cy, r) {
+  return `M${cx} ${cy - r} Q${cx} ${cy} ${cx + r} ${cy} Q${cx} ${cy} ${cx} ${cy + r} Q${cx} ${cy} ${cx - r} ${cy} Q${cx} ${cy} ${cx} ${cy - r} Z`;
+}
+function orbitSVG({ lit = 0, color = "var(--night-700)", socket = 8.3, ring = "var(--night-600)", unlit = "var(--night-700)", outer = null, attrs = true, riseFrom = 99 } = {}) {
+  let s = "";
+  for (let k = 0; k < 6; k++) {
+    const a = (-90 + k * 60) * Math.PI / 180;
+    const x = +(50 * Math.cos(a)).toFixed(2), y = +(50 * Math.sin(a)).toFixed(2);
+    const on = k < lit;
+    s += `<path d="${star4(x, y, socket)}" fill="${on ? color : unlit}" ${on && k >= riseFrom ? 'class="rise"' : ""} ${attrs && on ? 'data-lit=""' : ""}/>`;
+  }
+  const outerRing = outer ? `<circle r="61" fill="none" stroke="${outer}" stroke-width="1.5" vector-effect="non-scaling-stroke"/>` : "";
+  return `<svg viewBox="-60 -60 120 120" aria-hidden="true" focusable="false">${outerRing}
+    <circle r="50" fill="none" stroke="${ring}" stroke-width="1.5" vector-effect="non-scaling-stroke"/>
+    <circle r="14.5" fill="none" stroke="${ring}" stroke-width="1.5" vector-effect="non-scaling-stroke"/>${s}</svg>`;
+}
+
+/* The card back (§7.2). tier=null: plain back, no tell. */
+function cardBack({ tier = null, size = "small", breathe = false, extraClass = "" } = {}) {
+  const tellCls = tier ? ` t-${tier}${breathe && ["epic", "legendary", "mythic"].includes(tier) ? " breathe" : ""}` : "";
+  return `<div class="back ${size === "stage" ? "sz-stage" : ""}${tellCls} ${extraClass}" aria-hidden="true">
+    <div class="field"><div class="orb">${orbitSVG({ lit: tier ? nStars(tier) : 0, color: tier ? `var(--r-${tier})` : "" })}</div>
+    <div class="wm"><b>Anime TCG</b><i>Six tiers · one orbit</i></div></div><span class="glow"></span></div>`;
+}
+
+/* Sleeve inks (§8.3) and the theme hash (§8.2: sum of UTF-16 code units mod 5). */
+const THEME_INKS = ["plum", "pine", "rust", "olive", "petrol"];
+const themeInk = (themeId) => THEME_INKS[[...themeId].reduce((a, ch) => a + ch.charCodeAt(0), 0) % 5];
+
+/* A sleeve (§8.1). floor: tier whose star count is lit (null = none). Lit colour is not in spec (see README). */
+function sleeve({ name = "Anime TCG", line = "Five cards", floor = "rare", ink = "night", kind = null, outer = false, tear = 0, extraClass = "", style = "", riseFrom = 99 } = {}) {
+  const radiant = ink === "radiant";
+  const mark = kind ? `<span class="km">${esc(kind)}</span>` : "";
+  return `<div class="sleeve ${radiant ? "radiant" : ""} ${extraClass}" style="--sc:var(--sleeve-${ink});--tear:${tear};${style}" aria-hidden="true">
+    <div class="sbody"></div><div class="seam"></div><div class="tear"></div>${mark}
+    <div class="orb">${orbitSVG({ lit: floor ? nStars(floor) : 0, color: floor ? `var(--r-${floor})` : "", socket: 7.6, ring: radiant ? "#b9addb" : "var(--night-600)", unlit: radiant ? "#d8d0f0" : "var(--night-700)", outer: outer ? "var(--ink-300)" : null, riseFrom })}</div>
+    <div class="nb"><b>${esc(name)}</b><i>${esc(line)}</i></div></div>`;
+}
+
+/* The 12 x 18 sleeve glyph (§10.2) as an inline icon. */
+const SLEEVE_GLYPH = `<svg viewBox="0 0 12 18" aria-hidden="true" focusable="false"><rect x=".75" y=".75" width="10.5" height="16.5" rx="2" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M.75 3.5h10.5" stroke="currentColor" stroke-width="1.2"/><circle cx="6" cy="8.5" r="2.6" fill="none" stroke="currentColor" stroke-width="1.2"/></svg>`;
+
+/* Lucide icons (ISC licence), 24-unit paths, as §10.3 names them. */
+const LUCIDE = {
+  Package: '<path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"/><path d="M12 22V12"/><path d="m3.3 7 7.703 4.734a2 2 0 0 0 1.994 0L20.7 7"/><path d="m7.5 4.27 9 5.15"/>',
+  ArrowLeftRight: '<path d="M8 3 4 7l4 4"/><path d="M4 7h16"/><path d="m16 21 4-4-4-4"/><path d="M20 17H4"/>',
+  LayoutGrid: '<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>',
+  CircleUser: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="10" r="3"/><path d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662"/>',
+  ChevronLeft: '<path d="m15 18-6-6 6-6"/>',
+  Volume2: '<path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><path d="M16 9a5 5 0 0 1 0 6"/><path d="M19.364 18.364a9 9 0 0 0 0-12.728"/>',
+  VolumeX: '<path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298z"/><line x1="22" x2="16" y1="9" y2="15"/><line x1="16" x2="22" y1="9" y2="15"/>',
+};
+const icon = (n, size = 22) => `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${LUCIDE[n]}</svg>`;
+
+/* Annotation helpers: a `not in spec` outline + tag, and a spec-section tag. */
+const nis = (note = "not in spec") => `<span class="nis-tag">${esc(note)}</span>`;
+const spec = (ref, pos = "top:4px;left:4px") => `<span class="spec-tag" style="${pos}">${esc(ref)}</span>`;
+
+/* Fit fixed-size frames into their column: scale = min(1, available / frame width). */
+function fitFrames(root = document) {
+  root.querySelectorAll(".fw").forEach((fw) => {
+    const w = +fw.dataset.w, h = +fw.dataset.h;
+    const avail = fw.parentElement.clientWidth;
+    const s = Math.min(1, avail / w);
+    fw.style.width = w * s + "px";
+    fw.style.height = h * s + "px";
+    fw.firstElementChild.style.transform = `scale(${s})`;
+    const lab = fw.previousElementSibling;
+    if (lab && lab.classList.contains("fl")) lab.querySelector(".sc").textContent = s < 1 ? `shown at ${Math.round(s * 100)}%` : "actual size";
+  });
+}
+function frameShell(w, h, inner, label = `${w} × ${h}`, cls = "") {
+  return `<div class="fcell ${cls}" style="width:${w}px"><div class="fl"><b>${label}</b> <span class="sc"></span></div><div class="fw" data-w="${w}" data-h="${h}"><div class="vp" style="width:${w}px;height:${h}px;transform-origin:0 0">${inner}</div></div></div>`;
+}
+
+/* ===== Redesign pages: render functions. Every number is the acceptance stack's GET /api/demo (2026-10-31). ===== */
+const ODDS = {
+  scale: 1000000,
+  perPack: { common: 999704, uncommon: 1000000, rare: 800000, epic: 170000, legendary: 27500, mythic: 2500 },
+  share: { common: 560000, uncommon: 240000, rare: 160000, epic: 34000, legendary: 5500, mythic: 500 },
+  sizes: { common: 1044, uncommon: 746, rare: 596, epic: 358, legendary: 179, mythic: 60 },
+};
+const PCT = new Intl.NumberFormat("en-GB", { style: "percent", maximumSignificantDigits: 3, roundingMode: "trunc" });
+const pct = (p) => PCT.format(p / ODDS.scale);
+const PLAYER = { login: "tidewren", karma: 1240, cards: 48, dups: 6 }; // fictional player
+
+/* ---------- header (§10.2, §10.3) ---------- */
+function headerOut() {
+  return `<header class="hdr"><div class="in"><a class="wordmark" href="#">Anime TCG</a>
+    <div class="hdr-out"><a class="btn-text" href="#">Log in</a><a class="btn btn-secondary" href="#">Register</a></div></div></header>`;
+}
+function headerIn({ chips, current = "/packs", ready = 2 }) {
+  const links = [["/packs", "Packs"], ["/shop", "Shop"], ["/market", "Market"], ["/collection", `Collection <span class="tab">(${PLAYER.cards})</span>`]];
+  const nav = `<nav class="navlinks" aria-label="Main">${links.map(([to, t]) => `<a href="#" data-tab="${to}" ${to === current ? 'aria-current="page"' : ""}>${t}</a>`).join("")}</nav>`;
+  const right = chips === "A"
+    ? `<div class="chips"><a class="chip" href="#" aria-label="${ready} of 3 packs ready"><span style="color:var(--ink-300);display:inline-flex;width:12px;height:18px">${SLEEVE_GLYPH}</span><span class="num">${ready}/3</span></a>
+         <span class="chip karma" aria-label="${fmt(PLAYER.karma)} Karma"><span class="num">${fmt(PLAYER.karma)}</span><span class="w">Karma</span></span></div>`
+    : `<p class="karma-plain"><span class="num">${fmt(PLAYER.karma)}</span> <span class="w">Karma</span></p>`;
+  const acct = `<button class="acct ${""}" aria-label="Account, ${PLAYER.login}"><span class="av">${PLAYER.login[0]}</span><span class="nmx">${PLAYER.login}</span></button>`;
+  return `<header class="hdr"><div class="in"><a class="wordmark" href="#">Anime TCG</a>${nav}${right}<span class="nis" style="display:inline-flex;border-radius:10px">${acct}<span class="nis-tag" style="top:auto;bottom:-15px;left:auto;right:0">not in spec</span></span></div></header>`;
+}
+function tabBar({ chips, current = "/packs", ready = 2 }) {
+  const item = (to, label, ic) => `<a href="#" data-tab="${to}" ${to === current ? 'aria-current="page"' : ""}>${icon(ic)}<span>${label}</span></a>`;
+  const cnt = chips === "A" && ready > 0 ? `<span class="cnt">${ready}</span>` : "";
+  const name = chips === "A" && ready > 0 ? `Packs, ${ready} of 3 ready` : "Packs";
+  return `<nav class="tabbar" aria-label="Main">${item("/shop", "Shop", "Package")}${item("/market", "Market", "ArrowLeftRight")}
+    <a href="#" class="centre" data-tab="/packs" aria-label="${name}" ${current === "/packs" ? 'aria-current="page"' : ""}><span class="disc">${SLEEVE_GLYPH}${cnt}</span><span>Packs</span></a>
+    ${item("/collection", "Collection", "LayoutGrid")}${item("/profile", "Profile", "CircleUser")}</nav>`;
+}
+function footer() {
+  return `<footer class="ftr"><p>Non-commercial fan project. Character images and titles © their respective owners, served via the <a href="#">AniList</a> API.</p>
+    <p>Fonts: Bricolage Grotesque, Figtree, Martian Mono (<a href="#">SIL Open Font License</a>).</p></footer>`;
+}
+
+/* ---------- landing (§11.2) ---------- */
+function landing({ art }) {
+  const fan = art === "A"
+    ? [["maomao", -9, "calc(50% - var(--cw) * 0.95)", "0px"], ["anya", -3, "calc(50% - var(--cw) * 0.5)", "calc(var(--cw) * -0.04)"], ["inumaki", 5, "calc(50% - var(--cw) * 0.05)", "calc(var(--cw) * 0.02)"]]
+        .map(([k, rot, left, top]) => `<div class="fan" style="left:${left};top:${top};transform:rotate(${rot}deg)">${cardFace(CHARS[k], { effects: "none", tag: "span" })}</div>`).join("")
+    : "";
+  const tiers = TIERS.map((t) => `<li>${cardBack({ tier: t })}<span class="w tx-${t}">${LABEL[t]}</span></li>`).join("");
+  const steps = [
+    ["Packs", "A new pack every 10 minutes, and up to 3 can pile up. Five cards each."],
+    ["Rarity", "Every character has one of six tiers, set by how many AniList users favourited them. Every pack uses the odds below."],
+    ["Collection", "See how much of each series you have, and how much of all 2,983 characters."],
+    ["Karma", "Recycle duplicates for Karma and spend it on themed packs. Karma comes only from playing. It can't be bought."],
+    ["Market", "List cards for other players to buy with Karma, and buy theirs."],
+  ].map(([t, s], i) => `<li><span class="n" aria-hidden="true">${String(i + 1).padStart(2, "0")}</span><h3>${t}</h3><p>${s}</p></li>`).join("");
+  const rows = TIERS.map((t) => {
+    const w = Math.max(2, (ODDS.perPack[t] / ODDS.scale) * 80);
+    return `<tr><th scope="row" class="tx-${t}"><span class="sw" style="background:var(--flat-${t})" aria-hidden="true"></span><span class="ss" aria-hidden="true">${stars(t)}</span>${LABEL[t]}</th>
+      <td class="bar" aria-hidden="true"><span class="trk"><i style="width:${w.toFixed(1)}px;background:var(--r-${t})"></i></span></td>
+      <td class="num">${pct(ODDS.perPack[t])}</td><td class="num">${pct(ODDS.share[t])}</td></tr>`;
+  }).join("");
+  return `<div class="app">${headerOut()}<main>
+    <section class="hero" aria-labelledby="landing-heading"><div class="stars"></div><div class="horizon"></div>${spec("§11.2 hero · horizon", "top:6px;right:6px")}
+      <div class="page hero-in">
+        <div class="head"><p class="eyebrow" aria-hidden="true">Anime character cards</p><h1 id="landing-heading" class="d t-hero">Anime TCG</h1></div>
+        <div class="artcol ${art === "A" ? "fanA" : "fanB"} ${art === "A" ? "nis" : ""}" aria-hidden="true">${art === "A" ? nis("not in spec: fan offsets; phone height ≠ 168 px") : ""}${fan}<div class="slv">${sleeve({ line: "Demo pack · five cards" })}</div></div>
+        <div class="body"><p class="lede">2,983 characters from the 100 most popular anime on AniList, five to a pack.</p>
+          <div class="cta"><a class="btn btn-primary" href="#">Open a demo pack</a>
+          <p class="disc">A demo pack uses the same odds as every pack in the game. Its cards aren't kept: nothing is saved, and they don't go to any account.</p></div></div>
+      </div></section>
+    <div class="page">
+      <section class="sec" aria-labelledby="six-tiers" style="position:relative">${spec("§11.2 item 2", "top:-22px;left:0")}<h2 id="six-tiers" class="d t-section">Six tiers</h2><ul class="tiers" role="list">${tiers}</ul></section>
+      <section class="sec" aria-labelledby="how" style="position:relative">${spec("§11.2 item 3", "top:-22px;left:0")}<h2 id="how" class="d t-section">How it plays</h2><ol class="steps" role="list">${steps}</ol></section>
+      <section class="sec" aria-labelledby="odds-h" style="position:relative">${spec("§11.2 item 4 · bar column", "top:-22px;left:0")}<h2 id="odds-h" class="d t-section">Pack odds</h2>
+        <table class="odds"><thead><tr><th scope="col">Tier</th><th class="nis" aria-hidden="true" style="text-align:left;padding-left:12px">${nis("bar column position")}</th><th scope="col">At least one per pack</th><th scope="col">Each card</th></tr></thead><tbody>${rows}</tbody></table>
+        <p class="src">Drawn from 2,983 characters, as of 29 Oct 2026.</p></section>
+      <section class="join" aria-labelledby="join-h"><h2 id="join-h" class="d t-section" style="margin-bottom:12px">Join</h2><p>Playing needs an account, and registering needs an invite code from the owner.</p>
+        <div class="row"><a class="btn btn-primary" href="#">Register</a><p class="t-small" style="color:var(--ink-300)">Already registered? <a class="link-u" href="#">Log in</a></p></div></section>
+    </div></main>${footer()}</div>`;
+}
+
+/* ---------- /packs (§11.3) ---------- */
+const PACK_STATES = { ready: "2 of 3 ready", cap: "3 of 3 (at the cap)", none: "0 of 3 (waiting)", loading: "Loading", failed: "Couldn't load" };
+function packs({ chips, state = "ready", oddsOpen = false }) {
+  const ready = state === "cap" ? 3 : state === "none" ? 0 : 2;
+  let ctl;
+  if (state === "loading") ctl = `<div class="skel"></div><span class="btn btn-primary" aria-disabled="true">Open pack</span><p class="sr" role="status">Loading your packs…</p>`;
+  else if (state === "failed") ctl = `<p class="t-small" style="color:var(--ink-300)">Couldn't load your packs.</p><button class="btn btn-secondary">Try again</button>`;
+  else ctl = `<p class="count num">${ready} of 3 packs ready</p>
+      <button class="btn btn-primary" ${ready === 0 ? 'aria-disabled="true"' : ""}>Open pack</button>
+      ${state !== "cap" ? `<p class="line tab">Next pack in 7:42</p>` : ""}
+      <div class="foot"><p class="pity tab">Mythic guaranteed within 214 free packs.</p><button class="btn-text" data-act="odds" style="font-size:13px">Pack odds</button></div>`;
+  return `<div class="app col">${headerIn({ chips, current: "/packs", ready })}
+    <main class="page ph-wrap"><div class="ph"><p class="eyebrow" aria-hidden="true">Timer packs</p><h1 class="d t-title">Packs</h1></div>
+      <div class="sheet" style="position:relative">${spec("§11.3 pack sheet", "top:-10px;right:8px")}<div class="sl">${sleeve({ floor: "rare" })}</div><div class="ctl">${ctl}</div></div>
+    </main>${footer()}${tabBar({ chips, current: "/packs", ready })}${oddsOpen ? oddsDialog() : ""}</div>`;
+}
+function oddsDialog() {
+  const rows = TIERS.slice().reverse().map((t) => {
+    const w = Math.max(2, (ODDS.perPack[t] / ODDS.scale) * 80);
+    return `<tr><th scope="row" class="tx-${t}"><span class="ss" aria-hidden="true">${stars(t)}</span>${LABEL[t]}</th><td class="num">${fmt(ODDS.sizes[t])}</td><td class="num">${pct(ODDS.share[t])}</td>
+      <td class="bar" aria-hidden="true"><span class="trk"><i style="width:${w.toFixed(1)}px;background:var(--r-${t})"></i></span></td><td class="num">${pct(ODDS.perPack[t])}</td></tr>`;
+  }).join("");
+  return `<div class="dlg-back" data-act="close"><div class="dlg" role="dialog" aria-modal="true" aria-labelledby="odds-dlg" data-stop>
+    <h2 id="odds-dlg" class="d t-section">Pack odds</h2>
+    <div style="overflow-x:auto"><table class="odds" style="min-width:420px"><thead><tr><th scope="col">Tier</th><th scope="col">Characters</th><th scope="col">Share of cards</th><th aria-hidden="true"></th><th scope="col">At least one per pack</th></tr></thead><tbody>${rows}</tbody></table></div>
+    <p>Shares and chances are for a standard pack; the special packs below add to the rarer tiers.</p>
+    <p>Cards 1 to 3: Common or better. Card 4: Uncommon or better. Card 5: Rare or better.</p>
+    <p>Every 10th free pack is Enchanted: its fifth card is Epic or better.</p>
+    <p>About 1 pack in 2,500 is Radiant: five cards of Epic or better, at least one of them Mythic.</p>
+    <p>A 300th free pack in a row without a Mythic always has one.</p>
+    <p>Shop packs can be Radiant. They don't count toward Enchanted packs or the guarantee.</p>
+    <p>A character's tier comes from its popularity rank on AniList among the 2,983 characters of the current pool: Mythic is the top 2%, Legendary the next 6%, Epic the next 12%, Rare the next 20%, Uncommon the next 25%, Common the rest.</p>
+    <p>Pool as of 29 Oct 2026.</p>
+    <button class="btn btn-secondary x" data-act="close">Close</button></div></div>`;
+}
+
+/* ---------- header and tab bar page (§10.1–§10.3) ---------- */
+const PAGE_HEAD = {
+  "/shop": ["Themed packs", "Shop", null], "/market": ["Player trades", "Market", null], "/packs": ["Timer packs", "Packs", null],
+  "/collection": ["Your cards", "Collection", `${PLAYER.cards} cards · ${PLAYER.dups} duplicates`], "/profile": ["Player", "Profile", null],
+};
+function chrome({ chips, current = "/collection" }) {
+  const [eb, title, stat] = PAGE_HEAD[current];
+  const body = `<p class="bodynote">Page body unchanged apart from the new tokens (§11.4). Switch tabs in the bar, or the links in the header, to see each page's eyebrow and title (§10.1).</p>`;
+  return `<div class="app col">${headerIn({ chips, current, ready: 2 })}
+    <main class="page ph-wrap"><div class="ph"><p class="eyebrow" aria-hidden="true">${eb}</p><h1 class="d t-title">${title}</h1>${stat ? `<p class="stat tab">${stat}</p>` : ""}</div>${body}</main>
+    ${footer()}${tabBar({ chips, current, ready: 2 })}</div>`;
+}
+
+/* ===== Pack-opening prototype: the S0–S7 reducer of pack-opening.md §4, a stand-in for ceremony.ts ===== */
+const T = { sleeveIn: 320, tellIn: 250, hold: 700, unwind: 150, burst: 650, flip: 360, settle: 250, lock: 150, spot: { epic: 1400, legendary: 2000, mythic: 2600 }, step: 60 };
+const EPIC_UP = ["epic", "legendary", "mythic"];
+const card = (k, isNew = true) => ({ c: CHARS[k], tier: CHARS[k].tier, isNew });
+
+/* Scripted answers. Only `showcase` breaks the real slot floors; the others are dealable packs. */
+const PACKS = {
+  showcase: { label: "Showcase script: Uncommon to Mythic (not a real pack)", kind: "standard", src: ["timer", "shop", "demo"],
+    cards: [card("sasha", false), card("kanao"), card("anya"), card("maomao"), card("levi")] },
+  typical: { label: "Standard: 2 Common, 2 Uncommon, 1 Rare", kind: "standard", src: ["timer", "shop", "demo"],
+    cards: [card("kaminari"), card("usopp", false), card("kazuma"), card("bertholdt", false), card("inumaki")] },
+  epic5: { label: "Standard: Epic in card 5", kind: "standard", src: ["timer", "shop", "demo"],
+    cards: [card("mineta"), card("usopp", false), card("sasha"), card("kazuma", false), card("nanami")] },
+  enchanted: { label: "Enchanted: Legendary in card 5", kind: "enchanted", src: ["timer"],
+    cards: [card("kaminari"), card("mineta"), card("bertholdt", false), card("sasha"), card("zerotwo")] },
+  radiant: { label: "Radiant: five Epic or better", kind: "radiant", src: ["timer", "shop"],
+    cards: [card("rengoku"), card("anya", false), card("power"), card("nanami"), card("makima")] },
+  pity: { label: "Guaranteed Mythic (pity)", kind: "pity", src: ["timer"],
+    cards: [card("usopp", false), card("kaminari"), card("kazuma"), card("sasha", false), card("levi")] },
+};
+const SOURCES = {
+  timer: { route: "/packs/open", h1: "Pack opening", eyebrow: "Your pack", back: "Back to packs" },
+  shop: { route: "/shop/open", h1: "Shop pack", eyebrow: "Shop pack", back: "Back to the shop" },
+  demo: { route: "/demo", h1: "Demo pack", eyebrow: "Demo pack", back: "Back to the landing page" },
+};
+const SHOP_THEME = { id: "romance", title: "Romance" };
+const LINES = {
+  enchanted: "Every 10th free pack is Enchanted: its fifth card is Epic or better.",
+  radiant: "About 1 pack in 2,500 is Radiant: five cards of Epic or better, at least one of them Mythic.",
+  pity: "This Mythic came from the guarantee: a 300th free pack in a row without a Mythic always has one.",
+};
+
+/* Sleeve facts from the answer (visual-identity.md §8.1, §8.2). */
+function sleeveFor(ctx, answered) {
+  const demo = ctx.source === "demo", shop = ctx.source === "shop";
+  const base = { name: shop ? SHOP_THEME.title : "Anime TCG", line: demo ? "Demo pack · five cards" : shop ? "5 cards" : "Five cards", ink: shop ? themeInk(SHOP_THEME.id) : "night", floor: shop ? null : "rare", kind: null, outer: false };
+  if (!answered) return { ...base, ink: shop ? base.ink : "night" };
+  if (ctx.kind === "enchanted") return { ...base, floor: "epic", kind: "Enchanted", outer: true };
+  if (ctx.kind === "radiant") return { ...base, floor: "mythic", kind: "Radiant", ink: "radiant" };
+  if (ctx.kind === "pity") return { ...base, floor: "mythic", kind: "Guaranteed Mythic" };
+  return base;
+}
+function floorInside(ctx) {
+  const s = sleeveFor(ctx, true);
+  if (!s.floor) return null;
+  const f = s.floor === "mythic" ? "Mythic inside." : `${LABEL[s.floor]} or better inside.`;
+  return s.kind ? `${s.kind === "Guaranteed Mythic" ? "Guaranteed Mythic" : s.kind + " pack"}. ${f}` : f;
+}
+const isolate = (s) => `⁨${s}⁩`;
+const summaryText = (cards) => TIERS.slice().reverse().map((t) => [t, cards.filter((c) => c.tier === t).length]).filter(([, n]) => n);
+function summaryHTML(cards) {
+  const parts = summaryText(cards);
+  return parts.map(([t, n], i) => `${i === 0 ? "" : i === parts.length - 1 ? " and " : ", "}${n} <span class="tx-${t}">${LABEL[t]}</span>`).join("");
+}
+const summaryPlain = (cards) => { const p = summaryText(cards); return p.map(([t, n], i) => `${i === 0 ? "" : i === p.length - 1 ? " and " : ", "}${n} ${LABEL[t]}`).join(""); };
+
+/* ---------- the reducer (pure): state = { s, i } ---------- */
+function reduce(st, ev, ctx) {
+  const { s, i } = st; const rm = ctx.rm; const tier = ctx.cards[i]?.tier;
+  const go = (s2, i2 = i) => ({ s: s2, i: i2 });
+  const turn = () => (EPIC_UP.includes(tier) && !rm ? go("S5") : rm ? go("S6") : go("S4f"));
+  const next = () => (i < 4 ? go("S4", i + 1) : go("S7"));
+  const inCeremony = ["S1", "S2", "S3", "S4", "S4f", "S5", "S6"].includes(s);
+  switch (ev) {
+    case "ANSWER": return s === "S0" ? go("S1", 0) : st;
+    case "HOLD_START": return s === "S1" && !rm ? go("S2") : st;
+    case "HOLD_END": return s === "S2" ? go("S1") : st;
+    case "HOLD_DONE": return s === "S2" ? (rm ? go("S4", 0) : go("S3")) : st;
+    case "PRESS": return s === "S1" || s === "S2" ? (rm ? go("S4", 0) : go("S3")) : st;
+    case "ADVANCE":
+      if (s === "S3") return go("S4", 0);
+      if (s === "S4") return turn();
+      if (s === "S5") return go("S6");
+      if (s === "S6") return next();
+      return st;
+    case "ANIM_END":
+      if (s === "S3") return go("S4", 0);
+      if (s === "S4f" || s === "S5") return go("S6");
+      return st;
+    case "SKIP":
+      if (s === "S1" || s === "S2" || s === "S3") return go("S4", 0);
+      if (s === "S4") return turn();
+      if (s === "S4f" || s === "S5") return go("S6");
+      if (s === "S6") return next();
+      return st;
+    case "REVEAL_ALL": return inCeremony ? go("S7") : st;
+  }
+  return st;
+}
+
+/* ---------- sound (§11): Web Audio, created on the first toggle press ---------- */
+const Sound = {
+  ctx: null, master: null, noise: null, last: null,
+  on: false,
+  ensure() {
+    if (this.ctx) return;
+    const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
+    this.ctx = new AC(); this.master = this.ctx.createGain(); this.master.gain.value = 0.25; this.master.connect(this.ctx.destination);
+    const len = this.ctx.sampleRate; const buf = this.ctx.createBuffer(1, len, this.ctx.sampleRate); const d = buf.getChannelData(0);
+    let x = 12345; for (let k = 0; k < len; k++) { x = (1103515245 * x + 12345) % 2147483648; d[k] = (x / 1073741824) - 1; } // fixed LCG: no Math.random
+    this.noise = buf;
+  },
+  env(g, t0, peak, dur, attack = 0.01) { g.gain.setValueAtTime(0, t0); g.gain.linearRampToValueAtTime(peak, t0 + attack); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur); },
+  tone(freq, dur, type = "sine", peak = 0.6, attack = 0.03, at = 0) {
+    const c = this.ctx, t0 = c.currentTime + at, o = c.createOscillator(), g = c.createGain();
+    o.type = type; o.frequency.value = freq; o.connect(g); g.connect(this.master); this.env(g, t0, peak, dur, attack); o.start(t0); o.stop(t0 + dur + 0.05); return o;
+  },
+  cue(name, n) {
+    if (!this.on || !this.ctx) return;
+    const c = this.ctx, now = c.currentTime;
+    const stopLast = () => { try { this.last && this.last.forEach((o) => o.stop()); } catch (e) {} this.last = null; };
+    if (name === "tear") {
+      const s = c.createBufferSource(); s.buffer = this.noise; const f = c.createBiquadFilter(); f.type = "bandpass"; f.Q.value = 2;
+      f.frequency.setValueAtTime(800, now); f.frequency.exponentialRampToValueAtTime(3000, now + 0.3); const g = c.createGain();
+      s.connect(f); f.connect(g); g.connect(this.master); g.gain.setValueAtTime(0, now); g.gain.linearRampToValueAtTime(0.6, now + 0.12); g.gain.linearRampToValueAtTime(0, now + 0.3); s.start(now); s.stop(now + 0.32);
+    } else if (name === "slide") { for (let k = 0; k < 5; k++) this.tone(220, 0.04, "triangle", 0.4, 0.004, 0.2 + k * 0.06); }
+    else if (name === "tell") { stopLast(); if (n < 2) return; this.last = [this.tone(220 * Math.pow(2, ((n - 1) * 4) / 12), 0.25, "sine", 0.5, 0.06)]; }
+    else if (name === "turn") {
+      stopLast(); const s = c.createBufferSource(); s.buffer = this.noise; const f = c.createBiquadFilter(); f.type = "highpass"; f.frequency.value = 2000; const g = c.createGain();
+      s.connect(f); f.connect(g); g.connect(this.master); this.env(g, now, 0.5, 0.03, 0.002); s.start(now); s.stop(now + 0.04);
+    } else if (name === "spotlight") {
+      const root = 220 * Math.pow(2, ((n - 1) * 4) / 12), dur = n === 4 ? 0.9 : n === 5 ? 1.1 : 1.2;
+      const fs = [root, root * Math.pow(2, 4 / 12), root * Math.pow(2, 7 / 12)]; if (n === 6) fs.push(root * 2);
+      fs.forEach((f) => this.tone(f, dur, "sine", 0.22, 0.05));
+    } else if (name === "summary") { this.tone(523, 0.12, "sine", 0.4, 0.01); this.tone(784, 0.12, "sine", 0.4, 0.01, 0.13); }
+  },
+};
+
+/* ---------- rendering (pure functions of state and context) ---------- */
+function tintFor(tier) { return { epic: "224 69 99 / .14", legendary: "245 184 74 / .14", mythic: "183 159 240 / .18" }[tier]; }
+function stageHTML(st, ctx, ui = {}) {
+  const { s, i } = st; const cur = ctx.cards[i]; const tier = cur?.tier; const src = SOURCES[ctx.source];
+  const showTell = ["S4", "S4f", "S5", "S6"].includes(s);
+  const tinted = showTell && EPIC_UP.includes(tier);
+  const sky = tinted && tier === "legendary" ? "b60" : tinted && tier === "mythic" ? "b70" : "";
+  const sl = sleeveFor(ctx, s !== "S0");
+  const chip = ctx.source === "timer" ? `<span class="chip" aria-label="${ctx.ready} of 3 packs ready"><span style="color:var(--ink-300);display:inline-flex;width:12px;height:18px">${SLEEVE_GLYPH}</span><span class="num">${ctx.ready}/3</span></span>`
+    : ctx.source === "shop" ? `<span class="chip karma" aria-label="1,090 Karma"><span class="num">1,090</span><span class="w">Karma</span></span>` : "";
+  const counter = ["S4", "S4f", "S5", "S6"].includes(s) ? `<span class="cn num" aria-hidden="true">${i + 1} / 5</span><span class="sr">Card ${i + 1} of 5</span>` : "";
+  const bar = `<div class="sbar"><a class="bk" href="#" data-act="leave">${icon("ChevronLeft", 20)}<span class="t">${src.back}</span></a>
+    <div class="ctr"><h1 tabindex="-1">${src.h1}</h1>${counter}</div>
+    <div class="rt">${chip}<button class="snd" data-act="sound" aria-pressed="${Sound.on}" aria-label="Sound">${icon(Sound.on ? "Volume2" : "VolumeX", 22)}<span class="t">${Sound.on ? "Sound on" : "Sound off"}</span></button></div></div>`;
+
+  // the stage control's content
+  let inner = "", name = "", desc = "", prompt = "";
+  const stackBeneath = (n) => Array.from({ length: Math.min(4, n) }, (_, k) => `<div class="lay" style="transform:translate(${(Math.min(4, n) - k) * 3}px,${(Math.min(4, n) - k) * 3}px)">${cardBack({ size: "stage" })}</div>`).join("");
+  if (s === "S0" || s === "S1" || s === "S2") {
+    const rise = s === "S1" && ui.from === "S0" ? 3 : 99;
+    const tear = s === "S2" ? (ui.tear || 0) : 0;
+    inner = `<div class="slvw ${s === "S0" ? "s0" : ""} ${s === "S0" && ui.fresh ? "in" : ""}">${sleeve({ ...(s === "S0" ? sleeveFor(ctx, false) : sl), tear, riseFrom: rise })}</div>`;
+    name = "Tear open the pack"; desc = "Hold, or press Enter.";
+    prompt = s === "S0" ? (ui.waiting ? `Waiting for the server…${ui.still ? `<span class="still">Still waiting. Leaving this page is fine: no pack is lost.</span>` : ""}` : "")
+      : ui.keep ? "Keep holding" : ctx.rm ? "Tap to tear it open" : "Hold to tear it open";
+  } else if (s === "S3") {
+    inner = `<div class="burst" style="position:absolute;inset:0"><div class="slvw">${sleeve(sl)}</div>${[0, 1, 2, 3, 4].map((k) => `<div class="lay rb" style="--k:${k};transform:translate(${(4 - k) * 3}px,${(4 - k) * 3}px)"><div style="width:100%">${cardBack({ size: "stage" })}</div></div>`).join("")}</div>`;
+    name = "Show the first card";
+  } else if (s === "S4" || s === "S5") {
+    inner = `${stackBeneath(4 - i)}<div class="lay">${cardBack({ size: "stage" })}</div><div class="lay ${s === "S4" ? "tellin" : ""}">${cardBack({ tier, size: "stage", breathe: true })}</div>`;
+    name = s === "S4" ? `Turn card ${i + 1} of 5` : "Show the card"; desc = `Card ${i + 1} of 5, face down: ${nStars(tier)} of 6 stars lit.`;
+    prompt = s === "S4" ? "Tap to turn" : "";
+  } else if (s === "S4f") {
+    inner = `${stackBeneath(4 - i)}<div class="flipw"><div class="flipi"><div>${cardBack({ tier, size: "stage", breathe: true })}</div><div class="fface">${cardFace(cur.c, { tier, size: "stage", effects: ctx.effects, tag: "span" })}</div></div></div>`;
+    name = `Turn card ${i + 1} of 5`;
+  } else if (s === "S6") {
+    inner = `${stackBeneath(4 - i)}<div class="lay ${ui.from === "S5" || ui.from === "S4f" ? "settle" : ""}">${cardFace(cur.c, { tier, size: "stage", effects: ctx.effects, tag: "span" })}</div>`;
+    name = i < 4 ? "Next card" : "See your pack";
+    prompt = i < 4 ? "Tap for the next card" : "Tap to see your pack";
+  }
+  const banner = s === "S6" && ctx.rm && EPIC_UP.includes(tier) ? `<div class="banner"><p class="bw tx-${tier}">${LABEL[tier]}</p><p class="bs" dir="auto">Series · ${esc(cur.c.series)}</p></div>` : "";
+  const marker = ctx.source === "demo" ? "" : cur?.isNew ? `<span class="mk new">New</span>` : `<span class="mk own">Already yours</span>`;
+  const info = s === "S6" ? `<div class="info"><p class="t-sub tw tx-${tier}">${LABEL[tier]}<span class="st" aria-hidden="true">${stars(tier)}</span></p>
+      <p class="t-sub nm2" dir="auto" title="${esc(cur.c.name)}">${esc(cur.c.name)}</p><p class="se" dir="auto">${esc(cur.c.series)}</p>${marker}</div>` : "";
+  const tray = `<div class="tray" aria-hidden="true">${ctx.cards.map((c, k) => (ui.turned || [])[k] ? `<i class="on" style="background:var(--flat-${c.tier})"><span>${artSVG(c.c, "t")}</span></i>` : `<i></i>`).join("")}</div>`;
+  const ctrls = s === "S0" ? "" : `<div class="ctrls"><button class="btn btn-secondary" data-act="skip">Skip</button><button class="btn btn-secondary" data-act="reveal">Reveal all</button></div>`;
+  const spot = s === "S5" ? spotHTML(cur, i, ctx) : "";
+  return `<div class="app stage" data-state="${s}">
+    <div class="sky ${sky}"></div>${tinted ? `<div class="tint" style="background:radial-gradient(60% 45% at 50% 48%, rgb(${tintFor(tier)}) 0%, transparent 100%)"></div>` : ""}
+    ${bar}
+    <div class="mid">${banner}
+      <button class="sctl" ${s === "S0" ? 'aria-disabled="true"' : ""} aria-label="${esc(name)}" ${desc ? `aria-describedby="sctl-d"` : ""}>${inner}</button><span id="sctl-d" class="sr">${esc(desc)}</span>
+      ${info}<p class="prompt">${prompt}</p></div>
+    <div class="sbot">${tray}${ctrls}</div>${spot}</div>`;
+}
+function spotHTML(cur, i, ctx) {
+  const t = cur.tier; const dbl = { epic: "224 69 99 / .28", legendary: "245 184 74 / .28", mythic: "183 159 240 / .36" }[t];
+  return `<div class="spot" data-act="spot"><div class="tl" style="background:radial-gradient(70% 55% at 50% 45%, rgb(${dbl}) 0%, transparent 100%)"></div>
+    <div class="col"><p class="eyebrow">Card ${i + 1} of 5</p><p class="t-tier tx-${t}">${LABEL[t]}</p>
+      <div class="ser"><div class="pa" style="border-color:var(--flat-${t})">${artSVG(cur.c, "s")}</div>
+        <div style="min-width:0"><p class="eyebrow" style="color:var(--ink-300)">Series</p><p class="st2" dir="auto">${esc(cur.c.series)}</p>
+          ${cur.c.native && cur.c.native !== cur.c.series ? `<p class="nt" dir="auto">${esc(cur.c.native)}</p>` : ""}<p class="yr num">${cur.c.year}</p></div></div>
+      <p class="pop num">Popularity #${fmt(cur.c.rank)} of ${fmt(POOL)}</p></div></div>`;
+}
+function summaryPage(ctx, ui = {}) {
+  const src = SOURCES[ctx.source]; const cards = ctx.cards; const demo = ctx.source === "demo";
+  const k = cards.filter((c) => c.isNew).length, d = cards.filter((c) => !c.isNew).length;
+  const heading = ctx.source === "shop" ? `${SHOP_THEME.title} pack` : ctx.kind === "enchanted" ? "Enchanted pack" : ctx.kind === "radiant" ? "Radiant pack" : "Your pack";
+  const acts = ctx.source === "timer"
+    ? `<p class="num">${ctx.ready} of 3 packs ready</p><button class="btn btn-primary" data-act="again" ${ctx.ready === 0 ? 'aria-disabled="true"' : ""}>Open pack</button><a class="btn btn-secondary" href="#">Back to packs</a><a class="btn-text" href="#">See collection</a>`
+    : ctx.source === "shop" ? `<a class="btn btn-secondary" href="#">Back to the shop</a><a class="btn-text" href="#">See collection</a>`
+    : `<button class="btn btn-primary" data-act="again">Open a demo pack</button><a class="btn btn-secondary" href="#">Back to the landing page</a><p class="disc">A demo pack uses the same odds as every pack in the game. Its cards aren't kept: nothing is saved, and they don't go to any account.</p>`;
+  const specials = [ctx.kind === "enchanted" && LINES.enchanted, ctx.kind === "radiant" && LINES.radiant, ctx.kind === "pity" && LINES.pity].filter(Boolean).map((l) => `<p class="sp">${l}</p>`).join("");
+  let flipK = 0;
+  const grid = cards.map((c, n) => {
+    const fresh = !(ui.turned || [])[n] && !ctx.rm && ui.animate;
+    const cap = demo ? "" : c.isNew ? `<span class="mk new">New</span>` : `<span class="mk own">Already yours</span>`;
+    return `<li><div class="${fresh ? "gflip" : ""}" style="--k:${fresh ? flipK++ : 0}">${cardFace(c.c, { effects: ctx.effects })}</div>${demo ? "" : `<div class="cap">${cap}</div>`}</li>`;
+  }).join("");
+  const line = demo ? `Demo pack: ${summaryHTML(cards)}` : `${summaryHTML(cards)}${k ? ` · ${k} new` : ""}${d ? ` · ${d} already yours` : ""}`;
+  const header = demo ? headerOut() : headerIn({ chips: "A", current: ctx.source === "timer" ? "/packs" : "/shop", ready: ctx.ready });
+  return `<div class="app col summ">${header}<main class="page ph-wrap">
+    <div class="ph"><p class="eyebrow" aria-hidden="true">${src.eyebrow}</p><h1 class="d t-title">${src.h1}</h1></div>
+    <div class="acts">${acts}</div>
+    <section class="rv" aria-labelledby="rv-h">${demo ? "" : `<h2 id="rv-h" class="d t-section" tabindex="-1">${heading}</h2>`}
+      <p class="sl" ${demo ? 'id="rv-h" tabindex="-1"' : ""}>${line}</p>${specials}
+      <ul class="grid" role="list">${grid}</ul>
+      ${!demo && d ? `<p class="rec">Spare copies can be recycled for Karma in your <a class="link-u" href="#">collection</a>.</p>` : ""}
+      ${demo ? `<p class="keep">To keep cards, <a class="link-u" href="#">register</a> with an invite code.</p>` : ""}
+    </section></main>${footer()}${demo ? "" : tabBar({ chips: "A", current: ctx.source === "timer" ? "/packs" : "/shop", ready: ctx.ready })}</div>`;
+}
+
+/* ---------- controller ---------- */
+const P = { frame: "390", source: "demo", pack: "showcase", q2: "A", delay: 400, rm: false, ann: true, view: "live" };
+let st = { s: "S0", i: 0 }; let ui = {}; let timers = []; let lastChange = 0; let ctx;
+let hold = null, suppressClick = false, swipe = null, keepT = null;
+const log = []; const ann = [];
+const $ = (q, r = document) => r.querySelector(q);
+const FR = { 390: [390, 844], 320: [320, 568], 1440: [1440, 900] };
+
+function makeCtx() {
+  const pk = PACKS[P.pack];
+  const effects = P.source === "demo" && P.q2 === "B" ? "none" : "full";
+  return { source: P.source, kind: pk.kind, cards: pk.cards, rm: P.rm, effects, ready: ctx?.ready ?? 1 };
+}
+function clearTimers() { timers.forEach(clearTimeout); timers = []; }
+function later(ms, fn) { timers.push(setTimeout(fn, ms)); }
+function announce(msg) { ann.unshift(msg); const lr = $("#lr"); if (lr) lr.textContent = msg; drawSide(); }
+function addLog(s) { log.unshift(s); if (log.length > 40) log.pop(); }
+const stName = (x) => (["S4", "S4f", "S5", "S6"].includes(x.s) ? `${x.s}(${x.i})` : x.s);
+
+function dispatch(ev) {
+  if ((ev === "ADVANCE" || ev === "SKIP") && performance.now() - lastChange < T.lock) { addLog(`${ev} ignored (input lock)`); drawSide(); return; }
+  if (ev === "ADVANCE" && st.s === "S1") { showKeep(); return; }
+  const nx = reduce(st, ev, ctx);
+  if (nx === st || (nx.s === st.s && nx.i === st.i)) { addLog(`${ev} · no change in ${stName(st)}`); drawSide(); return; }
+  addLog(`${ev}: ${stName(st)} → ${stName(nx)}`);
+  enter(nx, st);
+}
+function enter(nx, prev) {
+  clearTimers(); stopHold();
+  const from = prev ? prev.s : null;
+  st = nx; lastChange = performance.now();
+  ui = { ...ui, from, keep: false, fresh: from !== "S0" && nx.s === "S0" };
+  if (nx.s === "S0") { ui.waiting = false; ui.still = false; ui.turned = [false, false, false, false, false]; ui.animate = true; }
+  if (nx.s === "S6") ui.turned[nx.i] = true;
+  // S2 is drawn in place so the pointer capture holds (a re-render would replace the control).
+  if (nx.s === "S2" || (nx.s === "S1" && from === "S2")) patchHold(); else drawStage();
+  const cur = ctx.cards[nx.i];
+  switch (nx.s) {
+    case "S0":
+      later(300, () => { ui.waiting = true; if (st.s === "S0") { drawStage(); announce("Waiting for the server…"); } });
+      later(10000, () => { ui.still = true; if (st.s === "S0") drawStage(); });
+      later(P.delay, () => { if (ctx.source === "timer") ctx.ready = Math.max(0, ctx.ready - 1); dispatch("ANSWER"); });
+      break;
+    case "S1": if (from === "S0") { const f = floorInside(ctx); if (f) announce(f); } break;
+    case "S3": Sound.cue("tear"); Sound.cue("slide"); later(T.burst, () => dispatch("ANIM_END")); break;
+    case "S4": if (from === "S1" || from === "S2") Sound.cue("tear"); announce(`Card ${nx.i + 1} of 5, face down: ${nStars(cur.tier)} of 6 stars lit.`); Sound.cue("tell", nStars(cur.tier)); break;
+    case "S4f": Sound.cue("turn"); later(T.flip, () => dispatch("ANIM_END")); break;
+    case "S5": Sound.cue("spotlight", nStars(cur.tier)); later(T.spot[cur.tier], () => dispatch("ANIM_END")); break;
+    case "S6": if (from === "S4" && ctx.rm) Sound.cue("turn"); announce(`${isolate(cur.c.name)}, ${LABEL[cur.tier]}, ${isolate(cur.c.series)}.${ctx.source === "demo" ? "" : cur.isNew ? " New." : " Already yours."}`); break;
+    case "S7": {
+      const k = ctx.cards.filter((c) => c.isNew).length;
+      const head = ctx.source === "demo" ? "Demo pack" : ctx.source === "shop" ? `${SHOP_THEME.title} pack` : ctx.kind === "enchanted" ? "Enchanted pack" : ctx.kind === "radiant" ? "Radiant pack" : "Your pack";
+      announce(`${head}: ${summaryPlain(ctx.cards)}.${ctx.source !== "demo" && k ? ` ${k} new.` : ""}`); Sound.cue("summary"); break;
+    }
+  }
+  drawSide();
+}
+function showKeep() { ui.keep = true; const p = $(".prompt"); if (p) p.textContent = "Keep holding"; clearTimeout(keepT); keepT = setTimeout(() => { ui.keep = false; const q = $(".prompt"); if (q && st.s === "S1") q.textContent = ctx.rm ? "Tap to tear it open" : "Hold to tear it open"; }, 1500); }
+
+/* The tear line during S2 grows over 700 ms; release unwinds it over 150 ms. */
+function patchHold() {
+  const st2 = $(".stage"); if (st2) st2.dataset.state = st.s;
+}
+function startHold() {
+  const t0 = performance.now(); const slv = $(".sctl .sleeve");
+  hold = { raf: 0 };
+  const tick = (now) => {
+    const p = Math.min(1, (now - t0) / T.hold); if (slv) slv.style.setProperty("--tear", p);
+    if (p >= 1) { hold = null; suppressClick = true; dispatch("HOLD_DONE"); return; }
+    hold.raf = requestAnimationFrame(tick);
+  };
+  hold.raf = requestAnimationFrame(tick);
+}
+function stopHold() { if (hold) { cancelAnimationFrame(hold.raf); hold = null; } }
+function unwind() {
+  const slv = $(".sctl .sleeve"); if (!slv) return;
+  const from = parseFloat(slv.style.getPropertyValue("--tear")) || 0; const t0 = performance.now();
+  const tick = (now) => { const p = Math.min(1, (now - t0) / T.unwind); slv.style.setProperty("--tear", from * (1 - p)); if (p < 1 && st.s === "S1") requestAnimationFrame(tick); };
+  requestAnimationFrame(tick);
+}
+
+/* ---------- drawing ---------- */
+function drawStage() {
+  const vp = $("#live .vp"); if (!vp) return;
+  const focusWasCtl = document.activeElement?.classList?.contains("sctl");
+  const focusInStage = !!document.activeElement?.closest?.(".stage");
+  vp.classList.toggle("rm", ctx.rm);
+  const page = st.s === "S7" ? summaryPage(ctx, ui) : "";
+  vp.innerHTML = `<div class="scroller${P.ann ? "" : " no-ann"}">${page}</div>${st.s === "S7" ? "" : stageHTML(st, ctx, ui)}<div id="lr" class="sr" role="status" aria-live="polite"></div>${P.ann && st.s !== "S7" ? annTags() : ""}`;
+  if (st.s === "S7" && ui.animate !== false) ui.animate = false;
+  if (st.s === "S7" && (focusInStage || focusWasCtl)) $("#rv-h", vp)?.focus();
+  else if (focusWasCtl) $(".sctl", vp)?.focus();
+}
+function annTags() {
+  const tags = [];
+  if (["S0", "S1", "S2"].includes(st.s)) tags.push(['not in spec: sleeve size, lit colour', "top:64px;left:8px"]);
+  if (st.s === "S3") tags.push(["not in spec: burst details", "top:64px;left:8px"]);
+  if (st.s === "S5") tags.push(["not in spec: spotlight layout", "top:64px;left:8px"]);
+  return tags.map(([t, pos]) => `<span class="nis-tag" style="${pos};z-index:70">${esc(t)}</span>`).join("");
+}
+const STATES = [["S0", "awaiting"], ["S1", "sealed"], ["S2", "tearing"], ["S3", "bursting"], ["S4", "faceDown(i)"], ["S4f", "flipping(i)"], ["S5", "spotlight(i)"], ["S6", "faceUp(i)"], ["S7", "summary"]];
+function drawSide() {
+  const sm = $("#sm"); if (!sm) return;
+  sm.innerHTML = STATES.map(([k, n]) => `<li class="${st.s === k ? "cur" : ""}"><b>${k}</b> <span>${n}${st.s === k && ["S4", "S4f", "S5", "S6"].includes(k) ? `, i = ${st.i}` : ""}</span></li>`).join("");
+  $("#annlog").innerHTML = ann.slice(0, 14).map((a) => `<li>${esc(a)}</li>`).join("") || "<li class='mut'>Nothing announced yet.</li>";
+  $("#evlog").innerHTML = log.slice(0, 14).map((a) => `<li>${esc(a)}</li>`).join("");
+}
+function buildFrame() {
+  const [w, h] = FR[P.frame];
+  $("#live").innerHTML = frameShell(w, h, "", `<b>${w} × ${h}</b> · <code>${SOURCES[P.source].route}</code>${P.source === "demo" ? ` · Q2 <span class="tagv" style="background:var(--c-${P.q2.toLowerCase()})">${P.q2}</span>` : ""}${P.rm ? " · reduced motion" : ""}`, "grow");
+  fitFrames($("#live"));
+}
+function restart() {
+  ctx = makeCtx(); ctx.ready = P.source === "timer" ? 2 : 0;
+  ann.length = 0; log.length = 0; addLog(`Restart: ${PACKS[P.pack].label}`);
+  st = { s: "-", i: 0 }; ui = {};
+  const first = P.source === "shop" ? { s: "S1", i: 0 } : { s: "S0", i: 0 };
+  buildFrame();
+  ui.turned = [false, false, false, false, false]; ui.animate = true;
+  if (first.s === "S1") { ctx.ready = 0; enter(first, { s: "S0" }); } else enter(first, null);
+}
+
+/* ---------- inputs on the stage control (§4.3) ---------- */
+function bindFrame() {
+  const live = $("#live");
+  live.addEventListener("pointerdown", (e) => {
+    const ctl = e.target.closest(".sctl"); if (!ctl || e.button !== 0) return;
+    suppressClick = false;
+    swipe = { x: e.clientX, y: e.clientY, s: st.s };
+    if (st.s === "S1" && !ctx.rm) { try { ctl.setPointerCapture(e.pointerId); } catch (_) {} dispatch("HOLD_START"); if (st.s === "S2") startHold(); }
+  });
+  const end = (e) => {
+    if (st.s === "S2" && hold) { stopHold(); dispatch("HOLD_END"); unwind(); showKeep(); suppressClick = true; }
+    if (swipe && e.type === "pointerup" && ["S3", "S4", "S5", "S6"].includes(st.s) && swipe.s === st.s) {
+      const dx = e.clientX - swipe.x, dy = e.clientY - swipe.y;
+      if (dx <= -48 || dy <= -48) { suppressClick = true; dispatch("ADVANCE"); }
+    }
+    swipe = null;
+  };
+  live.addEventListener("pointerup", end); live.addEventListener("pointercancel", end);
+  live.addEventListener("lostpointercapture", (e) => { if (st.s === "S2" && hold) end(e); });
+  live.addEventListener("contextmenu", (e) => { if (e.target.closest(".sctl")) e.preventDefault(); });
+  live.addEventListener("click", (e) => {
+    const a = e.target.closest("a"); if (a) e.preventDefault();
+    const act = e.target.closest("[data-act]")?.dataset.act;
+    if (act === "skip") return dispatch("SKIP");
+    if (act === "reveal") return dispatch("REVEAL_ALL");
+    if (act === "sound") { Sound.ensure(); Sound.on = !Sound.on; addLog(`Sound ${Sound.on ? "on" : "off"}${Sound.ctx ? " (AudioContext created on this press)" : ""}`); const b = e.target.closest(".snd"); b.setAttribute("aria-pressed", String(Sound.on)); b.innerHTML = `${icon(Sound.on ? "Volume2" : "VolumeX", 22)}<span class="t">${Sound.on ? "Sound on" : "Sound off"}</span>`; drawSide(); return; }
+    if (act === "again") { if (e.target.closest("[aria-disabled]")) return; enter({ s: "S0", i: 0 }, { s: "S7" }); return; }
+    if (act === "spot") return dispatch("ADVANCE");
+    if (act === "leave") { addLog("LEAVE: back link (the opening is marked shown)"); drawSide(); return; }
+    const ctl = e.target.closest(".sctl"); if (!ctl) return;
+    if (suppressClick) { suppressClick = false; return; }
+    if (e.detail > 1) { addLog("click detail > 1 ignored"); drawSide(); return; }
+    if (st.s === "S0") return;
+    if (e.detail === 0 || (ctx.rm && (st.s === "S1" || st.s === "S2"))) { if (st.s === "S1" || st.s === "S2") return dispatch("PRESS"); }
+    if (st.s === "S1") return showKeep();
+    dispatch("ADVANCE");
+  });
+  live.addEventListener("keydown", (e) => {
+    const ctl = e.target.closest(".sctl"); if (!ctl) return;
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault(); if (e.repeat) { addLog("keydown repeat ignored"); drawSide(); return; }
+      if (st.s === "S1" || st.s === "S2") dispatch("PRESS"); else if (st.s !== "S0") dispatch("ADVANCE");
+    } else if (e.key === "ArrowRight" && st.s !== "S0") { e.preventDefault(); dispatch("ADVANCE"); }
+  });
+  live.addEventListener("keyup", (e) => { if (e.key === " " && e.target.closest(".sctl")) e.preventDefault(); });
+}
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && P.view === "live" && ["S1", "S2", "S3", "S4", "S4f", "S5", "S6"].includes(st.s)) dispatch("REVEAL_ALL"); });
+
+/* ---------- jump (prototype only) ---------- */
+function jump(target) {
+  const tiers = ctx.cards.map((c) => c.tier);
+  let i = +$("#ji").value - 1;
+  if (target === "S5") { if (ctx.rm) { addLog("S5 never plays under reduced motion"); drawSide(); return; } if (!EPIC_UP.includes(tiers[i])) { const j = tiers.findIndex((t) => EPIC_UP.includes(t)); if (j < 0) { addLog("This pack has no Epic or better: no spotlight"); drawSide(); return; } i = j; } }
+  if (target === "S0") return restart();
+  ui.turned = ctx.cards.map((_, k) => k < i || (target === "S6" && k === i) || target === "S7");
+  if (target === "S1" || target === "S3") { ui.turned = [false, false, false, false, false]; i = 0; }
+  if (target === "S3" && ctx.rm) { addLog("S3 is skipped under reduced motion"); drawSide(); return; }
+  ui.animate = false;
+  addLog(`Jump to ${target}${["S4", "S5", "S6"].includes(target) ? `(${i})` : ""}`);
+  enter({ s: target, i }, { s: "jump" });
+}
+
+/* ---------- Q2 compare (static renders of the same functions) ---------- */
+function drawCompare() {
+  const base = { source: "demo", kind: "standard", cards: PACKS.showcase.cards, rm: P.rm, ready: 0 };
+  const w = 390, h = 844;
+  const cell = (v, inner, what) => frameShell(w, h, `<div class="scroller">${inner}</div>`, `<span class="tagv" style="background:var(--c-${v.toLowerCase()})">${v}</span> <b>${v === "A" ? "Frame effects" : "Plain demo cards"}</b> · ${what}`);
+  const cA = { ...base, effects: "full" }, cB = { ...base, effects: "none" };
+  const s6 = { s: "S6", i: 3 }, u6 = { turned: [true, true, true, true, false], from: null };
+  $("#cmpv").innerHTML = `<div class="cmp">${cell("A", stageHTML(s6, cA, u6), "S6 · Legendary face up")}${cell("B", stageHTML(s6, cB, u6), "S6 · Legendary face up")}</div>
+    <div class="cmp" style="margin-top:28px">${cell("A", summaryPage(cA, { turned: [1, 1, 1, 1, 1] }), "S7 · summary")}${cell("B", summaryPage(cB, { turned: [1, 1, 1, 1, 1] }), "S7 · summary")}</div>`;
+  $("#cmpv").querySelectorAll(".vp").forEach((v) => v.classList.toggle("rm", P.rm));
+  fitFrames($("#cmpv"));
+  $("#cmpv").querySelectorAll(".scroller").forEach((sc) => { const rv = sc.querySelector(".rv"); if (rv) sc.scrollTop = rv.offsetTop - 16; });
+}
+
+/* ---------- chrome controls ---------- */
+function syncControls() {
+  document.querySelectorAll(".seg").forEach((seg) => seg.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(P[seg.dataset.key] === b.dataset.v))));
+  const sel = $("#pack");
+  sel.innerHTML = Object.entries(PACKS).map(([k, p]) => `<option value="${k}" ${p.src.includes(P.source) ? "" : "disabled"}>${p.label}${p.src.includes(P.source) ? "" : " (not on this route)"}</option>`).join("");
+  if (!PACKS[P.pack].src.includes(P.source)) P.pack = "showcase";
+  sel.value = P.pack;
+  $("#delay").value = String(P.delay); $("#rm").checked = P.rm; $("#ann2").checked = P.ann;
+  $("#live-wrap").hidden = P.view !== "live"; $("#cmpv").hidden = P.view !== "compare";
+  document.querySelectorAll("[data-only]").forEach((g) => { g.hidden = g.dataset.only !== P.view; });
+}
+document.querySelectorAll(".seg").forEach((seg) => seg.addEventListener("click", (e) => {
+  const b = e.target.closest("button"); if (!b) return;
+  const k = seg.dataset.key; P[k] = b.dataset.v;
+  if (k === "q2") P.source = "demo";
+  syncControls();
+  if (P.view === "compare") drawCompare(); else restart();
+}));
+$("#pack").addEventListener("change", (e) => { P.pack = e.target.value; restart(); });
+$("#delay").addEventListener("change", (e) => { P.delay = +e.target.value; restart(); });
+$("#rm").addEventListener("change", (e) => { P.rm = e.target.checked; buildFrame(); if (P.view === "compare") drawCompare(); else restart(); });
+$("#ann2").addEventListener("change", (e) => { P.ann = e.target.checked; drawStage(); });
+$("#restart").addEventListener("click", restart);
+$("#jumps").addEventListener("click", (e) => { const b = e.target.closest("button[data-j]"); if (b) jump(b.dataset.j); });
+new ResizeObserver(() => { fitFrames($("#live")); if (P.view === "compare") fitFrames($("#cmpv")); }).observe($("#live-wrap"));
+try { if (matchMedia("(prefers-reduced-motion: reduce)").matches) P.rm = true; } catch (_) {}
+syncControls(); bindFrame(); restart();
+if (document.fonts) document.fonts.ready.then(() => fitFrames());
+
+/* ---------- the owner's pick for Q2 ---------- */
+(async () => {
+  const key = "demo-effects"; let db = null;
+  const line = () => { const v = document.querySelector('input[name="d-demo-effects"]:checked')?.value || "<A or B>"; const n = $("#n-demo-effects").value.trim(); return `mockup pack-opening: Q2 demo effects ${v}${n ? `, ${n}` : ""}`; };
+  try { db = window.claude?.use ? await window.claude.use("db") : null; } catch { db = null; }
+  const s = $("#s-demo-effects"), btn = $('[data-save="demo-effects"]');
+  if (!db) {
+    const c = $("#c-demo-effects"); c.hidden = false; const upd = () => { c.textContent = "Send this line in chat: " + line(); }; upd();
+    document.querySelectorAll('input[name="d-demo-effects"], #n-demo-effects').forEach((i) => i.addEventListener("input", upd));
+    btn.textContent = "Copy line"; btn.onclick = async () => { try { await navigator.clipboard.writeText(line()); s.textContent = "Copied."; } catch { s.textContent = "Select the line and copy it."; } };
+    return;
+  }
+  const ref = db.doc(`picks/${key}`);
+  ref.onSnapshot((snap) => {
+    if (!snap.exists) { s.textContent = "No pick saved yet."; return; }
+    const d = snap.data(); s.textContent = `Saved: ${d.choice}${d.note ? ` (“${d.note}”)` : ""} · ${new Date(d.at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`;
+    const r = document.querySelector(`input[name="d-demo-effects"][value="${d.choice}"]`); if (r && !document.querySelector('input[name="d-demo-effects"]:checked')) r.checked = true;
+  }, () => { s.textContent = "Couldn't read saved picks."; });
+  btn.onclick = async () => {
+    const v = document.querySelector('input[name="d-demo-effects"]:checked')?.value; if (!v) { s.textContent = "Choose A or B first."; return; }
+    btn.disabled = true;
+    try { await ref.set({ choice: v, note: $("#n-demo-effects").value.trim().slice(0, 500), at: new Date().toISOString() }); } catch { s.textContent = "Couldn't save. Send this in chat instead: " + line(); }
+    btn.disabled = false;
+  };
+})();
+
+</script>
