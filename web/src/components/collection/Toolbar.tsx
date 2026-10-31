@@ -155,7 +155,7 @@ export function Toolbar({ controls, options, disabled, onChange, onCleared }: Pr
               checked={controls.duplicatesOnly}
               disabled={disabled}
               onChange={(event) => onChange({ type: "duplicatesOnly", on: event.target.checked })}
-              className="size-4 accent-violet-600"
+              className="size-4 accent-volt"
             />
             {toolbarCopy.duplicatesOnly}
           </label>

@@ -70,7 +70,7 @@ export const ALL_CHIP: Record<"pressed" | "other", string> = {
 /** §6.2: the tile is a bare button; its focus ring goes around the card, not the caption. */
 export const TILE = "group flex h-full w-full flex-col gap-1.5 text-left focus-visible:outline-none";
 export const TILE_RING =
-  "block rounded-[12px] group-focus-visible:ring-2 group-focus-visible:ring-violet-500 group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-zinc-950";
+  "block rounded-[12px] group-focus-visible:ring-2 group-focus-visible:ring-volt group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-night-950";
 export const TILE_CAPTION =
   "flex min-h-4 items-baseline justify-between gap-2 px-0.5 text-xs leading-tight text-zinc-300 tabular-nums";
 
