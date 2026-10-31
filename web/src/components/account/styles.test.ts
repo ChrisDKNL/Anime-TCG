@@ -96,6 +96,10 @@ describe("the identity's controls", () => {
     expect(FOCUS_RING).not.toMatch(/violet/);
   });
 
+  it("the Account menu's items show keyboard focus with the Volt ring, not by their fill alone", () => {
+    expect(tokens(MENU_ITEM)).toEqual(expect.arrayContaining(tokens(FOCUS_RING)));
+  });
+
   it("error text and an invalid field use danger, not red-300", () => {
     expect(tokens(ERROR_TEXT)).toContain("text-danger");
     expect(INPUT_BORDER.invalid).toBe("border-danger");
