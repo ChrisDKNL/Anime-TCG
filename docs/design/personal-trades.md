@@ -860,7 +860,9 @@ These passages change **when the PR named here lands**; each PR edits the spec i
 | `navigation-and-landing.md` §3.1 (the page list) and §3.5 (header links)                  | `/trades` and `/trades/new`; the Market item's `aria-current="true"` and count                     | T.3 |
 | `visual-identity.md` §10.1 (page table) and §10.3 (tab bar)                               | rows for `/trades` and `/trades/new` (eyebrow `Player trades`); the Market item's count chip       | T.3 |
 
-## 16. Open questions (owner)
+## 16. Owner decisions
+
+**Owner, 2026-10-31: option A on all three** (13 750 per pair and 27 500 per receiver per rolling 30 days; the 5 % fee on Karma in personal trades, paid by the receiver; fair card swaps accepted and flagged by `audit-market`). The options as they were put:
 
 1. **The gift limits.** **A (recommended)**: per pair **13 750**, per receiver **27 500**, per rolling 30 days: a Mythic at the market cap fits one pair's month (your rule for the market limits, applied to gifts), and the receiver limit is about 920 Karma a day, a fifth of an active player's income; the funnel falls from about 365 400 to about 121 800 a month in fair value, and §10's cap-price attack from 52 250 a week to 52 250 a month (§3.7.1). **B**: half (6 875 / 13 750): a Mythic could then sell for at most 20 625 to one buyer in a month, so the top of the market's range (up to 27 500) could never sell; the funnel falls to about 108 000. **C**: double (27 500 / 55 000): more room for generous friends; the funnel rises to about 149 300.
 2. **A fee on Karma in personal trades.** **A (recommended)**: the market's 5 %, paid by whoever receives the Karma and destroyed, as a seller pays it: §10's "every Karma moved between accounts loses a twentieth" stays true, and personal trades are not a cheaper way round the market. **B**: no fee: a friend's 1 000 Karma arrives as 1 000; the funnel bound rises to about 133 600 a month, and a Karma round trip between two accounts costs nothing.
