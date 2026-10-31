@@ -160,6 +160,7 @@ All six mismatches of this spec's first version (S1 to S6: `closedAt`, the `limi
 - **A sale without `proceeds`** (never expected) reads `Sold for <price> Karma`.
 - **E9 meanwhile**: the tiles' rank chip takes its pool size from the held collection answer's `snapshot`.
 - **A bought card opens nowhere**: the purchase confirms in place in the listing dialog (§3.5 step 4); there is no market opening route.
+- **Every filter change starts from the first page** (manager decision, 2026-10-30, §3.4 step 4): a change of search, rarity, series, character or sort asks for the first page and replaces the list; the pages held for any other set of parameters are dropped, so returning to an earlier set starts again from its first page rather than showing the pages it had.
 
 ## 4. States
 

@@ -1,6 +1,6 @@
 import type { Listing } from "@anime-tcg/shared/api";
-import { keepPreviousData, useInfiniteQuery } from "@tanstack/react-query";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { keepPreviousData, useInfiniteQuery, useQueryClient } from "@tanstack/react-query";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useDelayedFlag } from "../../hooks/useDelayedFlag";
 import { useGame } from "../../hooks/useGame";
 import type { RateLimitWait } from "../../hooks/useKeyedAction";
@@ -53,7 +53,22 @@ interface Props {
  */
 export function MarketBrowse({ controls, wait, blocks, cancel }: Props) {
   const game = useGame();
-  const { changeMarket } = game;
+  const queryClient = useQueryClient();
+  const { changeMarket, marketKey } = game;
+
+  /**
+   * §3.4 step 4 (manager decision, 2026-10-30): every change of parameters asks for the first page
+   * again and replaces the list, so the pages held for any other set of parameters go first; a set
+   * the player returns to starts again from its first page instead of showing the pages it had.
+   * Only sets nothing observes go: the current one is the list on screen until the new page arrives.
+   */
+  const changeParameters = useCallback(
+    (action: MarketAction) => {
+      queryClient.removeQueries({ queryKey: [...marketKey, "listings"], type: "inactive" });
+      changeMarket(action);
+    },
+    [queryClient, marketKey, changeMarket],
+  );
   const listings = useInfiniteQuery({
     ...game.listingsQuery(listingsQuery(controls)),
     placeholderData: keepPreviousData,
@@ -68,9 +83,9 @@ export function MarketBrowse({ controls, wait, blocks, cancel }: Props) {
   const { query, sent } = controls;
   useEffect(() => {
     if (searchText(query) === sent) return;
-    const id = window.setTimeout(() => changeMarket({ type: "send" }), SEARCH_DELAY_MS);
+    const id = window.setTimeout(() => changeParameters({ type: "send" }), SEARCH_DELAY_MS);
     return () => window.clearTimeout(id);
-  }, [query, sent, changeMarket]);
+  }, [query, sent, changeParameters]);
 
   useLayoutEffect(() => {
     if (focusResults.current) resultsRef.current?.focus();
@@ -81,7 +96,7 @@ export function MarketBrowse({ controls, wait, blocks, cancel }: Props) {
   const [asked, setAsked] = useState(0);
   const change = (action: MarketAction) => {
     setAsked((n) => n + 1);
-    changeMarket(action);
+    changeParameters(action);
   };
 
   const pages = useMemo(() => listings.data?.pages ?? [], [listings.data]);

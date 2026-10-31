@@ -203,6 +203,27 @@ describe("/market: Browse (market-and-shop.md §3.4)", () => {
     await waitFor(() => expect(liveRegion()).toHaveTextContent(""));
   });
 
+  it("a filter change drops back to the first page: a set the player returns to starts again from page 1", async () => {
+    const { user, fetchMock } = await openMarket({
+      [LISTINGS]: { status: 200, body: makeListingsPage([ONE, TWO], { nextCursor: "c2" }) },
+      "GET /api/market/listings?sort=price_asc&cursor=c2": {
+        status: 200,
+        body: makeListingsPage([MINE_LISTING], { first: false }),
+      },
+      "GET /api/market/listings?rarity=epic&sort=price_asc": page(TWO),
+    });
+    await user.click(await main().findByRole("button", { name: "Show more" }));
+    expect(await main().findByText("3 listings shown")).toBeInTheDocument();
+    await user.selectOptions(main().getByRole("combobox", { name: "Rarity" }), "Epic");
+    expect(await main().findByText("1 listing shown")).toBeInTheDocument();
+    await user.selectOptions(main().getByRole("combobox", { name: "Rarity" }), "");
+    // The first page alone, as the server sends it now, never the two pages held before.
+    expect(await main().findByText("2 listings shown")).toBeInTheDocument();
+    expect(main().getByRole("button", { name: "Show more" })).toBeInTheDocument();
+    expect(callsTo(fetchMock, LISTINGS)).toHaveLength(2);
+    expect(callsTo(fetchMock, "GET /api/market/listings?sort=price_asc&cursor=c2")).toHaveLength(1);
+  });
+
   it("a failed next page says so under the list, and Try again asks for it again", async () => {
     const { user } = await openMarket({
       [LISTINGS]: { status: 200, body: makeListingsPage([ONE], { nextCursor: "c2" }) },
