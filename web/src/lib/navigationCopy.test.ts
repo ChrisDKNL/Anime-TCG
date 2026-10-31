@@ -86,12 +86,14 @@ const landingFunctions: Array<[string, string]> = [
 const rendered: Array<[string, string]> = [
   ...strings(navigation, "navigation", []),
   ...landingFunctions,
-  ...strings(routes, "routes", []).filter(([path]) => /heading|guardLine|title|BOOT_TITLE/.test(path)),
+  ...strings(routes, "routes", []).filter(([path]) =>
+    /heading|eyebrow|guardLine|title|BOOT_TITLE/.test(path),
+  ),
   ...pagePaths.map((path): [string, string] => [`title ${path}`, routes.pageTitle(path)]),
 ];
 
 describe("navigation copy (§8)", () => {
-  it("covers the headings, titles, guard lines, header, landing, profile and not-found strings", () => {
+  it("covers the headings, eyebrows, titles, guard lines, header, landing, profile and not-found strings", () => {
     const texts = rendered.map(([, text]) => text);
     for (const expected of [
       "Packs",
@@ -111,6 +113,10 @@ describe("navigation copy (§8)", () => {
       "Five cards",
       "Recycle duplicates for Karma and spend it on themed packs. Karma comes only from playing. It can't be bought.",
       "List cards for other players to buy with Karma, and buy theirs.",
+      "Anime character cards",
+      "Invite only",
+      "Player trades",
+      "404",
     ]) {
       expect(texts).toContain(expected);
     }
