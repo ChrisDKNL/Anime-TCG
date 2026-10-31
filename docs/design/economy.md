@@ -79,6 +79,8 @@ All tunable numbers, in the one file ADR 0004 asks for; 1c put the pack numbers 
 
 **The market limits, re-checked** (round 3, decision 8). The owner chose the moderate set: 100 purchases and 25 000 Karma spent per buyer, 25 000 received per seller, 12 500 per pair, per rolling 7 days, and asked to re-check that one Mythic at the upper bound fits and to adjust the Karma figures proportionally if not. With five tiers a Mythic at the cap cost 25 000, above the pair limit, and the Karma figures were doubled (50 000, 50 000, 25 000). With six tiers it costs 27 500 (§5.2), above the doubled pair limit too, so the owner's rule is applied again with the smallest factor that fits, 2.2 times the owner's set: **55 000 spent, 55 000 received, 27 500 per pair**; the purchase count stays 100. A Mythic at the cap fits every limit, the pair limit exactly, and the buyer's spend leaves room for a second one in the same week from another seller. The factor is a manager default, 2026-10-29, owner may revise (§16).
 
+**Karma upgrades** (ADR 0015, `karma-upgrades.md` §4). Permanent levels bought with Karma make one of these numbers per account: `MARKET_MAX_LISTINGS` becomes level 0 of `MARKET_MAX_LISTINGS_BY_LEVEL` (50, 75, 100, 150, 200), read from the seller's own listing-slots level (Owner, 2026-10-31: "It should only raise the amount of cards that can be put up for sale at once"). The four window limits, the price bounds and the fee have no level and never change per account (ADR 0015 §5). 1c's `PACK_CAP` and `PACK_INTERVAL_MINUTES` become `PACK_CAP_BY_LEVEL` (3 to 10) and `PACK_INTERVAL_SECONDS_BY_LEVEL` (600 to 480). The levels cost `UPGRADE_PRICE` (64 000, 128 000, 256 000, 512 000, each one `upgrade_purchase` ledger entry within `MAX_ENTRY_AMOUNT`). Every table's level 0 is the value above, so a level 0 account behaves exactly as this section says.
+
 Invariants, each a unit test over the file and 1c's tables in `shared/src/rarity.ts`: every value is a positive safe integer; `REFERENCE_VALUE` and `RECYCLE_VALUE` rise with the tier; `RECYCLE_VALUE[r] ≤ REFERENCE_VALUE[r] / 4`; `RECYCLE_VALUE[r] < MARKET_PRICE_MIN[r] − fee(MARKET_PRICE_MIN[r])`, so buying at the floor to recycle always loses and listing at the floor always pays more than recycling; `MARKET_PRICE_MIN[r] ≤ REFERENCE_VALUE[r] ≤ MARKET_PRICE_MAX[r]`; a shop pack's expected recycle value is below `THEMED_PACK_PRICE / 9` (the shop-and-recycle loop contracts, §9.4); `MARKET_PRICE_MAX.mythic ≤ MARKET_WINDOW_PAIR ≤ MARKET_WINDOW_PROCEEDS` and `MARKET_PRICE_MAX.mythic ≤ MARKET_WINDOW_SPEND`; `MAX_RECYCLE_COUNT × RECYCLE_VALUE.mythic ≤ MAX_ENTRY_AMOUNT`; `MAX_BALANCE + MAX_ENTRY_AMOUNT ≤ 2^31 − 1`. `CURRENCY_NAME = "Karma"` is not here: the API never sends the name (§12).
 
 ### 5.1 Reference values for six tiers
@@ -375,6 +377,8 @@ Karma has one source until the games: recycling duplicates. Cards come from pack
 
 The ceiling is a hard bound per account and does not depend on the balance. Market income is not a faucet: it is other players' Karma.
 
+These are level 0 figures. With Karma upgrades (ADR 0015) an account's own refill level sets its ceiling, at most 86 400 / 480 = **180 timer packs and 9 380 Karma a day** at refill level 4; pack storage raises what a player who is away gets, never the ceiling (`karma-upgrades.md` §4.2, §4.3). Each storage and refill level costs more than its extra packs can return in a year for the casual, active and ceiling player (the shortest payback is 1.12 years, `karma-upgrades.md` §4.5). The collection-fill curve of §9.2.1 counts free packs, so a faster account walks the same curve sooner (`karma-upgrades.md` §4.6).
+
 #### 9.2.1 How fast duplicates come, on the real pool
 
 An account that keeps one copy of everything holds a given character of tier `t` after `n` free packs with chance `1 − (1 − c_t / size_t)^n`, where `c_t` is a free pack's long-run expected cards of tier `t` (§9.1) and `size_t` the tier's characters on the real snapshot (1 044 / 746 / 596 / 358 / 179 / 60, `collection-packs.md` §5.1.10). The next pack's expected duplicates are `Σ c_t × that chance`, and its expected recycle value is the same sum weighted by `RECYCLE_VALUE[t]`. This averages the Enchanted cadence and treats packs as independent; recycling never takes the last copy, so a character once held stays held.
@@ -397,13 +401,14 @@ Commons repeat first (half of them are held after about 260 free packs) and Myth
 - **The market fee**: 5 % of every sale's price destroyed (at least 1).
 - **Owner resets**, when the owner does not keep the Karma.
 - **Games** (items 5, 6) keep `HOUSE_EDGE` of every wager.
+- **Karma upgrades** (ADR 0015): each level bought destroys its price, one `upgrade_purchase` entry; at most 2 880 000 Karma per account, once (`karma-upgrades.md` §4.1, §5.1).
 - Recycling, a fixed-price sale of duplicates to the game, is the faucet in Karma and a sink in cards: every recycle destroys the cards it credits.
 
 ### 9.4 Why it does not inflate
 
 Let `C` be the Karma credited by recycling in a day, `S` spent in the shop and `F` market fees, summed over accounts. The total Karma in the game changes by `C − S − F` a day; market trades cancel out apart from `F`.
 
-1. **Karma grows at most linearly**, by at most `N × 7 505` a day for `N` accounts (75 050 at the ten-account cap), and by less with every pack bought or fee paid. It does not depend on balances.
+1. **Karma grows at most linearly**, by at most `N × 7 505` a day for `N` accounts (75 050 at the ten-account cap), and by less with every pack bought or fee paid. It does not depend on balances. For fully upgraded accounts (refill level 4, ADR 0015) the bound is `N × 9 380` a day, 93 800 at the cap, and the shop loop funds at most 26.0 themed packs a day per account (`karma-upgrades.md` §5.1).
 2. **The shop-and-recycle loop contracts.** A themed pack costs 400 and its cards recycle for 39.80 on average, so every shop pack destroys 360.20 Karma net on average, and spending all Karma on packs and recycling their cards converges: an account at the ceiling can fund at most `7 505 / 360.20 ≈ 20.8` themed packs a day, about 14 % more packs than its free ones.
 3. **The market cannot be used to mint.** A card bought at the floor recycles for less than half of what it cost (`RECYCLE_VALUE < MARKET_PRICE_MIN`), and a card sold at the floor nets more than it would recycle for, so there is no buy-to-recycle arbitrage and no reason to recycle a card someone wants.
 4. **Cards grow at most linearly.** Per account: 720 a day from timer packs, at most 104 from themed packs, about 14 bought; recycling only removes cards. No recycling upgrade exists, so the upper tiers come only from packs (later also from games), at the pull rates of §5.2 and §9.1.
@@ -412,7 +417,7 @@ Let `C` be the Karma credited by recycling in a day, `S` spent in the shop and `
 
 ### 9.5 What grows without bound
 
-- **A balance that is never spent**, linearly: at most 7 505 a day from its own duplicates plus at most 52 250 net per seven days from the market (§10), about 15 000 a day in all. `MAX_BALANCE` is about 183 years away at that rate; it keeps the arithmetic in range, and `balance_limit` is the answer if it is ever reached.
+- **A balance that is never spent**, linearly: at most 7 505 a day from its own duplicates plus at most 52 250 net per seven days from the market (§10), about 15 000 a day in all. `MAX_BALANCE` is about 183 years away at that rate; it keeps the arithmetic in range, and `balance_limit` is the answer if it is ever reached. With refill at level 4 (ADR 0015), about 9 380 plus the unchanged 7 464 a day, 16 850 in all; `MAX_BALANCE` is then about 163 years away (`karma-upgrades.md` §5.1).
 - **Cards that are never listed or recycled**, linearly: at most about 840 a day per account.
 - **Ledger rows**: one per action, at most a few hundred a day for a busy account.
 
@@ -433,6 +438,8 @@ This is an invite-only game in which one person could hold several accounts (one
 | Owner remedies            | `reset-collection` (cards to zero, Karma to zero unless `--keep-karma`, §8.10), deleting an account, rotating `INVITE_CODES`                                                                                                                                                  | what the owner does with a finding                                                                                                                       |
 
 **Residual risk, plainly.** The server cannot tell two people from one person with two accounts. One person with several accounts can move up to 52 250 Karma net per seven days into one account (the seller-side window cap less the fee), about 7 460 a day, against that account's own ceiling of 7 505 a day from recycling: multi-accounting can roughly double one account's Karma income (1.99 times), never more, whatever the number of accounts. Scaling the owner's Karma limits (§5) so that one Mythic fits the pair limit scaled this ceiling too. Cards move the other way under the buyer's limits: at most 100 cards and 55 000 Karma per seven days, for example 10 Mythics or 100 Legendaries at the floor price. Detection is after the fact and heuristic, and the remedy is the owner's. The roster is capped (`ACCOUNT_CAP`, 10) and every account comes from an invite the owner hands out, which is the real control.
+
+**Karma upgrades do not move this** (ADR 0015 §5, `karma-upgrades.md` §4.4, §5.2). No upgrade raises a window limit, the pair limit, the price bounds or the fee; the one market upgrade, listing slots, raises only how many cards an account can list at once (up to 200), and what a main can receive stays bounded by its proceeds limit above. The residual stays 52 250 net per seven days, 1.99 times; against a main with refill level 4 (9 380 a day of its own) it is 1.80 times.
 
 ## 11. Contract (`shared/src/api.ts`, `shared/src/errors.ts`)
 
