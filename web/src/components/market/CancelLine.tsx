@@ -27,7 +27,7 @@ export function CancelLine({ result, name, statusRef }: Props) {
           ref={statusRef}
           role="status"
           tabIndex={-1}
-          className="text-sm break-words text-zinc-200 focus:outline-none"
+          className="self-stretch text-sm [overflow-wrap:anywhere] text-zinc-200 focus:outline-none"
         >
           <LoginText text={{ template: cancelCopy.cancelled, login: name }} />
         </p>

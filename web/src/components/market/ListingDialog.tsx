@@ -438,7 +438,7 @@ function Bought({
           id={headingId}
           ref={headingRef}
           tabIndex={-1}
-          className={`${PANEL_HEADING} break-words focus:outline-none`}
+          className={`${PANEL_HEADING} self-stretch [overflow-wrap:anywhere] focus:outline-none`}
         >
           <LoginText text={{ template: buyCopy.resultHeading, login: card.character.name }} />
         </h2>

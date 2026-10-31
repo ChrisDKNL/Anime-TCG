@@ -1067,9 +1067,9 @@ test.describe("hostile names", () => {
       await dialogFits(page, "listing dialog");
       await dialog(page).getByRole("button", { name: "Buy…" }).click();
       await dialogFits(page, "confirmation");
-      // The result's heading overflows at 320 px: bug-market-long-name-320.spec.ts.
       await dialog(page).getByRole("button", { name: "Buy for 20 Karma" }).click();
       await expect(dialog(page).getByText(/^Bought for 20 Karma/)).toBeVisible();
+      await dialogFits(page, "result");
       await dialog(page).getByRole("button", { name: "Close" }).last().click();
       await main(page).getByRole("button", { name: "My listings" }).click();
       await expect(
@@ -1085,6 +1085,50 @@ test.describe("hostile names", () => {
           .filter({ hasText: /^Listing cancelled\./ }),
       ).toBeFocused();
       await noSideScroll(page, "My listings after a cancel");
+    });
+
+    /**
+     * Regression (tester hunt on #60, 2026-10-31): in a `flex flex-col items-start` column the text
+     * was sized to its content, and `break-words` does not lower its min-content width, so an
+     * unbroken name widened the dialog to 1138 px against 286 px.
+     */
+    const dialogOverflow = (page: Page) =>
+      dialog(page).evaluate((element) => ({
+        scrollWidth: element.scrollWidth,
+        clientWidth: element.clientWidth,
+      }));
+
+    test("regression: the purchase result's heading wraps a long unbroken name", async ({ page, api }) => {
+      api.game.market = [
+        makeListing(1, { price: 20, character: makeCharacter(2_001, { name: LONG, tier: "rare" }) }),
+      ];
+      await page.goto("/market");
+      await grid(page).getByRole("button").first().click();
+      await dialog(page).getByRole("button", { name: "Buy…" }).click();
+      await dialog(page).getByRole("button", { name: "Buy for 20 Karma" }).click();
+      await expect(dialog(page).getByText("Bought for 20 Karma. You have 1,220 Karma.")).toBeVisible();
+      const { scrollWidth, clientWidth } = await dialogOverflow(page);
+      expect(scrollWidth, "the result widens the dialog").toBeLessThanOrEqual(clientWidth);
+    });
+
+    test("regression: the own listing's cancel status wraps a long unbroken name", async ({ page, api }) => {
+      api.game.market = [
+        makeListing(1, {
+          price: 20,
+          mine: true,
+          character: makeCharacter(2_001, { name: LONG, tier: "rare" }),
+        }),
+      ];
+      await page.goto("/market");
+      await grid(page).getByRole("button").first().click();
+      await dialog(page).getByRole("button", { name: "Cancel listing" }).click();
+      await expect(
+        dialog(page)
+          .getByRole("status")
+          .filter({ hasText: /^Listing cancelled\./ }),
+      ).toBeVisible();
+      const { scrollWidth, clientWidth } = await dialogOverflow(page);
+      expect(scrollWidth, "the cancel status widens the dialog").toBeLessThanOrEqual(clientWidth);
     });
 
     test("the character line with a long name fits", async ({ page, api }) => {
