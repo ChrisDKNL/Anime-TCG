@@ -19,7 +19,7 @@ function tokens(classes: string): string[] {
 /**
  * visual-identity.md §10.4 and §6.1 (raising accounts.md §7's 40 px): buttons are 48 px tall on a phone
  * and 44 px from `sm`, the text fields as tall so a field and a button share a row, the Account control
- * 44 px; menu items keep accounts.md §7's 40 px on phone. Layout is not measurable in jsdom, so this pins
+ * 44 px, and the menu items 44 px on phone. Layout is not measurable in jsdom, so this pins
  * the utilities that give those heights.
  */
 describe("touch targets", () => {
@@ -39,8 +39,8 @@ describe("touch targets", () => {
     expect(tokens(ACCOUNT_CONTROL)).toContain("min-h-11");
   });
 
-  it("menu items are at least 40 px tall below sm and unchanged from sm up", () => {
-    expect(tokens(MENU_ITEM)).toEqual(expect.arrayContaining(["min-h-10", "sm:min-h-0"]));
+  it("menu items are 44 px tall below sm (§6.1) and unchanged from sm up", () => {
+    expect(tokens(MENU_ITEM)).toEqual(expect.arrayContaining(["min-h-11", "sm:min-h-0"]));
   });
 
   it("text buttons (Show/Hide) are 44 px tall below sm and 28 px from sm up, inside the 48 px field", () => {

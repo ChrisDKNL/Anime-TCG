@@ -149,7 +149,7 @@ export function Toolbar({ controls, options, disabled, onChange, onCleared }: Pr
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <label className="inline-flex min-h-10 items-center gap-2 text-sm text-zinc-200 sm:min-h-8">
+          <label className="inline-flex min-h-11 items-center gap-2 text-sm text-zinc-200 sm:min-h-8">
             <input
               type="checkbox"
               checked={controls.duplicatesOnly}

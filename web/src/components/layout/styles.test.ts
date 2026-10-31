@@ -19,7 +19,7 @@ function tokens(classes: string): string[] {
 /**
  * navigation-and-landing.md §7 "Touch targets", raised by visual-identity.md §6.1 and §10: the page links
  * are 44 px targets, the link-buttons and the skip link the buttons' 48 px on phone and 44 px from `sm`,
- * the wordmark 40 px on phone. jsdom does no layout, so this pins the utilities that give those heights.
+ * the wordmark 44 px on phone. jsdom does no layout, so this pins the utilities that give those heights.
  */
 describe("touch targets", () => {
   it.each([
@@ -37,8 +37,8 @@ describe("touch targets", () => {
     expect(tokens(classes)).toEqual(expect.arrayContaining(["min-h-12", "sm:min-h-11"]));
   });
 
-  it("the wordmark link is at least 40 px tall below sm", () => {
-    expect(tokens(WORDMARK)).toEqual(expect.arrayContaining(["min-h-10", "sm:min-h-0"]));
+  it("the wordmark link is 44 px tall below sm (§6.1)", () => {
+    expect(tokens(WORDMARK)).toEqual(expect.arrayContaining(["min-h-11", "sm:min-h-0"]));
   });
 
   it("the signed-out Log in link is 44 px tall below sm and 28 px from sm up, as the text buttons", () => {

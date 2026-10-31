@@ -7,9 +7,9 @@ import { BUTTON, FOCUS_RING, TEXT_KIND } from "../account/styles";
 
 /**
  * visual-identity.md §10.2: the display face at 800, 85 % wide, 20 px, no gradient (the gradient title
- * was standards §2 debt). It is a header link, so it is a 40 px target on phone like the others.
+ * was standards §2 debt). It is a header link, so it is a 44 px target on phone (§6.1) like the others.
  */
-export const WORDMARK = `display-tight inline-flex min-h-10 items-center rounded text-xl font-extrabold text-ink-100 sm:min-h-0 ${FOCUS_RING}`;
+export const WORDMARK = `display-tight inline-flex min-h-11 items-center rounded text-xl font-extrabold text-ink-100 sm:min-h-0 ${FOCUS_RING}`;
 
 /** The page links sit bare in the header: no tab group box (§10.2). On phone they share their row (`flex-auto`). */
 export const NAV_GROUP = "flex w-full gap-1 sm:w-auto";

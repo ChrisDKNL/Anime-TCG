@@ -7,8 +7,8 @@ import { FOCUS_RING, TEXT_KIND } from "../account/styles";
  * meter or badge anywhere on the control (§6.1).
  */
 
-/** `BUTTON.text` at `text-sm` (§6.1 `Pack odds`): 40 px on phone, 28 px from `sm`. */
-export const TEXT_BUTTON_SM = `h-10 sm:h-7 rounded px-1 text-sm font-medium ${TEXT_KIND} ${FOCUS_RING}`;
+/** `BUTTON.text` at `text-sm` (§6.1 `Pack odds`): 44 px on phone (visual-identity.md §6.1), 28 px from `sm`. */
+export const TEXT_BUTTON_SM = `h-11 sm:h-7 rounded px-1 text-sm font-medium ${TEXT_KIND} ${FOCUS_RING}`;
 
 /** The same look on a link (`See your latest pack`, `See your latest shop pack`, packs-page.md §6.1). */
 export const TEXT_LINK_SM = `inline-flex items-center ${TEXT_BUTTON_SM}`;
