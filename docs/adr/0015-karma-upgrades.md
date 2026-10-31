@@ -17,11 +17,10 @@ The owner then chose (2026-10-31): **permanent levels**, the **first level about
 ## Decision
 
 1. **Upgrades are permanent levels bought with Karma.** Each upgrade has a few levels, and each level costs much more than the one before. A bought level is never lost or refunded. Karma is never bought with money and never converted to it (`CLAUDE.md`, unchanged).
-2. **The first upgrades:**
+2. **The first upgrades** (the spec may propose others under the same rules):
    - **Pack stock:** more timer packs stored while away; today `PACK_CAP` is 3.
    - **Refill:** a shorter pack interval; today `PACK_INTERVAL_MINUTES` is 10.
    - **Trade budget:** higher 7-day market limits.
-     The spec may propose others under the same rules.
 3. **They cost a grind.** The first level of an upgrade costs about two weeks of an active player's Karma, about 60 000 at today's numbers. Later levels cost roughly twice the level before. The spec derives the exact prices from `economy.md` §9.
 4. **Every level stays a sink.** The spec prices each pack-rate level (stock and refill) so it costs more than the extra Karma it can earn its buyer within a year, even at the ceiling player's rate. The economy model in `economy.md` §9 is extended to show the faucet still grows at most linearly, with the bound restated for a fully upgraded account.
 5. **The trade budget is capped.**
