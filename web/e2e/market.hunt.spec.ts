@@ -207,6 +207,60 @@ test.beforeEach(({ api }) => {
 // Double spend from the UI
 // ---------------------------------------------------------------------------------------------
 
+/**
+ * As economy.hunt.spec.ts "a second Escape in flight closes nothing": Chromium honours a prevented
+ * `cancel` once, so a second Escape, or any `close()`, closes a modal `<dialog>` with no cancelable
+ * event. In flight the dialog must open again at once, on the same confirmation, and send nothing more.
+ */
+test.describe("regression: a second Escape or a close in flight closes nothing", () => {
+  test("a market buy: the confirmation stays open in flight, one request, then the result", async ({
+    page,
+    api,
+  }) => {
+    const gate = held(api, buyKey(1));
+    await confirmBuy(page, "Asuka Langley");
+    await dialog(page).getByRole("button", { name: "Buy for 20 Karma" }).click();
+    await expect(dialog(page).getByRole("button", { name: "Buying…" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Escape");
+    await expect(dialog(page)).toBeVisible();
+    await dialog(page).evaluate((element) => (element as HTMLDialogElement).close());
+    await expect(dialog(page)).toBeVisible();
+    await expect(dialog(page).getByRole("button", { name: "Buying…" })).toBeVisible();
+    expect(api.count(buyKey(1))).toBe(1);
+    gate.release();
+    await expect(dialog(page).getByText("Bought for 20 Karma. You have 1,220 Karma.")).toBeVisible();
+    expect(api.count(buyKey(1))).toBe(1);
+    expect(api.game.bought.size).toBe(1);
+  });
+
+  test("a listing: the confirmation stays open in flight, one request, then the listed line", async ({
+    page,
+    api,
+  }) => {
+    const gate = held(api, LIST_KEY);
+    await openSpike(page, api);
+    await askToList(page, "120");
+    await dialog(page).getByRole("button", { name: "List for 120 Karma" }).click();
+    await expect(dialog(page).getByRole("button", { name: "Listing…" })).toBeVisible();
+    await page.keyboard.press("Escape");
+    await page.keyboard.press("Escape");
+    await expect(dialog(page)).toBeVisible();
+    await dialog(page).evaluate((element) => (element as HTMLDialogElement).close());
+    await expect(dialog(page)).toBeVisible();
+    await expect(dialog(page).getByRole("button", { name: "Listing…" })).toBeVisible();
+    expect(api.count(LIST_KEY)).toBe(1);
+    gate.release();
+    await expect(
+      dialog(page)
+        .getByRole("status")
+        .filter({ hasText: /^Listed for 120 Karma/ }),
+    ).toBeVisible();
+    expect(api.count(LIST_KEY)).toBe(1);
+    expect(api.game.market.filter((listing) => listing.mine)).toHaveLength(1);
+  });
+});
+
 test.describe("double spend from the UI", () => {
   test("a double click on Buy… opens the confirmation and sends nothing", async ({ page, api }) => {
     await openMarket(page);
