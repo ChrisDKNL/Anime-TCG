@@ -6,7 +6,7 @@ import { PageHeading } from "../components/layout/PageHeading";
 import { useDelayedFlag } from "../hooks/useDelayedFlag";
 import { useGame } from "../hooks/useGame";
 import { PAGE_HEADING_ID } from "../lib/pageFocus";
-import { pageHeading } from "../lib/routes";
+import { pageEyebrow, pageHeading } from "../lib/routes";
 
 /** Nothing but the `h1` shows for this long before the skeleton does (collection-overview.md §3.1 step 2). */
 const LOADING_DELAY_MS = 300;
@@ -43,7 +43,7 @@ export function CollectionPage() {
 
   return (
     <>
-      <PageHeading text={pageHeading("/collection")} />
+      <PageHeading text={pageHeading("/collection")} eyebrow={pageEyebrow("/collection")} />
       <section aria-labelledby={PAGE_HEADING_ID}>{content}</section>
     </>
   );

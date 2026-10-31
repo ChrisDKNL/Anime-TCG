@@ -2,11 +2,11 @@ import type { AccountPublic } from "@anime-tcg/shared/api";
 import type { ReactNode } from "react";
 import { useRegisterForm, type RegisterStep } from "../../hooks/useRegisterForm";
 import { common, registerCopy } from "../../lib/copy";
-import { pageHeading } from "../../lib/routes";
+import { pageEyebrow, pageHeading } from "../../lib/routes";
 import { PageHeading } from "../layout/PageHeading";
 import { FormBanner } from "./FormBanner";
 import { PasswordField, SubmitButton, TextField } from "./fields";
-import { BODY_TEXT, BUTTON, HINT_TEXT, PANEL_HEADING } from "./styles";
+import { BODY_TEXT, BUTTON, HINT_TEXT } from "./styles";
 
 interface Props {
   onRegistered: (account: AccountPublic) => void;
@@ -32,14 +32,16 @@ export function RegisterForm({ onRegistered, crossLink }: Props) {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <p id="register-step" className={HINT_TEXT}>
-          {STEP_LABEL[form.step]}
-        </p>
         <PageHeading
           text={pageHeading("/register")}
+          eyebrow={pageEyebrow("/register")}
           describedBy="register-step"
-          className={`${PANEL_HEADING} focus:outline-none`}
+          className=""
         />
+        {/* Under the title, as the page header's stat line (visual-identity.md §10.1). */}
+        <p id="register-step" className={`mt-2 ${HINT_TEXT}`}>
+          {STEP_LABEL[form.step]}
+        </p>
       </div>
 
       {form.capReached ? (

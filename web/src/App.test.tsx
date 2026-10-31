@@ -67,8 +67,11 @@ describe("App boot", () => {
     // No page renders before the answer, the landing page included (§3.2 step 1).
     expect(screen.getByText("Anime TCG")).toBeInTheDocument();
     expect(screen.queryByRole("heading")).not.toBeInTheDocument();
-    // The footer's AniList credit is the only link; the header has no page links yet.
-    expect(screen.getAllByRole("link").map((link) => link.textContent)).toEqual(["AniList"]);
+    // The footer's AniList credit and fonts licence are the only links; the header has no page links yet.
+    expect(screen.getAllByRole("link").map((link) => link.textContent)).toEqual([
+      "AniList",
+      "SIL Open Font License",
+    ]);
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
     expect(screen.queryByRole("navigation")).not.toBeInTheDocument();
     expect(screen.queryByText("Loading…")).not.toBeInTheDocument();
@@ -81,6 +84,8 @@ describe("App boot", () => {
       vi.advanceTimersByTime(1);
     });
     expect(screen.getByRole("status")).toHaveTextContent("Loading…");
+    // visual-identity.md §5.4: text is never ink-500 (4.36:1); the muted text colour is ink-400.
+    expect(screen.getByRole("status")).toHaveClass("text-ink-400");
   });
 
   it("unreachable: red banner with Try again above a usable landing page; Try again recovers, the pool facts too", async () => {

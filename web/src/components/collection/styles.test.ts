@@ -18,16 +18,16 @@ describe("collection overview styles (collection-overview.md §6)", () => {
     }
   });
 
-  it("chips and view buttons are 40 px touch targets on a phone (§7)", () => {
+  it("chips and view buttons are 44 px touch targets on a phone (§7, visual-identity.md §6.1)", () => {
     for (const rarity of RARITIES) {
       for (const state of ["pressed", "other"] as const) {
         expect(tokens(TIER_CHIP[rarity][state])).toEqual(
-          expect.arrayContaining(["py-2.5", "leading-[18px]", "sm:py-1.5"]),
+          expect.arrayContaining(["py-3", "leading-[18px]", "sm:py-1.5"]),
         );
       }
     }
-    expect(tokens(ALL_CHIP.other)).toEqual(expect.arrayContaining(["py-2.5", "leading-[18px]", "sm:py-1.5"]));
-    expect(tokens(VIEW_BUTTON.other)).toEqual(expect.arrayContaining(["min-h-10", "sm:min-h-0"]));
+    expect(tokens(ALL_CHIP.other)).toEqual(expect.arrayContaining(["py-3", "leading-[18px]", "sm:py-1.5"]));
+    expect(tokens(VIEW_BUTTON.other)).toEqual(expect.arrayContaining(["min-h-11", "sm:min-h-0"]));
   });
 
   it("a pressed chip is filled, so pressed does not rest on hue alone", () => {

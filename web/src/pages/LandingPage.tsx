@@ -7,11 +7,7 @@ import { PageHeading } from "../components/layout/PageHeading";
 import { useLandingDemo } from "../hooks/useLandingDemo";
 import { landingCopy, landingText } from "../lib/navigationCopy";
 import { PAGE_HEADING_ID } from "../lib/pageFocus";
-import { pageHeading } from "../lib/routes";
-
-/** §6.2: the display size, kyara's weight and scale in the system font. */
-const DISPLAY_HEADING =
-  "text-4xl leading-none font-black tracking-tight text-zinc-100 focus:outline-none sm:text-5xl lg:text-6xl";
+import { pageEyebrow, pageHeading } from "../lib/routes";
 
 /**
  * `/`, signed out (navigation-and-landing.md §3.7, §5.3, §6.2): the hero with
@@ -39,7 +35,7 @@ export function LandingPage() {
         className="pt-6 sm:grid sm:grid-cols-[minmax(0,1fr)_11.25rem] sm:items-center sm:gap-8 sm:pt-10 lg:grid-cols-[minmax(0,42rem)_11.25rem] lg:gap-16 lg:pt-16"
       >
         <div>
-          <PageHeading text={pageHeading("/")} className={DISPLAY_HEADING} />
+          <PageHeading text={pageHeading("/")} eyebrow={pageEyebrow("/")} size="hero" className="" />
           <p className="mt-4 max-w-xl text-base text-zinc-300 tabular-nums sm:text-lg">{text.lede}</p>
           <DemoControl control={demo.view.control} finishedHere={demo.finishedHere} onOpen={open} />
         </div>

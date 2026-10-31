@@ -546,11 +546,11 @@ describe("/shop/open (market-and-shop.md §3.3 step 6; navigation-and-landing.md
     }
   });
 
-  it('the header\'s Shop link keeps the current fill and reads aria-current="true"; it pushes /shop', async () => {
+  it('the header\'s Shop link keeps the current mark and reads aria-current="true"; it pushes /shop', async () => {
     const { user, history } = await bought();
     const shop = header().getByRole("link", { name: "Shop" });
     expect(shop).toHaveAttribute("aria-current", "true");
-    expect(shop).toHaveClass("bg-zinc-700");
+    expect(shop).toHaveClass("border-volt", "text-ink-100");
     await user.click(shop);
     await pageHeading("Shop");
     expect(history.location.pathname).toBe("/shop");

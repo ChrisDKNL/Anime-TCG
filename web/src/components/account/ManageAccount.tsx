@@ -4,7 +4,7 @@ import { useChangePasswordForm } from "../../hooks/useChangePasswordForm";
 import { useDeleteForm } from "../../hooks/useDeleteForm";
 import { useRenameForm } from "../../hooks/useRenameForm";
 import { cardCount, common, manageCopy, metaLine } from "../../lib/copy";
-import { pageHeading } from "../../lib/routes";
+import { pageEyebrow, pageHeading } from "../../lib/routes";
 import { PageHeading } from "../layout/PageHeading";
 import { Avatar } from "./Avatar";
 import { FormBanner } from "./FormBanner";
@@ -44,7 +44,7 @@ export function ManageAccount({ account, onRenamed, onDeleted }: Props) {
 
   return (
     <div className="flex max-w-lg flex-col">
-      <PageHeading text={pageHeading("/account")} />
+      <PageHeading text={pageHeading("/account")} eyebrow={pageEyebrow("/account")} />
 
       <div className="flex items-center gap-3">
         <Avatar login={account.login} size="lg" />
@@ -71,7 +71,7 @@ export function ManageAccount({ account, onRenamed, onDeleted }: Props) {
           ref={deleteTriggerRef}
           type="button"
           onClick={openConfirm}
-          className={`${BUTTON.dangerOutline} self-start`}
+          className={`${BUTTON.danger} self-start`}
         >
           {manageCopy.deleteTrigger}
         </button>
@@ -308,7 +308,7 @@ function ConfirmDelete({ account, onCancel, onDeleted }: ConfirmDeleteProps) {
         <SubmitButton
           blocked={form.deleting || waiting}
           disabled={form.password.length === 0}
-          className={`${BUTTON.dangerSolid} w-full break-words sm:w-auto ${waiting ? "tabular-nums" : ""}`}
+          className={`${BUTTON.danger} w-full break-words sm:w-auto ${waiting ? "tabular-nums" : ""}`}
         >
           <LoginText text={label} />
         </SubmitButton>

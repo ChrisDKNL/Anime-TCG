@@ -4,7 +4,7 @@ import { PackControl } from "../components/packs/PackControl";
 import { TEXT_LINK_SM } from "../components/packs/styles";
 import { usePacksPage } from "../hooks/usePacksPage";
 import { packControlCopy } from "../lib/packsCopy";
-import { pageHeading } from "../lib/routes";
+import { pageEyebrow, pageHeading } from "../lib/routes";
 
 /**
  * `/packs` (packs-page.md §3.1, §5.1): the pack control under the page's
@@ -18,7 +18,7 @@ export function PacksPage() {
   const page = usePacksPage();
   return (
     <>
-      <PageHeading text={pageHeading("/packs")} />
+      <PageHeading text={pageHeading("/packs")} eyebrow={pageEyebrow("/packs")} />
       <PackControl
         view={page.view}
         odds={page.odds}

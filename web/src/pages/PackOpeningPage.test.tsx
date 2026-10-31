@@ -213,11 +213,11 @@ describe("nothing held", () => {
 });
 
 describe("the header and the session (§3.13 steps 6 and 8)", () => {
-  it('the Packs link keeps the current fill and reads aria-current="true" on /packs/open; it pushes /packs', async () => {
+  it('the Packs link keeps the current mark and reads aria-current="true" on /packs/open; it pushes /packs', async () => {
     const { user, history } = await openFromPacks();
     const packs = nav().getByRole("link", { name: "Packs" });
     expect(packs).toHaveAttribute("aria-current", "true");
-    expect(packs).toHaveClass("bg-zinc-700");
+    expect(packs).toHaveClass("border-volt", "text-ink-100");
     expect(nav().getByRole("link", { name: "Shop" })).not.toHaveAttribute("aria-current");
     await user.click(packs);
     await pageHeading("Packs");

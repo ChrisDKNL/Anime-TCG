@@ -10,7 +10,7 @@ import {
   type ControlsAction,
   type OverviewControls,
 } from "../../lib/collectionView";
-import { INPUT, INPUT_BORDER } from "../account/styles";
+import { FOCUS_RING, INPUT, INPUT_BORDER } from "../account/styles";
 import { TEXT_BUTTON_SM } from "../packs/styles";
 import { ALL_CHIP, CONTROL_LABEL, TIER_CHIP } from "./styles";
 
@@ -149,13 +149,13 @@ export function Toolbar({ controls, options, disabled, onChange, onCleared }: Pr
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-          <label className="inline-flex min-h-10 items-center gap-2 text-sm text-zinc-200 sm:min-h-8">
+          <label className="inline-flex min-h-11 items-center gap-2 text-sm text-ink-200 sm:min-h-8">
             <input
               type="checkbox"
               checked={controls.duplicatesOnly}
               disabled={disabled}
               onChange={(event) => onChange({ type: "duplicatesOnly", on: event.target.checked })}
-              className="size-4 accent-violet-600"
+              className={`size-4 accent-volt ${FOCUS_RING}`}
             />
             {toolbarCopy.duplicatesOnly}
           </label>

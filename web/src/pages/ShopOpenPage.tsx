@@ -8,7 +8,7 @@ import { useGame } from "../hooks/useGame";
 import { isolate } from "../lib/bidi";
 import { shopCopy } from "../lib/economyCopy";
 import type { ShopPack } from "../lib/game";
-import { pageHeading } from "../lib/routes";
+import { pageEyebrow, pageHeading } from "../lib/routes";
 
 function toReveal({ receipt, theme }: ShopPack): RevealPack {
   return {
@@ -40,7 +40,7 @@ export function ShopOpenPage() {
 
   return (
     <>
-      <PageHeading text={pageHeading("/shop/open")} />
+      <PageHeading text={pageHeading("/shop/open")} eyebrow={pageEyebrow("/shop/open")} />
       <Link to="/shop" className={LINK_BUTTON.secondary}>
         {shopCopy.back}
       </Link>

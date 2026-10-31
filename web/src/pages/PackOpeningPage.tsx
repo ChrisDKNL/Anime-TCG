@@ -8,7 +8,7 @@ import { ignoreRepeat, openOnce } from "../components/packs/activation";
 import { Reveal, type RevealPack } from "../components/packs/Reveal";
 import { usePackOpeningPage } from "../hooks/usePackOpeningPage";
 import { packControlCopy, revealCopy } from "../lib/packsCopy";
-import { pageHeading } from "../lib/routes";
+import { pageEyebrow, pageHeading } from "../lib/routes";
 
 /**
  * The special-pack lines from the pack's stored kind and pity flag, never
@@ -52,7 +52,7 @@ export function PackOpeningPage() {
 
   return (
     <>
-      <PageHeading text={pageHeading("/packs/open")} />
+      <PageHeading text={pageHeading("/packs/open")} eyebrow={pageEyebrow("/packs/open")} />
       <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:gap-4">
         {control.count !== null && (
           <p id={countId} className="text-sm font-medium text-zinc-200 tabular-nums">

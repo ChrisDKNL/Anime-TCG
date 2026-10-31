@@ -16,6 +16,7 @@
     "vitest.config.ts",
     "playwright.config.ts",
     "shared-alias.ts",
+    "font-licenses.ts",
     "e2e/**/*.ts",
     "src/test/fixtures.ts",
     "src/test/collectionFixtures.ts",

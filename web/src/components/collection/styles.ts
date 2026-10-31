@@ -21,7 +21,7 @@ export const BAR_FILL =
 
 export const VIEW_SWITCH = "inline-flex gap-1 rounded-lg bg-zinc-900 p-1";
 
-const VIEW_BUTTON_BASE = `min-h-10 rounded-md px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0 ${FOCUS_RING}`;
+const VIEW_BUTTON_BASE = `min-h-11 rounded-md px-3 py-1.5 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50 sm:min-h-0 ${FOCUS_RING}`;
 
 export const VIEW_BUTTON: Record<"pressed" | "other", string> = {
   pressed: `${VIEW_BUTTON_BASE} bg-zinc-700 text-white`,
@@ -29,10 +29,10 @@ export const VIEW_BUTTON: Record<"pressed" | "other", string> = {
 };
 
 /**
- * §7 touch targets: on a phone 10 px of padding each side, an 18 px line box and the 1 px borders
- * make 40 px; the 11 px text's inherited 1.5 line height alone made 38.5.
+ * §7 touch targets, 44 px on a phone (visual-identity.md §6.1): 12 px of padding each side, an 18 px
+ * line box and the 1 px borders; the 11 px text's inherited 1.5 line height alone would not hold it.
  */
-const CHIP_BASE = `rounded-md border px-2.5 py-2.5 text-[11px] leading-[18px] font-semibold tracking-wider uppercase disabled:cursor-not-allowed disabled:opacity-50 sm:py-1.5 ${FOCUS_RING}`;
+const CHIP_BASE = `rounded-md border px-2.5 py-3 text-[11px] leading-[18px] font-semibold tracking-wider uppercase disabled:cursor-not-allowed disabled:opacity-50 sm:py-1.5 ${FOCUS_RING}`;
 
 /** §6.3 rarity chips: the fill is the pressed cue, so pressed does not rest on hue alone. */
 export const TIER_CHIP: Record<Rarity, Record<"pressed" | "other", string>> = {
@@ -70,7 +70,7 @@ export const ALL_CHIP: Record<"pressed" | "other", string> = {
 /** §6.2: the tile is a bare button; its focus ring goes around the card, not the caption. */
 export const TILE = "group flex h-full w-full flex-col gap-1.5 text-left focus-visible:outline-none";
 export const TILE_RING =
-  "block rounded-[12px] group-focus-visible:ring-2 group-focus-visible:ring-violet-500 group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-zinc-950";
+  "block rounded-[12px] group-focus-visible:ring-2 group-focus-visible:ring-volt group-focus-visible:ring-offset-2 group-focus-visible:ring-offset-night-950";
 export const TILE_CAPTION =
   "flex min-h-4 items-baseline justify-between gap-2 px-0.5 text-xs leading-tight text-zinc-300 tabular-nums";
 

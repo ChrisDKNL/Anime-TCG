@@ -337,6 +337,47 @@ describe("titles and focus on page changes (§3.6)", () => {
     }
   });
 
+  it("every page's h1 follows its eyebrow, hidden from assistive technology (visual-identity.md §10.1)", async () => {
+    const { history } = renderApp({}, account, "/packs");
+    for (const [path, heading, eyebrow] of [
+      ["/packs", "Packs", "Timer packs"],
+      ["/shop", "Shop", "Themed packs"],
+      ["/market", "Market", "Player trades"],
+      ["/collection", "Collection", "Your cards"],
+      ["/profile", "Profile", "Player"],
+      ["/account", "Manage account", "Settings"],
+      ["/nowhere", "Page not found", "404"],
+    ] as const) {
+      act(() => history.push(path));
+      const h1 = await pageHeading(heading);
+      const label = screen.getByText(eyebrow, { selector: "p" });
+      expect(label).toHaveAttribute("aria-hidden", "true");
+      expect(label.nextElementSibling).toBe(h1);
+    }
+  });
+
+  it("page-enter plays on a navigation, not on the first render of a load (§9.1)", async () => {
+    const { history } = renderApp({}, account, "/packs");
+    const user = userEvent.setup();
+    const packs = await pageHeading("Packs");
+    expect(packs).not.toHaveClass("animate-page-enter");
+    expect(screen.getByText("Timer packs")).not.toHaveClass("animate-page-enter");
+
+    await user.click(within(mainNav()).getByRole("link", { name: "Collection (0)" }));
+    const collection = await pageHeading("Collection");
+    expect(screen.getByText("Your cards")).toHaveClass("animate-page-enter", "motion-reduce:animate-none");
+    expect(collection).toHaveClass(
+      "animate-page-enter",
+      "[animation-delay:40ms]",
+      "motion-reduce:animate-none",
+    );
+    // It never takes focus from the h1 the page change moves it to (§3.6).
+    await waitFor(() => expect(collection).toHaveFocus());
+
+    act(() => history.back());
+    expect(await pageHeading("Packs")).toHaveClass("animate-page-enter");
+  });
+
   it("activating the current page's link adds no history entry and moves no focus", async () => {
     const { history } = renderApp({}, account, "/packs");
     const user = userEvent.setup();

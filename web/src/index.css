@@ -1,6 +1,151 @@
 @import "tailwindcss";
 
 /*
+ * The visual identity (docs/design/visual-identity.md §12.1–§12.4). Night is the ground, ink the text,
+ * Volt the one action colour (fill of a primary button, the focus ring), Ion the reward colour (Karma).
+ */
+@theme {
+  --color-night-950: #07080f;
+  --color-night-900: #0e1020;
+  --color-night-850: #151830;
+  --color-night-800: #1d2140;
+  --color-night-700: #2a2f55;
+  --color-night-600: #3a4070;
+  --color-ink-100: #eef0fa;
+  --color-ink-200: #dde0ee;
+  --color-ink-300: #c3c7dc;
+  --color-ink-400: #9aa0bd;
+  /* Non-text only (§5.4): below AA on every night surface. */
+  --color-ink-500: #6e7493;
+  --color-volt: #c8f031;
+  --color-volt-hover: #d9f86a;
+  --color-volt-press: #b3d924;
+  --color-volt-ink: #07080f;
+  --color-ion: #5cd6f5;
+  --color-danger: #ff9b8f;
+  --color-sleeve-night: #1f2a44;
+  --color-sleeve-plum: #2b1f3d;
+  --color-sleeve-pine: #13322e;
+  --color-sleeve-rust: #3a2418;
+  --color-sleeve-olive: #2e2e14;
+  --color-sleeve-petrol: #1a2f3f;
+  --color-sleeve-radiant: #f3eeff;
+  --color-sleeve-radiant-ink: #3a2f66;
+  --color-back-rim: #3a4070;
+  --color-back-socket: #2a2f55;
+
+  /*
+   * Migration (§12.1): every `zinc-*` class in web/ draws in night and ink until `chore/zinc-to-night`
+   * renames them and drops these lines. New code uses the semantic names above.
+   */
+  --color-zinc-950: #07080f;
+  --color-zinc-900: #0e1020;
+  --color-zinc-800: #1d2140;
+  --color-zinc-700: #2a2f55;
+  --color-zinc-600: #3a4070;
+  --color-zinc-500: #6e7493;
+  --color-zinc-400: #9aa0bd;
+  --color-zinc-300: #c3c7dc;
+  --color-zinc-200: #dde0ee;
+  --color-zinc-100: #eef0fa;
+
+  --font-display: "Bricolage Grotesque Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-sans:
+    "Figtree Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif,
+    "Apple Color Emoji", "Segoe UI Emoji";
+  --font-mono: "Martian Mono Variable", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  --text-hero: 3rem;
+  --text-hero--line-height: 0.9;
+  --text-hero--letter-spacing: -0.02em;
+  --text-hero--font-weight: 800;
+  --text-title: 2.25rem;
+  --text-title--line-height: 0.95;
+  --text-title--letter-spacing: -0.015em;
+  --text-title--font-weight: 800;
+  --text-section: 1.5rem;
+  --text-section--line-height: 1.05;
+  --text-section--letter-spacing: -0.01em;
+  --text-section--font-weight: 750;
+  --text-eyebrow: 0.6875rem;
+  --text-eyebrow--line-height: 1.2;
+  --text-eyebrow--letter-spacing: 0.12em;
+  --text-eyebrow--font-weight: 500;
+  --text-tier-word: clamp(3.5rem, 18vw, 10rem);
+  --text-tier-word--line-height: 0.85;
+  --text-tier-word--letter-spacing: 0.01em;
+  --text-tier-word--font-weight: 800;
+
+  --radius-card: 12px;
+  --radius-sleeve: 14px;
+  --radius-control: 10px;
+  --radius-chip: 8px;
+  --radius-sheet: 16px;
+  --shadow-overlay: 0 16px 48px rgb(0 0 0 / 0.55);
+  --shadow-bar: 0 -1px 0 #2a2f55;
+  --shadow-tell-rare: 0 0 16px rgb(111 149 236 / 0.35);
+
+  --ease-out-quint: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-in-out-sine: cubic-bezier(0.37, 0, 0.63, 1);
+  --ease-snap: cubic-bezier(0.5, 0, 0.1, 1);
+
+  /* Each is paired with `motion-reduce:animate-none` where it is used (§12.4). */
+  --animate-page-enter: page-enter 200ms var(--ease-out-quint) both;
+  --animate-value-tick: value-tick 180ms var(--ease-out-quint) both;
+  /* Only inside the ceremony stage (pack-opening.md). */
+  --animate-tell-breathe: tell-breathe 1.6s var(--ease-in-out-sine) infinite;
+
+  @keyframes page-enter {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes value-tick {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes tell-breathe {
+    0%,
+    100% {
+      opacity: 0.6;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+}
+
+:root {
+  /* Display widths (§4.2): the `display-tight` and `tier-word` utilities apply them. */
+  --display-stretch: 85%;
+  --tier-word-stretch: 75%;
+}
+
+@utility display-tight {
+  font-family: var(--font-display);
+  font-stretch: var(--display-stretch);
+}
+
+@utility tier-word {
+  font-family: var(--font-display);
+  font-stretch: var(--tier-word-stretch);
+  text-transform: uppercase;
+}
+
+/*
  * The card and its six tiers (card-and-rarity.md §10). Mark colours are for stars, chips and tables;
  * every text in a tier colour uses its `-text` token, which differs from the mark only for Epic (§4.2).
  */
@@ -211,8 +356,9 @@
   }
 }
 
+/* The page is flat night (§10.1, §11.1): no wash behind it. */
 body {
-  @apply bg-zinc-950 text-zinc-100 antialiased;
+  @apply bg-night-950 text-ink-100 antialiased;
 }
 
 /* Menu and dialog enter (accounts.md §6): fade and scale over 150 ms, nothing that loops. */

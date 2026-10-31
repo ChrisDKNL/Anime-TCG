@@ -14,7 +14,7 @@ import { useShellContext } from "../hooks/useShell";
 import { seriesNames } from "../lib/collectionSeries";
 import { shopCopy } from "../lib/economyCopy";
 import { PAGE_HEADING_ID } from "../lib/pageFocus";
-import { pageHeading } from "../lib/routes";
+import { pageEyebrow, pageHeading } from "../lib/routes";
 
 /** Nothing but the `h1` shows for this long before the skeleton does (collection-overview.md §3.1). */
 const LOADING_DELAY_MS = 300;
@@ -104,7 +104,7 @@ export function ShopPage() {
 
   return (
     <>
-      <PageHeading text={pageHeading("/shop")} />
+      <PageHeading text={pageHeading("/shop")} eyebrow={pageEyebrow("/shop")} />
       {game.state.shopPack !== null && (
         <p className="mb-6">
           <Link to="/shop/open" className={TEXT_LINK_SM}>
