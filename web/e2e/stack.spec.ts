@@ -34,6 +34,9 @@ import { mockCardImages } from "./support/fake-api";
  *   reload; an unknown path is the not-found page (§3.12 item 8). AniList's image CDN is mocked.
  * - An error Caddy answers itself (a POST to a page: 405) keeps the site headers, sends no Server and
  *   has an empty body; with STACK_API_DOWN=1 against a stack whose api is stopped, so does the 502 for /api.
+ * - (tester, visual-identity.md §4.1, §11.1) /licenses/fonts.txt is text/plain, no-cache, with the site
+ *   headers and the three OFL texts; in a browser under the real CSP the three families load from
+ *   /assets as font/woff2 with the long cache, and no font is refused.
  */
 
 const STACK_URL = process.env.STACK_URL?.replace(/\/$/, "");
@@ -247,6 +250,83 @@ test.describe("deployed stack through Caddy", () => {
     const res = await request.post(`${STACK_URL}/packs`, { headers: { Origin: STACK_URL ?? "" } });
     await expectErrorResponse(res, 405);
     expect(res.headers()["allow"]).toBe("GET, HEAD");
+  });
+
+  // (tester) The identity's fonts and their licence through Caddy (visual-identity.md §4.1, §11.1).
+  test("/licenses/fonts.txt is the three OFL texts as text/plain, revalidated on every load, with the site headers", async ({
+    request,
+  }) => {
+    const res = await request.get(`${STACK_URL}/licenses/fonts.txt`);
+    expect(res.status()).toBe(200);
+    const headers = res.headers();
+    expect(headers["content-type"]).toMatch(/^text\/plain/);
+    // Not under /assets and not content-hashed: a font update changes it in place, so it is never cached for good.
+    expect(headers["cache-control"]).toBe("no-cache");
+    expect(headers["content-security-policy"]).toBe(EXPECTED_CSP);
+    expect(headers["x-content-type-options"]).toBe("nosniff");
+    expect(headers["server"]).toBeUndefined();
+    const text = await res.text();
+    expect(text).not.toContain("<!doctype html>");
+    expect(text.match(/SIL OPEN FONT LICENSE Version 1\.1/g)).toHaveLength(3);
+    for (const name of ["bricolage-grotesque", "figtree", "martian-mono"]) {
+      expect(text).toContain(`@fontsource-variable/${name}`);
+    }
+  });
+
+  test("in a browser under the real CSP: the three families load from /assets as font/woff2 with the long cache, and nothing is refused", async ({
+    page,
+  }) => {
+    await mockCardImages(page);
+    const fonts: Array<{ url: string; type: string | undefined; cache: string | undefined; status: number }> =
+      [];
+    page.on("response", (response) => {
+      if (response.request().resourceType() !== "font") return;
+      fonts.push({
+        url: response.url(),
+        type: response.headers()["content-type"],
+        cache: response.headers()["cache-control"],
+        status: response.status(),
+      });
+    });
+    const errors: string[] = [];
+    page.on("console", (message) => {
+      if (message.type() === "error" && /Content Security Policy|font/i.test(message.text())) {
+        errors.push(message.text());
+      }
+    });
+    await page.addInitScript(() => {
+      const seen: string[] = [];
+      (window as unknown as { __violations: string[] }).__violations = seen;
+      document.addEventListener("securitypolicyviolation", (event) =>
+        seen.push(`${event.effectiveDirective} ${event.blockedURI}`),
+      );
+    });
+    await page.goto(`${STACK_URL}/login`);
+    await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    await page.evaluate(() => document.fonts.ready);
+    const loaded = await page.evaluate(() =>
+      (() => {
+        const list: FontFace[] = [];
+        document.fonts.forEach((face) => list.push(face));
+        return list;
+      })()
+        .filter((face) => face.status === "loaded")
+        .map((face) => face.family.replace(/"/g, ""))
+        .sort(),
+    );
+    expect(loaded).toEqual(["Bricolage Grotesque Variable", "Figtree Variable", "Martian Mono Variable"]);
+    expect(fonts.length).toBeGreaterThanOrEqual(3);
+    for (const font of fonts) {
+      expect(new URL(font.url).origin, font.url).toBe(STACK_URL);
+      expect(new URL(font.url).pathname, font.url).toMatch(/^\/assets\/[^/]+\.woff2$/);
+      expect(font.status, font.url).toBe(200);
+      expect(font.type, font.url).toBe("font/woff2");
+      expect(font.cache, font.url).toBe("public, max-age=31536000, immutable");
+    }
+    expect(await page.evaluate(() => (window as unknown as { __violations: string[] }).__violations)).toEqual(
+      [],
+    );
+    expect(errors).toEqual([]);
   });
 });
 
