@@ -144,6 +144,7 @@ The flat colour used for a thumbnail's frame (§3.2) is the flat background for 
 - **Glow** is static: a `box-shadow` that never animates. At the tile size it may spill into the 12 px grid gap; that is intended.
 - **Where effects play** (owner's decision, §9): in the reveal and the card dialog always; never on the demo pack (`/demo`), whose card has the tier border and no glow, glint or drift (`navigation-and-landing.md` §3.7, owner's decision, §12 note); in the collection and market grids, the glow is always shown and the glint and drift play only while the card is hovered or focused.
 - **Reduced motion** (`prefers-reduced-motion: reduce`): no glint (the `::after` layer is not rendered) and no drift (the pearl rests at `0% 40%`). The frames and glows stay, as still images. The reveal's entry animation is the 1c web spec's and stops too.
+- **In the opening ceremony** (ADR 0014, `pack-opening.md`): the card back, its tier-coloured tell before the turn and the full-screen moment for Epic and up are that spec's and `visual-identity.md` §7.2's. The frames and effects above are unchanged.
 - Nothing else on the card moves: no hover lift, scale, tilt or parallax (`docs/06-engineering-standards.md` §2 still applies to those).
 
 ### 5.4 Owner decision: glows and pearl on the frames
@@ -173,7 +174,7 @@ The flat colour used for a thumbnail's frame (§3.2) is the flat background for 
 
 ## 7. Packs, pity and the odds page
 
-The owner's pack rules ("Owner, 2026-10-29"): slots 1 to 3 are Common or better, slot 4 Uncommon or better, slot 5 Rare or better; every 10th free pack is an **Enchanted** pack, whose slot 5 is Epic or better; about 1 pack in 2,500 is a **Radiant** pack, five cards of Epic or better including a Mythic; and a player's 300th free pack in a row without a Mythic contains one (**pity**). The rules are shown plainly and only where a player looks for them. **No countdown, no progress bar, no "next pack is Enchanted", no near-miss and no fanfare** (ADR 0004 §6). The one number shown on the pack page is the pity counter, which the owner chose (§7.4, §9); it is drawn with the least nudge possible.
+The owner's pack rules ("Owner, 2026-10-29"): slots 1 to 3 are Common or better, slot 4 Uncommon or better, slot 5 Rare or better; every 10th free pack is an **Enchanted** pack, whose slot 5 is Epic or better; about 1 pack in 2,500 is a **Radiant** pack, five cards of Epic or better including a Mythic; and a player's 300th free pack in a row without a Mythic contains one (**pity**). The rules are shown plainly and only where a player looks for them. **No countdown, no progress bar, no "next pack is Enchanted" and no near-miss** (ADR 0004 §6). Suspense while a pack is being opened is allowed by ADR 0014 under its truthful-tell rules (`pack-opening.md`). The one number shown on the pack page is the pity counter, which the owner chose (§7.4, §9); it is drawn with the least nudge possible.
 
 ### 7.1 On the pack pages (`/packs`, `/packs/open`)
 
@@ -186,7 +187,7 @@ The pack control, the pity counter and `Pack odds` are on `/packs`; the reveal, 
 - **After a pity Mythic**: the line says `This Mythic came from the guarantee: a 300th free pack in a row without a Mythic always has one.`
 - **After an Enchanted pack whose Mythic came from pity** (both rules fell on one pack, `collection-packs.md` §5.4.3): the heading reads `Enchanted pack`, and both lines show, the Enchanted line first.
 - Which heading and lines show comes from `PackOpened.packKind` (`standard`, `enchanted`, `radiant`) and `PackOpened.pityMythic`; the UI never infers it from the cards.
-- Otherwise the heading is the ordinary one from the 1c web spec. The special packs use the same reveal sequence, the same cards and the same timing; the frames already show what came. No extra animation, sound, colour or confetti.
+- Otherwise the heading is the ordinary one from the 1c web spec. The special packs go through the same opening ceremony as any pack (`pack-opening.md`, ADR 0014). There, after the server's answer, the sleeve truthfully marks an Enchanted, Radiant or guaranteed pack and lights the floor it guarantees, and each card gets its own tier's treatment. There is no confetti.
 - All numbers in these lines come from the server (§12, R3: `odds.enchanted.every`, `odds.radiant.chance` out of `odds.scale` shown as `1 pack in <scale ÷ chance>`, `odds.pity.packs`); the strings above show today's values. The word `free` follows `odds.pity.freePacksOnly` (§7.4).
 
 ### 7.2 Shop packs
