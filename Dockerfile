@@ -20,7 +20,7 @@ COPY web web
 RUN npm run build --workspace shared --workspace web
 
 # Stage 2: serve dist/ with Caddy as an unprivileged user.
-FROM caddy:2-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f
+FROM caddy:2-alpine@sha256:e70b164da81ef698b3ad19af799ea6086ce6d9e48ed4079eb9fe26f6fbf14ee5
 # The base image runs Caddy as root so it can bind 80/443. We listen on 8080
 # instead, which an unprivileged user can bind without capabilities; TLS and
 # the public port are the host proxy's job (docs/04-deployment.md).
